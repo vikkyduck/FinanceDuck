@@ -20,14 +20,13 @@ interface MonthlyFinancialTableProps {
 }
 
 export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
+  const { accessTokenId } = useAuth();
   const [data, setData] = useState<MonthlyFinancialData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchMonthlyFinancialData();
-  }, [year]);
-
-  const { accessTokenId } = useAuth();
+  }, [year, accessTokenId]);
 
   const fetchMonthlyFinancialData = async () => {
     if (!accessTokenId) return;

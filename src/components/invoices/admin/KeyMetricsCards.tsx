@@ -60,7 +60,7 @@ export const KeyMetricsCards = () => {
 
   useEffect(() => {
     fetchMetrics();
-  }, []);
+  }, [accessTokenId]);
 
   // Realtime subscriptions for automatic updates
   useRealtimeSubscription({

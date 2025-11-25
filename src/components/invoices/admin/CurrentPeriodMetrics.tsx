@@ -95,7 +95,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
 
   useEffect(() => {
     fetchMetrics();
-  }, [selectedYear]);
+  }, [selectedYear, accessTokenId]);
 
   // Realtime subscriptions for automatic updates
   useRealtimeSubscription({

@@ -41,7 +41,7 @@ export const AdminStats = () => {
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [accessTokenId]);
 
   // Realtime subscriptions for automatic updates
   useRealtimeSubscription({

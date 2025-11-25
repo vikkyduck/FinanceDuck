@@ -16,14 +16,13 @@ interface MonthlySalesChartProps {
 }
 
 export const MonthlySalesChart = ({ year }: MonthlySalesChartProps) => {
+  const { accessTokenId } = useAuth();
   const [data, setData] = useState<MonthlyData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchMonthlyData();
-  }, [year]);
-
-  const { accessTokenId } = useAuth();
+  }, [year, accessTokenId]);
 
   const fetchMonthlyData = async () => {
     if (!accessTokenId) return;

@@ -16,14 +16,13 @@ interface ProfitTrendChartProps {
 }
 
 export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
+  const { accessTokenId } = useAuth();
   const [data, setData] = useState<MonthlyProfit[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchProfitData();
-  }, [year]);
-
-  const { accessTokenId } = useAuth();
+  }, [year, accessTokenId]);
 
   const fetchProfitData = async () => {
     if (!accessTokenId) return;

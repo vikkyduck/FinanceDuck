@@ -19,14 +19,13 @@ interface RevenueForecastChartProps {
 }
 
 export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartProps) => {
+  const { accessTokenId } = useAuth();
   const [data, setData] = useState<MonthlyForecast[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchForecastData();
-  }, [monthsAhead]);
-
-  const { accessTokenId } = useAuth();
+  }, [monthsAhead, accessTokenId]);
 
   const fetchForecastData = async () => {
     if (!accessTokenId) return;

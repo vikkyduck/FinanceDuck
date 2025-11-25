@@ -7,9 +7,9 @@ channel = "stable-25_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+build = ["bun", "run", "build"]
 publicDir = "dist"
+run = ["bun", "run", "start"]
 
 [workflows]
 runButton = "Project"
@@ -40,5 +40,5 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 39503
+localPort = 33689
 externalPort = 3000

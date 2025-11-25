@@ -7,7 +7,7 @@ channel = "stable-25_05"
 
 [deployment]
 deploymentTarget = "static"
-build = ["bun", "run", "build"]
+build = ["bash", "-c", "bun install && bun run build"]
 run = ["bun", "run", "start"]
 publicDir = "dist"
 

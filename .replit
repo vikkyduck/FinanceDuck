@@ -6,7 +6,7 @@ expertMode = true
 channel = "stable-25_05"
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "static"
 build = ["bash", "-c", "bun install && bun run build"]
 publicDir = "dist"
 run = ["bash", "-c", "bun run start"]
@@ -42,7 +42,3 @@ externalPort = 80
 [[ports]]
 localPort = 35563
 externalPort = 3000
-
-[[ports]]
-localPort = 45947
-externalPort = 3001

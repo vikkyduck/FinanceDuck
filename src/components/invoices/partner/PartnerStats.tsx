@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Wallet, ShieldAlert } from "lucide-react";
@@ -44,9 +43,6 @@ export const PartnerStats = () => {
     console.log('[PartnerStats] Fetching stats for partnerId:', partnerId);
     setLoading(true);
     try {
-      // Ensure session context so RLS works for partner
-      await ensureSessionContext();
-
       // Use database function for stable calculations
       const { data: debtData, error: debtError } = await supabase
         .rpc('get_partner_debt_to_admin', { _partner_id: partnerId });
@@ -73,26 +69,13 @@ export const PartnerStats = () => {
         return;
       }
 
-      // Fetch client remaining budget separately - только для оплаченных счетов
-      const { data: invoices, error: invoicesError } = await supabase
-        .from('invoices')
-        .select('invoice_calculations(client_remaining)')
-        .eq('partner_id', partnerId)
-        .eq('status', 'paid');
-
-      if (invoicesError) throw invoicesError;
-
-      const clientRemaining = invoices?.reduce((sum, inv: any) => {
-        return sum + (inv.invoice_calculations?.[0]?.client_remaining || 0);
-      }, 0) || 0;
-
       setStats({
         total_inflow: debt.total_inflow || 0,
         partner_commission: debt.partner_commission || 0,
         partner_expenses: debt.partner_expenses || 0,
         admin_expenses: debt.admin_expenses || 0,
         debt_to_admin: debt.debt_to_admin || 0,
-        client_remaining: clientRemaining,
+        client_remaining: debt.client_remaining_total || 0,
         total_paid_to_admin: debt.total_paid_to_admin || 0,
         remaining_debt: debt.remaining_debt || 0,
       });

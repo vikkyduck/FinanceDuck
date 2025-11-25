@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
+import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Calendar, DollarSign, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
-import { addMonths, format, startOfMonth, endOfMonth } from "date-fns";
-import { ru } from "date-fns/locale";
 import {
   LineChart,
   Line,
@@ -30,127 +28,42 @@ interface MonthlyForecast {
 }
 
 export const AdminCashFlowForecast = () => {
+  const { accessTokenId } = useAuth();
   const [forecast, setForecast] = useState<MonthlyForecast[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentBalance, setCurrentBalance] = useState(0);
 
   useEffect(() => {
     fetchCashFlowForecast();
-  }, []);
+  }, [accessTokenId]);
 
   const fetchCashFlowForecast = async () => {
+    if (!accessTokenId) return;
+    
     try {
-      await ensureSessionContext();
-      // Получаем текущий баланс
-      const { data: paidInvoices } = await supabase
-        .from("invoices")
-        .select(`
-          invoice_calculations(amount_to_admin)
-        `)
-        .eq("status", "paid");
+      const { data, error } = await supabase.rpc('get_admin_cashflow_forecast', {
+        _token_id: accessTokenId
+      });
 
-      const { data: partnerPayments } = await supabase
-        .from("partner_payments")
-        .select("amount");
+      if (error) throw error;
 
-      const totalReceived = (paidInvoices || []).reduce(
-        (sum: number, inv: any) =>
-          sum + (Number(inv.invoice_calculations?.[0]?.amount_to_admin) || 0),
-        0
-      );
+      if (data && data.length > 0) {
+        // First row contains current balance
+        setCurrentBalance(Number(data[0].current_balance || 0));
 
-      const totalPaidToPartners = (partnerPayments || []).reduce(
-        (sum: number, p: any) => sum + Number(p.amount),
-        0
-      );
+        // Rest are monthly forecasts (skip first row which is current balance)
+        const forecastData: MonthlyForecast[] = data
+          .filter((row: any) => row.month_index > 0)
+          .map((row: any) => ({
+            month: row.month_name,
+            expectedIncome: Number(row.expected_income || 0),
+            expectedExpenses: Number(row.expected_expenses || 0),
+            netFlow: Number(row.net_flow || 0),
+            cumulativeBalance: Number(row.cumulative_balance || 0),
+          }));
 
-      const balance = totalReceived - totalPaidToPartners;
-      setCurrentBalance(balance);
-
-      // Прогноз на следующие 6 месяцев
-      const forecastData: MonthlyForecast[] = [];
-      let cumulativeBalance = balance;
-
-      for (let i = 0; i < 6; i++) {
-        const targetMonth = addMonths(new Date(), i);
-        const monthStart = startOfMonth(targetMonth);
-        const monthEnd = endOfMonth(targetMonth);
-
-        // Ожидаемый доход (счета со статусом sent и датой оплаты в этом месяце)
-        const { data: expectedInvoices } = await supabase
-          .from("invoices")
-          .select(`
-            invoice_calculations(amount_to_admin)
-          `)
-          .eq("status", "sent")
-          .gte("payment_date", monthStart.toISOString())
-          .lte("payment_date", monthEnd.toISOString());
-
-        const expectedIncome = (expectedInvoices || []).reduce(
-          (sum: number, inv: any) =>
-            sum + (Number(inv.invoice_calculations?.[0]?.amount_to_admin) || 0),
-          0
-        );
-
-        // Ожидаемые расходы (долги партнерам)
-        const { data: partnerDebts } = await supabase
-          .from("invoices")
-          .select(`
-            id,
-            partner_id,
-            invoice_calculations(
-              partner_share_from_margin,
-              commission_amount
-            )
-          `)
-          .in("status", ["sent", "paid"]);
-
-        const { data: existingPayments } = await supabase
-          .from("partner_payments")
-          .select("amount, partner_id");
-
-        // Расчет долгов по партнерам
-        const partnerDebtsMap = new Map<string, number>();
-        (partnerDebts || []).forEach((inv: any) => {
-          const calc = inv.invoice_calculations?.[0];
-          if (!calc) return;
-
-          const partnerShare =
-            Number(calc.partner_share_from_margin) ||
-            Number(calc.commission_amount) ||
-            0;
-
-          const currentDebt = partnerDebtsMap.get(inv.partner_id) || 0;
-          partnerDebtsMap.set(inv.partner_id, currentDebt + partnerShare);
-        });
-
-        // Вычитаем уже оплаченное
-        (existingPayments || []).forEach((p: any) => {
-          const currentDebt = partnerDebtsMap.get(p.partner_id) || 0;
-          partnerDebtsMap.set(p.partner_id, Math.max(0, currentDebt - Number(p.amount)));
-        });
-
-        const totalPartnerDebt = Array.from(partnerDebtsMap.values()).reduce(
-          (sum, debt) => sum + debt,
-          0
-        );
-
-        // Предполагаем, что выплачиваем 1/6 долга в месяц
-        const expectedExpenses = totalPartnerDebt / 6;
-
-        const netFlow = expectedIncome - expectedExpenses;
-        cumulativeBalance += netFlow;
-
-        forecastData.push({
-          month: format(targetMonth, "LLL yyyy", { locale: ru }),
-          expectedIncome,
-          expectedExpenses,
-          netFlow,
-          cumulativeBalance,
-        });
+        setForecast(forecastData);
       }
-
-      setForecast(forecastData);
     } catch (error) {
       console.error("Error fetching cash flow forecast:", error);
     } finally {

@@ -1076,6 +1076,18 @@ export type Database = {
           session_id: string
         }[]
       }
+      get_admin_cashflow_forecast: {
+        Args: { _token_id: string }
+        Returns: {
+          current_balance: number
+          month_name: string
+          month_index: number
+          expected_income: number
+          expected_expenses: number
+          net_flow: number
+          cumulative_balance: number
+        }[]
+      }
       get_admin_forecast: {
         Args: { _months_ahead?: number; _token_id: string }
         Returns: {
@@ -1239,6 +1251,7 @@ export type Database = {
         Args: { _partner_id: string }
         Returns: {
           admin_expenses: number
+          client_remaining_total: number
           debt_to_admin: number
           partner_commission: number
           partner_expenses: number

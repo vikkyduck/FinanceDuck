@@ -1,0 +1,101 @@
+В компонентах useEffect не зависит от accessTokenId, поэтому запрос делается ДО того, как токен получен. Давай проверю RPC функции и другие компоненты:
+
+Show all
+3 tools used
+НАШЁЛ ПРОБЛЕМУ! Смотри - критическая ошибка в коде:
+
+
+// AdminStats.tsx строка 42-44
+useEffect(() => {
+  fetchStats();
+}, []); // <-- ПУСТОЙ МАССИВ ЗАВИСИМОСТЕЙ!
+Когда компонент монтируется, accessTokenId ещё null (useAuth ещё загружается). Функция fetchStats делает if (!accessTokenId) return; и выходит. Но когда accessTokenId появляется - useEffect НЕ ПЕРЕЗАПУСКАЕТСЯ потому что массив зависимостей пустой!
+
+Проверю другие компоненты: <lov-tool-use id="toolu_01Bfay8MR1cjGBVZtz9X39eD" name="lov-view" data="{"file_path": "src/components/invoices/admin/AdminCashFlowForecast.tsx"}"> </lov-tool-use>
+
+Show all
+2 tools used
+НАШЁЛ ВСЕ ПРОБЛЕМЫ! Вот полный список:
+
+Проблема 1: Отсутствие accessTokenId в зависимостях useEffect
+AdminStats.tsx (строка 42-44):
+
+
+useEffect(() => {
+  fetchStats();
+}, []); // ❌ ПУСТОЙ МАССИВ! Нужно [accessTokenId]
+KeyMetricsCards.tsx (строка 61-63):
+
+
+useEffect(() => {
+  fetchMetrics();
+}, []); // ❌ ПУСТОЙ МАССИВ!
+MonthlyFinancialTable.tsx (строки 26-28, 30):
+
+
+useEffect(() => {
+  fetchMonthlyFinancialData();
+}, [year]); // ❌ Нет accessTokenId!
+
+const { accessTokenId } = useAuth(); // И это объявлено ПОСЛЕ useEffect!
+Проблема 2: Компоненты всё ещё используют ensureSessionContext()
+AdminCashFlowForecast.tsx - полностью НЕ переведён на RPC! Использует:
+
+await ensureSessionContext(); (строка 43)
+Прямые запросы supabase.from("invoices") (строки 45-51, 80-87, 96-106)
+PartnerStats.tsx - использует:
+
+await ensureSessionContext(); (строка 48)
+RPC get_partner_debt_to_admin ✅
+Но потом делает ОТДЕЛЬНЫЙ прямой запрос для client_remaining (строки 77-82) ❌
+Проблема 3: Партнёрские компоненты
+PartnerStats частично работает через RPC, но:
+
+Использует ensureSessionContext() который не работает с пулом соединений
+Делает дополнительный прямой запрос для client_remaining
+План исправления (полный)
+Часть 1: Исправить useEffect зависимости во всех админских компонентах
+Затронутые файлы:
+
+AdminStats.tsx - добавить [accessTokenId] в useEffect
+KeyMetricsCards.tsx - добавить [accessTokenId] в useEffect
+AdminHeroMetrics.tsx - проверить и добавить зависимость
+MonthlySalesChart.tsx - добавить [accessTokenId] в useEffect
+ProfitTrendChart.tsx - добавить [accessTokenId] в useEffect
+RevenueForecastChart.tsx - добавить [accessTokenId] в useEffect
+RevenueForecastTable.tsx - добавить [accessTokenId] в useEffect
+SalesStatistics.tsx - добавить [accessTokenId] в useEffect
+YearlyKeyIndicators.tsx - добавить [accessTokenId] в useEffect
+CurrentPeriodMetrics.tsx - добавить [accessTokenId] в useEffect
+MonthlyFinancialTable.tsx - добавить [accessTokenId, year] и переместить useAuth выше
+Часть 2: Перевести AdminCashFlowForecast на RPC
+Создать новую RPC функцию get_admin_cashflow_forecast(_token_id uuid) которая:
+
+Возвращает текущий баланс
+Возвращает прогноз на 6 месяцев (expectedIncome, expectedExpenses, netFlow, cumulativeBalance)
+Обновить AdminCashFlowForecast.tsx:
+
+Убрать ensureSessionContext()
+Использовать новую RPC функцию
+Часть 3: Исправить PartnerStats
+Обновить RPC функцию get_partner_debt_to_admin чтобы возвращала client_remaining_total.
+
+Обновить PartnerStats.tsx:
+
+Убрать ensureSessionContext()
+Убрать отдельный запрос для client_remaining
+Использовать значение из RPC
+Часть 4: Проверить все партнёрские компоненты
+Проверить и исправить:
+
+PartnerInvoicesList.tsx
+PartnerPaymentsList.tsx
+PartnerAgency30Report.tsx
+PartnerCommissionReport.tsx
+PartnerClientStats.tsx
+Результат
+После этих изменений:
+
+Все компоненты будут ждать accessTokenId перед запросом
+Все запросы будут идти через RPC функции (контекст сессии внутри одной транзакции)
+Данные будут корректно отображаться для админа и партнёров

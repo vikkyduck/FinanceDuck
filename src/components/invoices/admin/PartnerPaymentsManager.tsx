@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Wallet, CheckCircle } from "lucide-react";
+import { Wallet, Plus } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { RecordPaymentDialog } from "./RecordPaymentDialog";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
+import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { cn } from "@/lib/utils";
 
 interface PartnerPaymentSummary {
@@ -24,7 +25,7 @@ export const PartnerPaymentsManager = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { setRef } = useStaggerAnimation(summaries.length, 50);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       await ensureSessionContext();
@@ -73,12 +74,23 @@ export const PartnerPaymentsManager = () => {
       const partnerId = invoice.partner_id;
       const partnerName = invoice.partners?.name || "Unknown";
       const calc = invoice.invoice_calculations?.[0];
+      const scheme = invoice.scheme;
 
       if (!calc) return;
 
-      // Во всех схемах используем единое поле amount_to_admin,
-      // которое уже посчитано на бэкенде триггером recalculate_invoice_totals
-      const amountToAdminForInvoice = Number(calc.amount_to_admin) || 0;
+      // Используем ту же формулу что и RPC get_partner_debt_to_admin:
+      // debt = client_bill - partner_commission
+      // Это гарантирует одинаковые данные у админа и партнёра
+      const clientBill = Number(calc.client_bill) || 0;
+      let partnerCommission = 0;
+      
+      if (scheme === 'agency_30') {
+        partnerCommission = Number(calc.partner_share_from_margin) || 0;
+      } else if (scheme === 'commission_based') {
+        partnerCommission = Number(calc.commission_amount) || 0;
+      }
+      
+      const debtToAdmin = clientBill - partnerCommission;
 
       if (!partnerMap.has(partnerId)) {
         partnerMap.set(partnerId, {
@@ -91,7 +103,7 @@ export const PartnerPaymentsManager = () => {
       }
 
       const summary = partnerMap.get(partnerId)!;
-      summary.total_to_transfer += amountToAdminForInvoice;
+      summary.total_to_transfer += debtToAdmin;
     });
 
     // Добавляем оплаченные суммы
@@ -117,11 +129,27 @@ export const PartnerPaymentsManager = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  // Real-time синхронизация при изменении платежей
+  useRealtimeSubscription({
+    channelName: 'admin_partner_payments',
+    table: 'partner_payments',
+    onUpdate: fetchData,
+    enabled: true,
+  });
+
+  // Real-time синхронизация при изменении счетов
+  useRealtimeSubscription({
+    channelName: 'admin_invoices_for_payments',
+    table: 'invoices',
+    onUpdate: fetchData,
+    enabled: true,
+  });
 
   const handleRecordPayment = (partner: PartnerPaymentSummary) => {
     setSelectedPartner(partner);
@@ -186,11 +214,11 @@ export const PartnerPaymentsManager = () => {
                 {summary.remaining > 0 && (
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => handleRecordPayment(summary)}
-                    className="hover:scale-105 transition-transform"
+                    data-testid={`button-record-payment-${summary.partner_id}`}
                   >
-                    Записать выплату
+                    <Plus className="h-4 w-4 mr-1" />
+                    Записать приход
                   </Button>
                 )}
               </TableCell>

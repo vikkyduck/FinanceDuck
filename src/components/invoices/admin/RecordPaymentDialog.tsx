@@ -155,7 +155,7 @@ export const RecordPaymentDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Записать платёж от партнёра</DialogTitle>
+          <DialogTitle>Записать приход от партнёра</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

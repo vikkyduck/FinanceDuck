@@ -175,7 +175,7 @@ export const KeyMetricsCards = () => {
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
       <MetricCard
-        title="Выручка этого месяца"
+        title="Выручка"
         value={revenue.currentMonth}
         trend={revenue.trend}
         icon={DollarSign}
@@ -183,29 +183,29 @@ export const KeyMetricsCards = () => {
         tooltip="Общая сумма по всем оплаченным счетам в текущем месяце"
       />
       <MetricCard
-        title="Прибыль этого месяца"
+        title="Прибыль"
         value={profit.currentMonth}
         trend={profit.trend}
         icon={PiggyBank}
         delay={100}
-        tooltip="Чистая прибыль Cat после всех расходов и выплат партнерам"
+        tooltip="Чистая прибыль после всех расходов и выплат партнерам"
       />
       <MetricCard
-        title="Ожидается в ближайшие 3 месяца"
+        title="Прогноз 3 мес."
         value={expected}
         icon={Clock}
         delay={200}
         showTrend={false}
-        tooltip="Прогноз поступлений по отправленным счетам с планируемой датой оплаты в ближайшие 3 месяца"
+        tooltip="Ожидаемые поступления по отправленным счетам в ближайшие 3 месяца"
       />
       <MetricCard
-        title="Остаток клиентов"
+        title="Средства клиентов"
         value={clientRemaining}
         icon={Lock}
         delay={300}
         showTrend={false}
         valueClassName="text-green-600"
-        tooltip="Бюджет клиентов, зарезервированный на их счетах ИП"
+        tooltip="Бюджет клиентов, зарезервированный на их счетах"
       />
     </div>
   );

@@ -122,8 +122,8 @@ export const RecordPaymentDialog = ({
 
       if (success) {
         toast({
-          title: "Платеж записан",
-          description: `Платеж партнёру ${partnerName} записан`,
+          title: "Приход записан",
+          description: `Приход от ${partnerName} записан`,
         });
         setAmount("");
         setDate(new Date());
@@ -142,7 +142,7 @@ export const RecordPaymentDialog = ({
       } else {
         toast({
           title: "Ошибка",
-          description: "Не удалось записать платёж",
+          description: "Не удалось записать приход",
           variant: "destructive",
         });
       }

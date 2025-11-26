@@ -34,10 +34,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const AdminDashboard = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const queryClient = useQueryClient();
   const { viewMode, setViewMode } = useViewMode();
   const [searchParams] = useSearchParams();
   const showAlerts = searchParams.get('alerts') === 'true';
@@ -315,7 +317,10 @@ export const AdminDashboard = () => {
       <CreateInvoiceDialog 
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+          queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+        }}
       />
       <ManagePartnersDialog 
         open={partnersDialogOpen}

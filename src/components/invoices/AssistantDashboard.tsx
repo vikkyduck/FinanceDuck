@@ -26,10 +26,12 @@ import { AssistantInsights } from "./assistant/AssistantInsights";
 import { BarChart3 } from "lucide-react";
 import { useYearFilter } from "@/hooks/useYearFilter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const AssistantDashboard = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const queryClient = useQueryClient();
   const { viewMode, setViewMode } = useViewMode({ defaultMode: 'table' });
   const [searchParams] = useSearchParams();
   const showAlerts = searchParams.get('alerts') === 'true';
@@ -160,7 +162,12 @@ export const AssistantDashboard = () => {
       <CreateInvoiceDialog 
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+          queryClient.invalidateQueries({ queryKey: ['assistant-yearly-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['assistant-insights'] });
+          queryClient.invalidateQueries({ queryKey: ['assistant-partner-stats'] });
+        }}
       />
       <ManagePartnersDialog 
         open={partnersDialogOpen}

@@ -63,7 +63,7 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
           icon: Trophy,
           color: "text-yellow-600 dark:text-yellow-400",
           bg: "bg-yellow-500/10",
-          text: `🏆 ${topPartner[0]} — ваш топ-партнёр (${percentage}% выручки)`
+          text: `${topPartner[0]} — ваш топ-партнёр (${percentage}% выручки)`
         });
       }
 
@@ -74,7 +74,7 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
           icon: TrendingUp,
           color: "text-green-600 dark:text-green-400",
           bg: "bg-green-500/10",
-          text: `📈 ${monthName} был лучшим месяцем — ${amount}М ₽`
+          text: `${monthName} был лучшим месяцем — ${amount}М ₽`
         });
       }
 
@@ -82,7 +82,7 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
         icon: Target,
         color: "text-blue-600 dark:text-blue-400",
         bg: "bg-blue-500/10",
-        text: `💰 Средний чек: ${Math.round(averageCheck / 1000)}К ₽`
+        text: `Средний чек: ${Math.round(averageCheck / 1000)}К ₽`
       });
 
       if (invoices.length >= 10) {
@@ -90,7 +90,7 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
           icon: Lightbulb,
           color: "text-purple-600 dark:text-purple-400",
           bg: "bg-purple-500/10",
-          text: `💡 Отлично! Обработано ${invoices.length} оплаченных счетов в этом году`
+          text: `Отлично! Обработано ${invoices.length} оплаченных счетов в этом году`
         });
       }
 

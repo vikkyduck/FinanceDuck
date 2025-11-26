@@ -183,12 +183,14 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
       resetForm();
       onSuccess?.();
     } catch (error: any) {
+      console.error("CreateInvoiceDialog error:", error);
       if (error.name === 'ZodError') {
+        console.error("Zod validation error:", error.errors);
         handleValidationError("Форма", error.errors[0]?.message || 'Ошибка валидации данных');
       } else {
         handleSupabaseError(error, { 
           operation: "create_invoice",
-          details: { invoiceNumber, clientBill }
+          details: { invoiceNumber, clientBill, selectedPartner, selectedClient, scheme }
         });
       }
     } finally {

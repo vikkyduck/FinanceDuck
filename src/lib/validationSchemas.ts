@@ -33,13 +33,14 @@ export const invoiceSchema = z.object({
     .regex(/^\d+(\.\d{1,2})?$/, { message: "Invalid amount format" })
     .transform(Number)
     .refine(n => n > 0 && n < 1000000000, { message: "Amount must be between 0 and 1 billion" }),
-  partnerCommissionRate: z.string()
-    .trim()
-    .regex(/^\d+(\.\d{1,2})?$/, { message: "Invalid rate format" })
-    .transform(Number)
-    .refine(n => n >= 0 && n <= 100, { message: "Rate must be between 0 and 100" })
-    .optional()
-    .or(z.literal('')),
+  partnerCommissionRate: z.union([
+    z.literal(''),
+    z.string()
+      .trim()
+      .regex(/^\d+(\.\d{1,2})?$/, { message: "Invalid rate format" })
+      .transform(Number)
+      .refine(n => n >= 0 && n <= 100, { message: "Rate must be between 0 and 100" })
+  ]).optional(),
   notes: notesSchema,
   paymentDate: z.date().optional(),
 });

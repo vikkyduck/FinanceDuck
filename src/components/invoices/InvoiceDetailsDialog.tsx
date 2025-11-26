@@ -1006,8 +1006,8 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                 )}
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Waterfall Visualization */}
-                {(userRole === 'admin' || userRole === 'assistant') && (
+                {/* Waterfall Visualization - only for admin, contains commission/profit data */}
+                {userRole === 'admin' && (
                   <InvoiceWaterfallChart
                     clientBill={calc?.client_bill || 0}
                     scheme={invoice.scheme}
@@ -1016,7 +1016,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                     partnerShare={isAgency30 ? (calc?.partner_share_from_margin || 0) : (calc?.commission_amount || 0)}
                     adminShare={isAgency30 ? (calc?.admin_share_from_margin || 0) : (calc?.net_profit_admin || 0)}
                     catShare={calc?.cat_share_50}
-                    showCatShare={userRole === 'admin'}
+                    showCatShare={true}
                   />
                 )}
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock, ShieldAlert } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -199,13 +199,13 @@ export const KeyMetricsCards = () => {
         tooltip="Прогноз поступлений по отправленным счетам с планируемой датой оплаты в ближайшие 3 месяца"
       />
       <MetricCard
-        title="Деньги клиентов (не трогать)"
+        title="Остаток клиентов"
         value={clientRemaining}
-        icon={ShieldAlert}
+        icon={Lock}
         delay={300}
         showTrend={false}
         valueClassName="text-green-600"
-        tooltip="Суммарный остаток бюджета клиентов по всем оплаченным счетам. Эти деньги нельзя использовать на другие цели"
+        tooltip="Бюджет клиентов, зарезервированный на их счетах ИП"
       />
     </div>
   );

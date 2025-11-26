@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Wallet, LogIn, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 const AccessCodeLogin = () => {
   const [code, setCode] = useState("");
@@ -82,8 +83,18 @@ const AccessCodeLogin = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-lg px-6">
-        <div className="text-center mb-12">
+      <motion.div 
+        className="w-full max-w-lg px-6"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+      >
+        <motion.div 
+          className="text-center mb-12"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
+        >
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary/5 mb-6">
             <Wallet className="h-10 w-10 text-primary" strokeWidth={1.5} />
           </div>
@@ -93,47 +104,55 @@ const AccessCodeLogin = () => {
           <p className="text-lg text-muted-foreground max-w-md mx-auto">
             Система управления счетами и документами
           </p>
-        </div>
+        </motion.div>
 
-        <Card className="border shadow-sm">
-          <CardContent className="pt-8 pb-8 px-8">
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-3">
-                <Label htmlFor="code" className="text-base font-medium">
-                  Код доступа
-                </Label>
-                <Input
-                  id="code"
-                  type="text"
-                  placeholder="Введите ваш код"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  disabled={loading}
-                  className="h-14 text-lg"
-                  autoFocus
-                />
-              </div>
-              <Button 
-                type="submit" 
-                className="w-full h-14 text-base font-medium"
-                disabled={loading || !code}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Вход...
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="mr-2 h-5 w-5" />
-                    Войти
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          <Card className="border shadow-sm">
+            <CardContent className="pt-8 pb-8 px-8">
+              <form onSubmit={handleLogin} className="space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="code" className="text-base font-medium">
+                    Код доступа
+                  </Label>
+                  <Input
+                    id="code"
+                    type="text"
+                    placeholder="Введите ваш код"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    disabled={loading}
+                    className="h-14 text-lg transition-shadow duration-200 focus:shadow-md"
+                    autoFocus
+                    data-testid="input-access-code"
+                  />
+                </div>
+                <Button 
+                  type="submit" 
+                  className="w-full h-14 text-base font-medium"
+                  disabled={loading || !code}
+                  data-testid="button-login"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Вход...
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="mr-2 h-5 w-5" />
+                      Войти
+                    </>
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </motion.div>
     </div>
   );
 };

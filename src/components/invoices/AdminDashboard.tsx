@@ -32,6 +32,7 @@ import { getTimeBasedGreeting } from "@/lib/greetingUtils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -66,12 +67,12 @@ export const AdminDashboard = () => {
 
   return (
     <DashboardLayout>
-      {/* Command Center Header - Always Visible */}
+      {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">
-          {greeting}, Администратор
+        <h1 className="text-3xl font-bold mb-1">
+          {greeting}
         </h1>
-        <p className="text-muted-foreground">Командный центр управления империей</p>
+        <p className="text-muted-foreground">Обзор за текущий месяц</p>
       </div>
 
       {/* Sticky Action Bar */}
@@ -117,11 +118,11 @@ export const AdminDashboard = () => {
           <TabsList className="w-full justify-start h-auto flex-wrap">
             <TabsTrigger value="overview" className="gap-2">
               <BarChart3 className="h-4 w-4" />
-              Обзор
+              Сводка
             </TabsTrigger>
             <TabsTrigger value="finances" className="gap-2">
               <Building2 className="h-4 w-4" />
-              Финансы
+              Деньги
             </TabsTrigger>
             <TabsTrigger value="invoices" className="gap-2">
               <Receipt className="h-4 w-4" />
@@ -136,15 +137,23 @@ export const AdminDashboard = () => {
               Клиенты
             </TabsTrigger>
           </TabsList>
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={expandAll}>
-              <Maximize2 className="h-4 w-4 mr-2" />
-              Развернуть все
-            </Button>
-            <Button variant="outline" size="sm" onClick={collapseAll}>
-              <Minimize2 className="h-4 w-4 mr-2" />
-              Свернуть все
-            </Button>
+          <div className="flex gap-1 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={expandAll} data-testid="button-expand-all">
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Развернуть все</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={collapseAll} data-testid="button-collapse-all">
+                  <Minimize2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Свернуть все</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 

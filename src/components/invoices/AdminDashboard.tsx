@@ -9,7 +9,6 @@ import { AdminStats } from "./admin/AdminStats";
 import { AdminHeroMetrics } from "./admin/AdminHeroMetrics";
 import { WorkingCapitalManager } from "./admin/WorkingCapitalManager";
 import { ClientLTVReport } from "./admin/ClientLTVReport";
-import { PaymentTimeline } from "./admin/PaymentTimeline";
 import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
 import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
 import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
@@ -19,7 +18,6 @@ import { PartnerPaymentsManager } from "./admin/PartnerPaymentsManager";
 import { AdminCashFlowForecast } from "./admin/AdminCashFlowForecast";
 import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
-import { ReconciliationDashboard } from "./admin/ReconciliationDashboard";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
@@ -56,9 +54,7 @@ export const AdminDashboard = () => {
     "admin-dashboard-sections",
     {
       stats: true,
-      reconciliation: true,
       workingCapital: true,
-      paymentTimeline: true,
       cashFlow: true,
       recurringInvoices: true,
       invoicesList: true,
@@ -177,15 +173,6 @@ export const AdminDashboard = () => {
               >
                 <AdminStats />
               </CollapsibleSection>
-
-              <CollapsibleSection
-                id="reconciliation"
-                title="Сверка платежей"
-                isExpanded={isExpanded("reconciliation")}
-                onToggle={() => toggleSection("reconciliation")}
-              >
-                <ReconciliationDashboard />
-              </CollapsibleSection>
             </motion.div>
           </TabsContent>
 
@@ -204,15 +191,6 @@ export const AdminDashboard = () => {
                 onToggle={() => toggleSection("workingCapital")}
               >
                 <WorkingCapitalManager />
-              </CollapsibleSection>
-
-              <CollapsibleSection
-                id="paymentTimeline"
-                title="Платежный календарь"
-                isExpanded={isExpanded("paymentTimeline")}
-                onToggle={() => toggleSection("paymentTimeline")}
-              >
-                <PaymentTimeline />
               </CollapsibleSection>
 
               <CollapsibleSection

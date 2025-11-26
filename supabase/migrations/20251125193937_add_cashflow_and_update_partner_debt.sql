@@ -206,3 +206,7 @@ BEGIN
   END LOOP;
 END;
 $function$;
+
+-- Grant execute privileges
+GRANT EXECUTE ON FUNCTION public.get_admin_cashflow_forecast(uuid, numeric) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_admin_cashflow_forecast(uuid, numeric) TO service_role;

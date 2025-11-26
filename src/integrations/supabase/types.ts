@@ -1134,6 +1134,7 @@ export type Database = {
           previous_month_revenue: number
           profit_trend: number
           revenue_trend: number
+          total_client_remaining: number
         }[]
       }
       get_assistant_stats_invoices: {

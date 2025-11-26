@@ -6,7 +6,7 @@ import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { Loader2, TrendingUp, Wallet, Receipt, CreditCard, DollarSign, ShieldAlert } from "lucide-react";
+import { Loader2, TrendingUp, Wallet, Receipt, CreditCard, ShieldAlert } from "lucide-react";
 
 interface CommissionData {
   total_from_client: number;
@@ -66,7 +66,6 @@ export const PartnerCommissionReport = () => {
       // Calculate totals
       let totalFromClient = 0;
       let partnerCommission = 0;
-      let adminExpenses = 0;
       let clientRemaining = 0;
 
       invoices.forEach((invoice: any) => {
@@ -77,27 +76,19 @@ export const PartnerCommissionReport = () => {
           partnerCommission += calc.commission_amount || 0;
           clientRemaining += calc.client_remaining || 0;
         }
-
-        // Admin expenses
-        if (invoice.executor_expenses) {
-          invoice.executor_expenses.forEach((expense: any) => {
-            if (expense.is_admin_expense) {
-              adminExpenses += expense.amount || 0;
-            }
-          });
-        }
       });
 
-      const adminRemainder = totalFromClient - partnerCommission;
-      const totalToAdmin = adminRemainder + adminExpenses;
+      // К переводу админу = Сумма от клиентов - Комиссия партнёра
+      // Расходы админа НЕ добавляются к долгу партнёра
+      const totalToAdmin = totalFromClient - partnerCommission;
       const paymentsToAdmin = payments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
       const remainingDebt = totalToAdmin - paymentsToAdmin;
 
       setData({
         total_from_client: totalFromClient,
         partner_commission: partnerCommission,
-        admin_remainder: adminRemainder,
-        admin_expenses: adminExpenses,
+        admin_remainder: totalToAdmin,
+        admin_expenses: 0, // Не учитываем - это расходы админа, не долг партнёра
         total_to_admin: totalToAdmin,
         payments_to_admin: paymentsToAdmin,
         remaining_debt: remainingDebt,
@@ -108,8 +99,6 @@ export const PartnerCommissionReport = () => {
         invoicesCount: invoices.length,
         totalFromClient,
         partnerCommission,
-        adminRemainder,
-        adminExpenses,
         totalToAdmin,
         paymentsToAdmin,
         remainingDebt,
@@ -228,41 +217,13 @@ export const PartnerCommissionReport = () => {
 
         <Separator />
 
-        {/* Admin expenses */}
-        {data.admin_expenses > 0 && (
-          <>
-            <div className="p-4 bg-destructive/5 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="h-4 w-4 text-destructive" />
-                <p className="text-sm text-muted-foreground">Расходы админа</p>
-              </div>
-              <p className="text-xl font-semibold text-destructive">{formatCurrency(data.admin_expenses)}</p>
-            </div>
-            <Separator />
-          </>
-        )}
-
         {/* Debt to admin */}
         <div className="space-y-4">
           <h3 className="font-semibold">Долг перед админом</h3>
           
           <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Остаток для админа:</span>
-              <span className="font-medium">{formatCurrency(data.admin_remainder)}</span>
-            </div>
-            
-            {data.admin_expenses > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">+ Расходы админа:</span>
-                <span className="font-medium">{formatCurrency(data.admin_expenses)}</span>
-              </div>
-            )}
-
-            <Separator />
-            
             <div className="flex justify-between items-center font-semibold text-lg">
-              <span>Итого к переводу:</span>
+              <span>К переводу админу:</span>
               <span className="text-primary">{formatCurrency(data.total_to_admin)}</span>
             </div>
             
@@ -299,7 +260,7 @@ export const PartnerCommissionReport = () => {
         {/* Summary formula */}
         <Alert className="bg-muted/50">
           <AlertDescription className="text-sm">
-            <strong>Формула:</strong> Долг админу = (Счёт - Ваша комиссия) + Расходы админа
+            <strong>Формула:</strong> К переводу = Сумма от клиентов - Ваша комиссия
           </AlertDescription>
         </Alert>
       </CardContent>

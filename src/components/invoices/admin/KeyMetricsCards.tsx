@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +19,7 @@ export const KeyMetricsCards = () => {
   const [revenue, setRevenue] = useState<MetricData>({ currentMonth: 0, previousMonth: 0, trend: 0 });
   const [profit, setProfit] = useState<MetricData>({ currentMonth: 0, previousMonth: 0, trend: 0 });
   const [expected, setExpected] = useState<number>(0);
+  const [clientRemaining, setClientRemaining] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   const { accessTokenId } = useAuth();
@@ -50,6 +51,7 @@ export const KeyMetricsCards = () => {
         });
         
         setExpected(Number(stats.expected_revenue_3months || 0));
+        setClientRemaining(Number(stats.total_client_remaining || 0));
       }
     } catch (error) {
       console.error("Error fetching metrics:", error);
@@ -86,7 +88,8 @@ export const KeyMetricsCards = () => {
     icon: Icon, 
     delay,
     showTrend = true,
-    tooltip
+    tooltip,
+    valueClassName
   }: { 
     title: string; 
     value: number; 
@@ -95,6 +98,7 @@ export const KeyMetricsCards = () => {
     delay: number;
     showTrend?: boolean;
     tooltip?: string;
+    valueClassName?: string;
   }) => {
     const isPositive = trend && trend > 0;
     const TrendIcon = isPositive ? TrendingUp : TrendingDown;
@@ -149,7 +153,7 @@ export const KeyMetricsCards = () => {
           </div>
           
           <div className="space-y-2">
-            <p className="text-4xl font-bold tracking-tight">
+            <p className={`text-4xl font-bold tracking-tight ${valueClassName || ''}`}>
               {formatCurrency(value)}
             </p>
             
@@ -169,7 +173,7 @@ export const KeyMetricsCards = () => {
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-3">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
       <MetricCard
         title="Выручка этого месяца"
         value={revenue.currentMonth}
@@ -193,6 +197,15 @@ export const KeyMetricsCards = () => {
         delay={200}
         showTrend={false}
         tooltip="Прогноз поступлений по отправленным счетам с планируемой датой оплаты в ближайшие 3 месяца"
+      />
+      <MetricCard
+        title="Деньги клиентов (не трогать)"
+        value={clientRemaining}
+        icon={ShieldAlert}
+        delay={300}
+        showTrend={false}
+        valueClassName="text-green-600"
+        tooltip="Суммарный остаток бюджета клиентов по всем оплаченным счетам. Эти деньги нельзя использовать на другие цели"
       />
     </div>
   );

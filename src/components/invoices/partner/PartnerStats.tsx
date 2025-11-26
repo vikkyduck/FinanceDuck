@@ -142,24 +142,19 @@ export const PartnerStats = () => {
           <CardContent className="space-y-4">
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Ваша комиссия (вычитается):</span>
-                <span className="font-medium text-green-600">-{formatCurrency(stats.partner_commission)}</span>
-              </div>
-              
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Ваши расходы (вычитаются):</span>
-                <span className="font-medium text-green-600">-{formatCurrency(stats.partner_expenses)}</span>
+                <span className="text-muted-foreground">Получено от клиентов:</span>
+                <span className="font-medium">{formatCurrency(stats.total_inflow)}</span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Расходы админа (добавляются):</span>
-                <span className="font-medium text-destructive">+{formatCurrency(stats.admin_expenses)}</span>
+                <span className="text-muted-foreground">Ваша комиссия:</span>
+                <span className="font-medium text-green-600">-{formatCurrency(stats.partner_commission)}</span>
               </div>
               
               <Separator />
               
               <div className="flex justify-between items-center font-semibold text-lg">
-                <span>Итого к переводу:</span>
+                <span>К переводу админу:</span>
                 <span className="text-primary">{formatCurrency(stats.debt_to_admin)}</span>
               </div>
               

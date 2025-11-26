@@ -29,12 +29,14 @@ export const PartnerPaymentsManager = () => {
     try {
       await ensureSessionContext();
 
-      // Получаем все счета с расчётами по обеим схемам
+      // Получаем только оплаченные счета (для соответствия с RPC get_partner_debt_to_admin)
+      // Долг возникает только когда клиент заплатил партнёру
       const { data: invoices, error: invoicesError } = await supabase
       .from("invoices")
       .select(`
         partner_id,
         scheme,
+        status,
         partners(name),
         invoice_calculations(
           client_bill,
@@ -44,7 +46,8 @@ export const PartnerPaymentsManager = () => {
           commission_amount,
           executor_expenses_total
         )
-      `);
+      `)
+      .eq("status", "paid");
 
     if (invoicesError) {
       console.error("Error fetching invoices:", invoicesError);

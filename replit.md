@@ -39,11 +39,17 @@ The system supports four user roles (admin, assistant, partner, client) with dis
    - Allows attaching payments to specific invoices
    - Filters by `remaining > 0` to show only outstanding debts
 
+## Removed Features (November 2025)
+
+1. **Payment Timeline (PaymentTimeline.tsx)** - Removed from admin dashboard
+2. **Reconciliation Dashboard (ReconciliationDashboard.tsx)** - Removed from admin dashboard
+
 ## Key Technical Decisions
 
 - **Partner debt formula**: `debt = client_bill - partner_commission` (unified across schemes)
 - **Terminology**: Use "приход" (not "платёж/выплату") for partner payments to admin
 - **Design**: Apple HIG principles - simplicity, clarity, minimal text, intuitive icons
+- **Assistant visibility**: Assistant role cannot see commission percentages, partner/admin shares, or profit analytics
 
 # User Preferences
 

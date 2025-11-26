@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock, Lock } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock, Lock, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MetricCardSkeleton } from "@/components/ui/metric-card-skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { HelpCircle } from "lucide-react";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -105,21 +104,13 @@ export const KeyMetricsCards = () => {
     
     if (loading) {
       return (
-        <Card 
-          className="border-0 shadow-lg"
-          style={{ animationDelay: `${delay}ms` }}
-        >
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-9 w-9 rounded-lg" />
-            </div>
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-40" />
-              {showTrend && <Skeleton className="h-5 w-48" />}
-            </div>
-          </CardContent>
-        </Card>
+        <MetricCardSkeleton
+          showIcon
+          showTrend={showTrend}
+          size="lg"
+          delay={delay}
+          borderless
+        />
       );
     }
     

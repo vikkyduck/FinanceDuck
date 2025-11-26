@@ -3,7 +3,7 @@ import { TrendingUp, TrendingDown, DollarSign, Target, PiggyBank } from "lucide-
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -108,18 +108,15 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-4 w-24" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-10 w-32" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MetricCardSkeletonGrid
+        count={3}
+        columns={3}
+        showHeader
+        showIcon={false}
+        size="default"
+        gridClassName="grid-cols-1 md:grid-cols-3"
+        className="gap-4"
+      />
     );
   }
 

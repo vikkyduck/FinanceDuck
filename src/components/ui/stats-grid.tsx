@@ -1,6 +1,7 @@
 import { StatCard } from "@/components/ui/stat-card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
 import { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface StatConfig {
   icon: LucideIcon;
@@ -18,23 +19,28 @@ interface StatsGridProps {
   columns?: 2 | 3 | 4;
 }
 
+const gridColsMap: Record<number, string> = {
+  2: "md:grid-cols-2",
+  3: "md:grid-cols-3",
+  4: "md:grid-cols-2 lg:grid-cols-4",
+};
+
 export const StatsGrid = ({ 
   stats, 
   loading = false, 
   error = null,
   columns = 4 
 }: StatsGridProps) => {
+  const gridClasses = gridColsMap[columns] || gridColsMap[4];
+
   if (loading) {
     return (
-      <div className={`grid gap-6 md:grid-cols-2 lg:grid-cols-${columns}`}>
-        {[...Array(columns)].map((_, i) => (
-          <div key={i} className="border-0 shadow-sm rounded-lg p-6 space-y-4">
-            <Skeleton className="h-4 w-32" variant="shimmer" />
-            <Skeleton className="h-12 w-24" variant="wave" />
-            <Skeleton className="h-4 w-40" variant="shimmer" />
-          </div>
-        ))}
-      </div>
+      <MetricCardSkeletonGrid
+        count={columns}
+        columns={columns}
+        showIcon={false}
+        size="lg"
+      />
     );
   }
 
@@ -47,7 +53,7 @@ export const StatsGrid = ({
   }
 
   return (
-    <div className={`grid gap-6 md:grid-cols-2 lg:grid-cols-${columns}`}>
+    <div className={cn("grid gap-6", gridClasses)}>
       {stats.map((stat, index) => (
         <StatCard
           key={index}

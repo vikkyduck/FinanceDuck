@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { TrendingUp, Wallet, Calendar, Target, AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -90,16 +90,15 @@ export const AdminHeroMetrics = ({ period = 'month' }: AdminHeroMetricsProps) =>
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {[...Array(4)].map((_, i) => (
-          <Card key={i} className="border-0 shadow-lg">
-            <CardContent className="p-6">
-              <Skeleton className="h-8 w-32 mb-4" />
-              <Skeleton className="h-12 w-full" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <MetricCardSkeletonGrid
+        count={4}
+        columns={4}
+        showIcon={false}
+        size="lg"
+        borderless
+        className="mb-8"
+        gridClassName="grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+      />
     );
   }
 

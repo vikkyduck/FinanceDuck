@@ -4,6 +4,47 @@ This is an invoice management system built with React, TypeScript, and Supabase.
 
 The system supports four user roles (admin, assistant, partner, client) with distinct permissions and dashboards tailored to each role's needs. It includes features like invoice tracking, payment monitoring, financial analytics, and security event logging.
 
+# Recent Changes (November 2025)
+
+## New Features Implemented
+
+1. **Waterfall Visualization** (`InvoiceWaterfallChart.tsx`)
+   - Cascading money distribution chart showing how funds flow through transactions
+   - Shows: Client Bill → Partner Share → Admin Share → Expenses → Net Profit → Cat/Admin 50/50 split
+   - Running total correctly terminates at zero when cat-share is enabled
+
+2. **Cat Share Badge** (`CatShareBadge.tsx`)
+   - Displays 50% "Доля Кота" badge with amount
+   - Only visible to admin role
+   - Integrated into InvoiceDetailsDialog
+
+3. **Partner Virtual Statement** (`PartnerVirtualStatement.tsx`)
+   - Simplified ledger view for partners
+   - Period filters (week, month, quarter, all)
+   - Shows running balance of transactions
+
+4. **Global Command Palette** (`GlobalCommandPalette.tsx`)
+   - Smart search with ⌘K / Ctrl+K keyboard shortcut
+   - Searches invoices, partners, clients based on role
+   - Uses Wouter for navigation
+
+5. **Floating Action Button** (`FloatingActionButton.tsx`)
+   - Quick actions based on user role
+   - Admin: Create invoice, record payment
+   - Integrated into admin dashboard
+
+6. **Partner Debt Drill-Down** (`PartnerInvoicesDetail.tsx`)
+   - Expandable partner rows in PartnerPaymentsManager
+   - Shows individual invoices with remaining debt
+   - Allows attaching payments to specific invoices
+   - Filters by `remaining > 0` to show only outstanding debts
+
+## Key Technical Decisions
+
+- **Partner debt formula**: `debt = client_bill - partner_commission` (unified across schemes)
+- **Terminology**: Use "приход" (not "платёж/выплату") for partner payments to admin
+- **Design**: Apple HIG principles - simplicity, clarity, minimal text, intuitive icons
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.

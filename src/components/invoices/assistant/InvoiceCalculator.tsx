@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { DollarSign, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { getSchemeLabel } from "@/lib/invoiceCalculations";
 
 interface InvoiceCalculatorProps {
   scheme: string;
@@ -74,7 +75,7 @@ export const InvoiceCalculator = ({
                 <span className="text-sm font-medium">Схема</span>
               </div>
               <span className="font-bold text-sm">
-                {scheme === "agency_30" ? "Агентство 30%" : "Партнерское соглашение"}
+                {getSchemeLabel(scheme as any, 'assistant')}
               </span>
             </motion.div>
 

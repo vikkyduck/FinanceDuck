@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
 import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { getSchemeLabel } from "@/lib/invoiceCalculations";
 
 interface PartnerTerm {
   scheme: string;
@@ -102,10 +103,6 @@ export const PartnerTerms = () => {
     return 'Не установлено';
   };
 
-  const getSchemeName = (scheme: string) => {
-    return scheme === 'agency_30' ? 'Агентство 30%' : 'Партнерское соглашение';
-  };
-
   return (
     <Table>
       <TableHeader>
@@ -122,7 +119,7 @@ export const PartnerTerms = () => {
             ref={setRef(index)}
             className="table-row-hover"
           >
-            <TableCell className="font-medium table-cell-highlight">{getSchemeName(term.scheme)}</TableCell>
+            <TableCell className="font-medium table-cell-highlight">{getSchemeLabel(term.scheme as any, 'partner', term.partner_commission_rate ?? undefined)}</TableCell>
             <TableCell className="text-primary font-semibold table-cell-highlight">
               {term.scheme === 'agency_30' 
                 ? '15% от счета' 

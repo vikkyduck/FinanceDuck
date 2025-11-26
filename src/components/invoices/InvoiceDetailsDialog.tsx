@@ -23,6 +23,8 @@ import { UploadDocumentDialog } from "./UploadDocumentDialog";
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, getDocumentTypeLabel, formatFileSize, UserRole } from "@/lib/invoicePermissions";
 import { ensureSessionContext, callRPC, querySupabaseWithFilter } from "@/lib/supabaseHelpers";
+import { InvoiceWaterfallChart } from "./InvoiceWaterfallChart";
+import { CatShareBadge } from "./CatShareBadge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -994,10 +996,30 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
 
             {/* Расчеты водопад */}
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
                 <CardTitle className="text-lg">Расчеты</CardTitle>
+                {userRole === 'admin' && calc?.cat_share_50 > 0 && (
+                  <CatShareBadge 
+                    catShare={calc.cat_share_50} 
+                    adminShare={calc.admin_share_50} 
+                  />
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Waterfall Visualization */}
+                {(userRole === 'admin' || userRole === 'assistant') && (
+                  <InvoiceWaterfallChart
+                    clientBill={calc?.client_bill || 0}
+                    scheme={invoice.scheme}
+                    commissionRate={calc?.commission_rate}
+                    executorExpenses={calc?.executor_expenses_total || 0}
+                    partnerShare={isAgency30 ? (calc?.partner_share_from_margin || 0) : (calc?.commission_amount || 0)}
+                    adminShare={isAgency30 ? (calc?.admin_share_from_margin || 0) : (calc?.net_profit_admin || 0)}
+                    catShare={calc?.cat_share_50}
+                    showCatShare={userRole === 'admin'}
+                  />
+                )}
+
                 <div className="flex justify-between text-lg font-bold">
                   <span>Счет клиенту:</span>
                   <span>{formatCurrency(calc?.client_bill || 0)}</span>

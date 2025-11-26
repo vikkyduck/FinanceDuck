@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2 } from "lucide-react";
@@ -22,6 +22,7 @@ import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
 import { ReconciliationDashboard } from "./admin/ReconciliationDashboard";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
+import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { useCollapsibleSections } from "@/hooks/useCollapsibleSections";
@@ -331,6 +332,12 @@ export const AdminDashboard = () => {
       <ExportFiltersDialog 
         open={exportDialogOpen} 
         onOpenChange={setExportDialogOpen} 
+      />
+
+      <FloatingActionButton
+        onCreateInvoice={() => setCreateDialogOpen(true)}
+        onManagePartners={() => setPartnersDialogOpen(true)}
+        onManageClients={() => setClientsDialogOpen(true)}
       />
     </DashboardLayout>
   );

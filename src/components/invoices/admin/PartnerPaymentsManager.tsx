@@ -3,12 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Wallet, Plus } from "lucide-react";
+import { Wallet, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { RecordPaymentDialog } from "./RecordPaymentDialog";
+import { PartnerInvoicesDetail } from "./PartnerInvoicesDetail";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface PartnerPaymentSummary {
   partner_id: string;
@@ -23,6 +25,7 @@ export const PartnerPaymentsManager = () => {
   const [loading, setLoading] = useState(true);
   const [selectedPartner, setSelectedPartner] = useState<PartnerPaymentSummary | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
   const { setRef } = useStaggerAnimation(summaries.length, 50);
 
   const fetchData = useCallback(async () => {
@@ -191,39 +194,66 @@ export const PartnerPaymentsManager = () => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {summaries.map((summary, index) => (
-            <TableRow 
-              key={summary.partner_id} 
-              ref={setRef(index)}
-              className="table-row-hover"
-            >
-              <TableCell className="font-medium table-cell-highlight">{summary.partner_name}</TableCell>
-              <TableCell className="text-right table-cell-highlight">
-                {formatCurrency(summary.total_to_transfer)}
-              </TableCell>
-              <TableCell className="text-right text-green-600 table-cell-highlight">
-                {formatCurrency(summary.total_paid)}
-              </TableCell>
-              <TableCell className={cn(
-                "text-right font-semibold table-cell-highlight",
-                summary.remaining > 0 ? 'text-red-600' : 'text-green-600'
-              )}>
-                {formatCurrency(summary.remaining)}
-              </TableCell>
-              <TableCell className="text-right">
-                {summary.remaining > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={() => handleRecordPayment(summary)}
-                    data-testid={`button-record-payment-${summary.partner_id}`}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Записать приход
-                  </Button>
+          {summaries.map((summary, index) => {
+            const isExpanded = expandedPartnerId === summary.partner_id;
+            return (
+              <>
+                <TableRow 
+                  key={summary.partner_id} 
+                  ref={setRef(index)}
+                  className={cn("table-row-hover cursor-pointer", isExpanded && "bg-muted/50")}
+                  onClick={() => setExpandedPartnerId(isExpanded ? null : summary.partner_id)}
+                  data-testid={`row-partner-${summary.partner_id}`}
+                >
+                  <TableCell className="font-medium table-cell-highlight">
+                    <div className="flex items-center gap-2">
+                      {isExpanded ? (
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      {summary.partner_name}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right table-cell-highlight">
+                    {formatCurrency(summary.total_to_transfer)}
+                  </TableCell>
+                  <TableCell className="text-right text-green-600 table-cell-highlight">
+                    {formatCurrency(summary.total_paid)}
+                  </TableCell>
+                  <TableCell className={cn(
+                    "text-right font-semibold table-cell-highlight",
+                    summary.remaining > 0 ? 'text-red-600' : 'text-green-600'
+                  )}>
+                    {formatCurrency(summary.remaining)}
+                  </TableCell>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    {summary.remaining > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleRecordPayment(summary)}
+                        data-testid={`button-record-payment-${summary.partner_id}`}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Записать приход
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+                {isExpanded && (
+                  <TableRow key={`${summary.partner_id}-detail`}>
+                    <TableCell colSpan={5} className="p-0">
+                      <PartnerInvoicesDetail
+                        partnerId={summary.partner_id}
+                        partnerName={summary.partner_name}
+                        onPaymentRecorded={fetchData}
+                      />
+                    </TableCell>
+                  </TableRow>
                 )}
-              </TableCell>
-            </TableRow>
-          ))}
+              </>
+            );
+          })}
         </TableBody>
       </Table>
 

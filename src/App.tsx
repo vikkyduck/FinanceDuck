@@ -10,6 +10,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useCookieSession } from "@/hooks/useCookieSession";
 import { useApiHealthCheck } from "@/hooks/useApiHealthCheck";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
+import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import Index from "./pages/Index";
 import InvoicesDashboard from "./pages/InvoicesDashboard";
 import AccessCodeLogin from "./pages/AccessCodeLogin";
@@ -120,6 +121,7 @@ const AppContent = () => {
   return (
     <>
       <ApiStatusBanner {...apiHealth} />
+      <GlobalCommandPalette />
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />

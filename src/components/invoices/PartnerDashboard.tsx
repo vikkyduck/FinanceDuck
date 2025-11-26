@@ -10,6 +10,7 @@ import { PartnerPaymentsList } from "./partner/PartnerPaymentsList";
 import { PartnerAgency30Report } from "./partner/PartnerAgency30Report";
 import { PartnerCommissionReport } from "./partner/PartnerCommissionReport";
 import { PartnerClientStats } from "./partner/PartnerClientStats";
+import { PartnerVirtualStatement } from "./partner/PartnerVirtualStatement";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
@@ -63,6 +64,8 @@ export const PartnerDashboard = () => {
         <PartnerCommissionReport />
 
         <PartnerClientStats />
+
+        <PartnerVirtualStatement />
 
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4">

@@ -21,6 +21,7 @@ import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { AdminTransactionsList } from "./admin/AdminTransactionsList";
+import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
@@ -174,6 +175,8 @@ export const AdminDashboard = () => {
               >
                 <AdminStats />
               </CollapsibleSection>
+
+              <PartnerDebtDashboard />
 
               <AdminTransactionsList limit={10} />
             </motion.div>

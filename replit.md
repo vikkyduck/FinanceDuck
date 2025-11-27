@@ -14,6 +14,10 @@ This project is an invoice management system migrating from Supabase to Replit w
 - Added telegram field to partners and clients tables
 - Made email optional (nullable) for partners and clients
 - Partners can now be added via UI without email
+- **NEW (2025-11-27):** Added client_partners junction table for many-to-many client-partner relationships
+  - Clients can now have multiple partners assigned
+  - Legacy partnerId field kept for backward compatibility with invoices
+  - Migration: existing partnerId relationships moved to junction table
 
 **Completed migrations (Supabase → invoiceService API):**
 - InvoiceDetailsDialog - full invoice view with expenses and documents
@@ -21,16 +25,19 @@ This project is an invoice management system migrating from Supabase to Replit w
 - AddExpenseDialog / EditExpenseDialog - expense CRUD operations
 - ClientCombobox / PartnerCombobox - entity selection with server data
 - ManagePartnersDialog - full CRUD with contact fields (name, telegram, phone, email), view partner's clients (admin only), delete with confirmation (admin only)
-- ManageClientsDialog - full CRUD with contact fields (name, telegram, phone), partner association, delete with confirmation (admin only)
+- ManageClientsDialog - full CRUD with contact fields (name, telegram, phone), **multi-partner selection** (admin only), delete with confirmation (admin only)
 - RecordPaymentDialog - partner payment recording with server-side filtering
 
 **API Endpoints for Partners/Clients:**
 - GET/POST/PATCH /api/partners - full contact info
-- DELETE /api/partners/:id - admin only, checks for linked invoices/clients
-- GET /api/partners/:id/clients - get partner's clients
+- DELETE /api/partners/:id - admin only, checks for linked invoices/clients (via junction table)
+- GET /api/partners/:id/clients - get partner's clients (uses junction table)
 - GET/POST/PATCH /api/clients - full contact info
 - DELETE /api/clients/:id - admin only, checks for linked invoices
-- GET /api/clients/:id/with-partner - get client with partner info
+- GET /api/clients/:id/with-partner - get client with legacy partner info
+- **NEW:** GET /api/clients/:id/partners - get all partners for a client
+- **NEW:** PUT /api/clients/:id/partners - set partners for a client (admin only)
+- **NEW:** GET /api/clients-with-partners - get all clients with their partners array
 
 **Privacy Rules Enforced (Server-Side):**
 - Assistants cannot access partner-client relationships via ANY endpoint:

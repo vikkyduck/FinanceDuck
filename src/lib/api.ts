@@ -51,6 +51,13 @@ export async function apiPatch<T>(endpoint: string, data?: unknown): Promise<T> 
   });
 }
 
+export async function apiPut<T>(endpoint: string, data?: unknown): Promise<T> {
+  return api<T>(endpoint, {
+    method: "PUT",
+    body: data ? JSON.stringify(data) : undefined,
+  });
+}
+
 export async function apiDelete<T>(endpoint: string): Promise<T> {
   return api<T>(endpoint, { method: "DELETE" });
 }

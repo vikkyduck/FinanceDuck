@@ -4,17 +4,18 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Loader2, Pencil, Trash2, Phone, Send, X, Check, User } from "lucide-react";
+import { Plus, Loader2, Pencil, Trash2, Phone, Send, X, Check, User, ChevronsUpDown } from "lucide-react";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
 import { toast } from "sonner";
 import { ClientsTableSkeleton } from "../InvoicesSkeleton";
 import { handleValidationError, showSuccess } from "@/lib/errorHandler";
 import { useRateLimit } from "@/hooks/useRateLimit";
-import { invoiceService, ClientListItem, PartnerListItem } from "@/lib/services/invoices";
+import { invoiceService, ClientWithPartners, PartnerListItem } from "@/lib/services/invoices";
 import { useAuth } from "@/hooks/useAuth";
 
 interface ManageClientsDialogProps {
@@ -26,16 +27,16 @@ interface ClientFormData {
   name: string;
   telegram: string;
   phone: string;
-  partnerId: string;
+  partnerIds: string[];
 }
 
-const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerId: "" };
+const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerIds: [] };
 
 export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogProps) => {
   const { role } = useAuth();
   const isAdmin = role === "admin";
   
-  const [clients, setClients] = useState<ClientListItem[]>([]);
+  const [clients, setClients] = useState<ClientWithPartners[]>([]);
   const [partners, setPartners] = useState<PartnerListItem[]>([]);
   const [form, setForm] = useState<ClientFormData>(emptyForm);
   const [loading, setLoading] = useState(false);
@@ -47,8 +48,11 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
   const [editForm, setEditForm] = useState<ClientFormData>(emptyForm);
   
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<ClientListItem | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<ClientWithPartners | null>(null);
   const [deleting, setDeleting] = useState(false);
+  
+  const [addPartnerPopoverOpen, setAddPartnerPopoverOpen] = useState(false);
+  const [editPartnerPopoverOpen, setEditPartnerPopoverOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -59,12 +63,16 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
   const fetchData = async () => {
     setFetchingData(true);
     try {
-      const [clientsData, partnersData] = await Promise.all([
-        invoiceService.fetchClients(),
-        invoiceService.fetchPartners(),
-      ]);
-      setClients(clientsData);
+      const partnersData = await invoiceService.fetchPartners();
       setPartners(partnersData);
+      
+      if (isAdmin) {
+        const clientsData = await invoiceService.fetchClientsWithPartners();
+        setClients(clientsData);
+      } else {
+        const basicClients = await invoiceService.fetchClients();
+        setClients(basicClients.map(c => ({ ...c, partners: [] })));
+      }
     } catch (error: any) {
       console.error("Error fetching data:", error);
       toast.error("Не удалось загрузить данные");
@@ -73,10 +81,19 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
     }
   };
 
-  const getPartnerName = (partnerId: string | null): string => {
-    if (!partnerId) return "";
-    const partner = partners.find(p => p.id === partnerId);
-    return partner?.name || "";
+  const togglePartner = (partnerIds: string[], partnerId: string): string[] => {
+    if (partnerIds.includes(partnerId)) {
+      return partnerIds.filter(id => id !== partnerId);
+    }
+    return [...partnerIds, partnerId];
+  };
+
+  const getPartnerNames = (partnerIds: string[]): string => {
+    if (partnerIds.length === 0) return "Выберите партнёров";
+    return partnerIds
+      .map(id => partners.find(p => p.id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
   };
 
   const handleAdd = async () => {
@@ -90,14 +107,20 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
 
     setLoading(true);
     try {
-      await invoiceService.createClient({
+      const created = await invoiceService.createClient({
         name: form.name.trim(),
         telegram: form.telegram.trim() || undefined,
         phone: form.phone.trim() || undefined,
-        partnerId: form.partnerId || undefined,
+        partnerId: form.partnerIds.length === 1 ? form.partnerIds[0] : undefined,
       });
+      
+      if (isAdmin && form.partnerIds.length > 0) {
+        await invoiceService.setClientPartners(created.id, form.partnerIds);
+      }
+      
       showSuccess("Успешно", "Клиент добавлен");
       setForm(emptyForm);
+      setAddPartnerPopoverOpen(false);
       fetchData();
     } catch (error: any) {
       toast.error(error.message || "Не удалось добавить клиента");
@@ -106,19 +129,20 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
     }
   };
 
-  const startEdit = (client: ClientListItem) => {
+  const startEdit = (client: ClientWithPartners) => {
     setEditingId(client.id);
     setEditForm({
       name: client.name,
       telegram: client.telegram || "",
       phone: client.phone || "",
-      partnerId: client.partnerId || "",
+      partnerIds: client.partners.map(p => p.id),
     });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm(emptyForm);
+    setEditPartnerPopoverOpen(false);
   };
 
   const saveEdit = async () => {
@@ -135,11 +159,17 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
         name: editForm.name.trim(),
         telegram: editForm.telegram.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
-        partnerId: editForm.partnerId || undefined,
+        partnerId: editForm.partnerIds.length === 1 ? editForm.partnerIds[0] : undefined,
       });
+      
+      if (isAdmin) {
+        await invoiceService.setClientPartners(editingId, editForm.partnerIds);
+      }
+      
       showSuccess("Успешно", "Клиент обновлён");
       setEditingId(null);
       setEditForm(emptyForm);
+      setEditPartnerPopoverOpen(false);
       fetchData();
     } catch (error: any) {
       toast.error(error.message || "Не удалось обновить клиента");
@@ -148,7 +178,7 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
     }
   };
 
-  const confirmDelete = (client: ClientListItem) => {
+  const confirmDelete = (client: ClientWithPartners) => {
     setClientToDelete(client);
     setDeleteConfirmOpen(true);
   };
@@ -198,28 +228,53 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                       data-testid="input-client-name"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
-                      <User className="h-3 w-3" />
-                      Партнёр
-                    </Label>
-                    <Select
-                      value={form.partnerId || "__none__"}
-                      onValueChange={(value) => setForm({ ...form, partnerId: value === "__none__" ? "" : value })}
-                    >
-                      <SelectTrigger data-testid="select-client-partner">
-                        <SelectValue placeholder="Выберите партнёра" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Без партнёра</SelectItem>
-                        {partners.map((partner) => (
-                          <SelectItem key={partner.id} value={partner.id}>
-                            {partner.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        Партнёры
+                      </Label>
+                      <Popover open={addPartnerPopoverOpen} onOpenChange={setAddPartnerPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            className="w-full justify-between font-normal"
+                            data-testid="select-client-partners"
+                          >
+                            <span className="truncate">
+                              {form.partnerIds.length === 0 
+                                ? "Выберите партнёров"
+                                : `Выбрано: ${form.partnerIds.length}`}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[280px] p-2">
+                          <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                            {partners.map((partner) => (
+                              <div
+                                key={partner.id}
+                                className="flex items-center space-x-2 p-2 hover-elevate rounded-md cursor-pointer"
+                                onClick={() => setForm({ ...form, partnerIds: togglePartner(form.partnerIds, partner.id) })}
+                              >
+                                <Checkbox
+                                  checked={form.partnerIds.includes(partner.id)}
+                                  onCheckedChange={() => setForm({ ...form, partnerIds: togglePartner(form.partnerIds, partner.id) })}
+                                />
+                                <span className="text-sm">{partner.name}</span>
+                              </div>
+                            ))}
+                            {partners.length === 0 && (
+                              <div className="text-sm text-muted-foreground text-center py-2">
+                                Нет партнёров
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -302,29 +357,56 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                             </TableCell>
                             <TableCell>
                               {editingId === client.id ? (
-                                <Select
-                                  value={editForm.partnerId || "__none__"}
-                                  onValueChange={(value) => setEditForm({ ...editForm, partnerId: value === "__none__" ? "" : value })}
-                                >
-                                  <SelectTrigger className="h-8">
-                                    <SelectValue placeholder="Партнёр" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="__none__">Без партнёра</SelectItem>
-                                    {partners.map((partner) => (
-                                      <SelectItem key={partner.id} value={partner.id}>
-                                        {partner.name}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                client.partnerId ? (
-                                  <Badge variant="secondary">
-                                    {getPartnerName(client.partnerId)}
-                                  </Badge>
+                                isAdmin ? (
+                                  <Popover open={editPartnerPopoverOpen} onOpenChange={setEditPartnerPopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full justify-between font-normal h-8"
+                                      >
+                                        <span className="truncate text-xs">
+                                          {editForm.partnerIds.length === 0 
+                                            ? "Выберите"
+                                            : `Выбрано: ${editForm.partnerIds.length}`}
+                                        </span>
+                                        <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[220px] p-2">
+                                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                                        {partners.map((partner) => (
+                                          <div
+                                            key={partner.id}
+                                            className="flex items-center space-x-2 p-2 hover-elevate rounded-md cursor-pointer"
+                                            onClick={() => setEditForm({ ...editForm, partnerIds: togglePartner(editForm.partnerIds, partner.id) })}
+                                          >
+                                            <Checkbox
+                                              checked={editForm.partnerIds.includes(partner.id)}
+                                              onCheckedChange={() => setEditForm({ ...editForm, partnerIds: togglePartner(editForm.partnerIds, partner.id) })}
+                                            />
+                                            <span className="text-sm">{partner.name}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
                                 ) : (
-                                  <span className="text-xs text-muted-foreground">Нет партнёра</span>
+                                  <span className="text-xs text-muted-foreground">Недоступно</span>
+                                )
+                              ) : (
+                                isAdmin && client.partners.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {client.partners.map(p => (
+                                      <Badge key={p.id} variant="secondary" className="text-xs">
+                                        {p.name}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    {isAdmin ? "Нет партнёров" : "—"}
+                                  </span>
                                 )
                               )}
                             </TableCell>

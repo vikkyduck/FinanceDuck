@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from "@/lib/api";
 
 export interface ClientListItem {
   id: string;
@@ -11,6 +11,10 @@ export interface ClientListItem {
 
 export interface ClientWithPartner extends ClientListItem {
   partner?: PartnerListItem;
+}
+
+export interface ClientWithPartners extends ClientListItem {
+  partners: PartnerListItem[];
 }
 
 export interface PartnerListItem {
@@ -373,6 +377,50 @@ export const invoiceService = {
     } catch (error: any) {
       return { success: false, error: error.message || "Failed to delete client" };
     }
+  },
+
+  async fetchClientPartners(clientId: string): Promise<PartnerListItem[]> {
+    const data = await apiGet<any[]>(`/clients/${clientId}/partners`);
+    return data.map((partner) => ({
+      id: partner.id,
+      name: partner.name,
+      telegram: partner.telegram || null,
+      phone: partner.phone || null,
+      email: partner.email || null,
+      createdAt: partner.createdAt,
+    }));
+  },
+
+  async setClientPartners(clientId: string, partnerIds: string[]): Promise<PartnerListItem[]> {
+    const data = await apiPut<any[]>(`/clients/${clientId}/partners`, { partnerIds });
+    return data.map((partner) => ({
+      id: partner.id,
+      name: partner.name,
+      telegram: partner.telegram || null,
+      phone: partner.phone || null,
+      email: partner.email || null,
+      createdAt: partner.createdAt,
+    }));
+  },
+
+  async fetchClientsWithPartners(): Promise<ClientWithPartners[]> {
+    const data = await apiGet<any[]>("/clients-with-partners");
+    return data.map((client) => ({
+      id: client.id,
+      name: client.name,
+      telegram: client.telegram || null,
+      phone: client.phone || null,
+      partnerId: client.partnerId || null,
+      createdAt: client.createdAt,
+      partners: (client.partners || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        telegram: p.telegram || null,
+        phone: p.phone || null,
+        email: p.email || null,
+        createdAt: p.createdAt,
+      })),
+    }));
   },
 
   async createPartner(partner: {

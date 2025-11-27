@@ -98,11 +98,17 @@ export function calculateInvoice(
  * 
  * Partner Agreement (commission_based):
  *   debt = clientBill - partnerCommission - executorExpenses
- *   (Partner pays expenses from client money)
+ *   (Partner collects from client, keeps commission, pays expenses, transfers rest to admin)
  * 
  * Agency 30%:
- *   debt = partner_share_from_margin (15% of client bill)
- *   (Partner owes only their 15% commission, remaining 70% is separate)
+ *   Client pays 100%
+ *   ├─ 70% = client budget for project expenses
+ *   └─ 30% = agency margin, split 50/50:
+ *       ├─ 15% partner share (partner keeps this)
+ *       └─ 15% admin share (partner OWES this to admin)
+ *   
+ *   debt = admin_share_from_margin (15% of client bill)
+ *   doNotSpendAmount = 70% of client bill - executor expenses
  */
 export function calculatePartnerDebt(
   scheme: InvoiceScheme,
@@ -111,24 +117,28 @@ export function calculatePartnerDebt(
   executorExpenses: number = 0
 ): { debtToAdmin: number; doNotSpendAmount: number } {
   if (scheme === 'agency_30') {
-    // Agency 30%: Partner owes only their 15% commission
-    // The remaining 70% minus expenses is "DO NOT SPEND" money
+    // Agency 30%: 
+    // - Partner keeps 15% (their share)
+    // - Partner OWES admin 15% (admin's share)
+    // - 70% is client budget for expenses (tracked separately)
+    const adminShare = clientBill * 0.15; // Admin's 15% - THIS is what partner owes
     const clientBase = clientBill * 0.70;
     const doNotSpendAmount = Math.max(0, clientBase - executorExpenses);
     
     return {
-      debtToAdmin: partnerCommission, // Just the 15% commission
+      debtToAdmin: adminShare, // Partner owes admin their 15% share
       doNotSpendAmount,
     };
   }
   
   // Partner Agreement (commission_based):
-  // Partner owes clientBill - their commission - expenses they paid
+  // Partner collects full amount from client, keeps their commission,
+  // pays executor expenses, and transfers the remainder to admin
   const debtToAdmin = Math.max(0, clientBill - partnerCommission - executorExpenses);
   
   return {
     debtToAdmin,
-    doNotSpendAmount: 0, // No "do not spend" pool for commission-based scheme
+    doNotSpendAmount: 0, // No separate "do not spend" pool for commission-based scheme
   };
 }
 

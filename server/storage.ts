@@ -1,12 +1,12 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments,
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners,
   Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment,
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment,
   AccessToken, UserSession, UserRole
 } from "../shared/schema";
-import { eq, and, desc, isNull, gte, sql } from "drizzle-orm";
+import { eq, and, desc, isNull, gte, sql, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 export interface IStorage {
@@ -26,6 +26,9 @@ export interface IStorage {
   getClients(partnerId?: string): Promise<Client[]>;
   getClient(id: string): Promise<Client | null>;
   getClientWithPartner(id: string): Promise<(Client & { partner?: Partner }) | null>;
+  getClientPartners(clientId: string): Promise<Partner[]>;
+  getClientsWithPartners(): Promise<(Client & { partners: Partner[] })[]>;
+  setClientPartners(clientId: string, partnerIds: string[]): Promise<void>;
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: string, client: Partial<InsertClient>): Promise<Client | null>;
   deleteClient(id: string): Promise<{ success: boolean; error?: string }>;
@@ -184,9 +187,9 @@ export class DatabaseStorage implements IStorage {
       return { success: false, error: "Нельзя удалить партнёра: есть связанные счета" };
     }
     
-    const linkedClients = await db.select({ id: clients.id })
-      .from(clients)
-      .where(eq(clients.partnerId, id))
+    const linkedClients = await db.select({ id: clientPartners.clientId })
+      .from(clientPartners)
+      .where(eq(clientPartners.partnerId, id))
       .limit(1);
     
     if (linkedClients.length > 0) {
@@ -200,7 +203,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPartnerClients(partnerId: string): Promise<Client[]> {
-    return db.select().from(clients).where(eq(clients.partnerId, partnerId)).orderBy(clients.name);
+    const results = await db
+      .select({ client: clients })
+      .from(clientPartners)
+      .innerJoin(clients, eq(clientPartners.clientId, clients.id))
+      .where(eq(clientPartners.partnerId, partnerId))
+      .orderBy(clients.name);
+    
+    return results.map(r => r.client);
   }
 
   async getClients(partnerId?: string): Promise<Client[]> {
@@ -247,6 +257,56 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getClientPartners(clientId: string): Promise<Partner[]> {
+    const results = await db
+      .select({ partner: partners })
+      .from(clientPartners)
+      .innerJoin(partners, eq(clientPartners.partnerId, partners.id))
+      .where(eq(clientPartners.clientId, clientId))
+      .orderBy(partners.name);
+    
+    return results.map(r => r.partner);
+  }
+
+  async getClientsWithPartners(): Promise<(Client & { partners: Partner[] })[]> {
+    const allClients = await db.select().from(clients).orderBy(clients.name);
+    
+    const clientsWithPartners = await Promise.all(
+      allClients.map(async (client) => {
+        const clientPartnerList = await this.getClientPartners(client.id);
+        return {
+          ...client,
+          partners: clientPartnerList,
+        };
+      })
+    );
+    
+    return clientsWithPartners;
+  }
+
+  async setClientPartners(clientId: string, partnerIds: string[]): Promise<void> {
+    await db.delete(clientPartners).where(eq(clientPartners.clientId, clientId));
+    
+    if (partnerIds.length > 0) {
+      await db.insert(clientPartners).values(
+        partnerIds.map(partnerId => ({
+          clientId,
+          partnerId,
+        }))
+      );
+    }
+    
+    if (partnerIds.length === 1) {
+      await db.update(clients)
+        .set({ partnerId: partnerIds[0], updatedAt: new Date() })
+        .where(eq(clients.id, clientId));
+    } else if (partnerIds.length === 0) {
+      await db.update(clients)
+        .set({ partnerId: null, updatedAt: new Date() })
+        .where(eq(clients.id, clientId));
+    }
+  }
+
   async deleteClient(id: string): Promise<{ success: boolean; error?: string }> {
     const linkedInvoices = await db.select({ id: invoices.id })
       .from(invoices)
@@ -257,6 +317,7 @@ export class DatabaseStorage implements IStorage {
       return { success: false, error: "Нельзя удалить клиента: есть связанные счета" };
     }
     
+    await db.delete(clientPartners).where(eq(clientPartners.clientId, id));
     await db.delete(accessTokens).where(eq(accessTokens.clientId, id));
     await db.delete(clients).where(eq(clients.id, id));
     

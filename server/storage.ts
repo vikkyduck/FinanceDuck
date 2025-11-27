@@ -658,8 +658,23 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getAccessTokens(): Promise<AccessToken[]> {
-    return db.select().from(accessTokens).orderBy(accessTokens.createdAt);
+  async getAccessTokens(): Promise<(AccessToken & { partnerName?: string; clientName?: string })[]> {
+    const results = await db
+      .select({
+        token: accessTokens,
+        partnerName: partners.name,
+        clientName: clients.name,
+      })
+      .from(accessTokens)
+      .leftJoin(partners, eq(accessTokens.partnerId, partners.id))
+      .leftJoin(clients, eq(accessTokens.clientId, clients.id))
+      .orderBy(desc(accessTokens.createdAt));
+    
+    return results.map(r => ({
+      ...r.token,
+      partnerName: r.partnerName ?? undefined,
+      clientName: r.clientName ?? undefined,
+    }));
   }
 
   async createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string): Promise<AccessToken> {

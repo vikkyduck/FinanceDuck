@@ -5,10 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ManageAccessCodesDialogProps {
   open: boolean;
@@ -17,12 +17,36 @@ interface ManageAccessCodesDialogProps {
 
 type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
 
+interface AccessToken {
+  id: string;
+  code: string;
+  role: UserRole;
+  partnerId?: string | null;
+  clientId?: string | null;
+  partnerName?: string;
+  clientName?: string;
+  lastUsedAt?: string | null;
+  createdAt?: string;
+}
+
+interface Partner {
+  id: string;
+  name: string;
+}
+
+interface Client {
+  id: string;
+  name: string;
+}
+
 export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCodesDialogProps) => {
   const { toast } = useToast();
+  const { csrfToken } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [tokens, setTokens] = useState<any[]>([]);
-  const [partners, setPartners] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [tokens, setTokens] = useState<AccessToken[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   
   const [newCode, setNewCode] = useState("");
   const [selectedRole, setSelectedRole] = useState<UserRole>("assistant");
@@ -38,37 +62,54 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
   }, [open]);
 
   const fetchTokens = async () => {
-    const { data, error } = await supabase
-      .from('access_tokens')
-      .select(`
-        *,
-        partners(name),
-        clients(name)
-      `)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setTokens(data);
+    setLoading(true);
+    try {
+      const response = await fetch('/api/access-tokens', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTokens(data);
+      } else {
+        throw new Error('Не удалось загрузить коды');
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Ошибка",
+        description: error.message,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchPartners = async () => {
-    const { data } = await supabase
-      .from('partners')
-      .select('id, name')
-      .order('name');
-    
-    if (data) setPartners(data);
+    try {
+      const response = await fetch('/api/partners', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPartners(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch partners:', error);
+    }
   };
 
   const fetchClients = async () => {
-    const { data } = await supabase
-      .from('clients')
-      .select('id, name')
-      .order('name');
-    
-    if (data) setClients(data);
+    try {
+      const response = await fetch('/api/clients', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setClients(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch clients:', error);
+    }
   };
 
   const generateCode = (role: UserRole) => {
@@ -79,7 +120,6 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
       client: 'CLT'
     }[role];
     
-    // Generate cryptographically secure random code with 8 alphanumeric characters
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const array = new Uint8Array(8);
     crypto.getRandomValues(array);
@@ -92,25 +132,30 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
   };
 
   const handleCreateToken = async () => {
-    setLoading(true);
+    setCreating(true);
 
     try {
       const code = newCode || generateCode(selectedRole);
       
-      // Create access token (all role info is already in this table)
-      const { error: tokenError } = await supabase
-        .from('access_tokens')
-        .insert({
+      const response = await fetch('/api/access-tokens', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken || '',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
           code: code.toUpperCase(),
           role: selectedRole,
-          partner_id: selectedRole === 'partner' && selectedPartnerId ? selectedPartnerId : null,
-          client_id: selectedRole === 'client' && selectedClientId ? selectedClientId : null,
-          is_active: true,
-        })
-        .select()
-        .single();
+          partnerId: selectedRole === 'partner' && selectedPartnerId ? selectedPartnerId : null,
+          clientId: selectedRole === 'client' && selectedClientId ? selectedClientId : null,
+        }),
+      });
 
-      if (tokenError) throw tokenError;
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Ошибка создания кода');
+      }
 
       toast({
         title: "Код создан",
@@ -130,40 +175,57 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
       });
     }
 
-    setLoading(false);
+    setCreating(false);
   };
 
   const handleDeleteToken = async (id: string) => {
-    // При деактивации токен автоматически удаляется триггером
-    const { error } = await supabase
-      .from('access_tokens')
-      .update({ is_active: false })
-      .eq('id', id);
-
-    if (error) {
-      toast({
-        variant: "destructive",
-        title: "Ошибка",
-        description: error.message,
+    try {
+      const response = await fetch(`/api/access-tokens/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRF-Token': csrfToken || '',
+        },
+        credentials: 'include',
       });
-    } else {
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Ошибка удаления');
+      }
+
       toast({
         title: "Код удален",
         description: "Код доступа успешно удален",
       });
       fetchTokens();
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Ошибка",
+        description: error.message,
+      });
     }
   };
 
   const getRoleBadge = (role: string) => {
+    const labels: Record<string, string> = {
+      admin: "Админ",
+      assistant: "Ассистент",
+      partner: "Партнер",
+      client: "Клиент",
+    };
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       admin: "destructive",
       assistant: "default",
       partner: "secondary",
       client: "outline",
     };
-    return <Badge variant={variants[role]}>{role}</Badge>;
+    return <Badge variant={variants[role]}>{labels[role] || role}</Badge>;
   };
+
+  const isCreateDisabled = creating || 
+    (selectedRole === 'partner' && !selectedPartnerId) || 
+    (selectedRole === 'client' && !selectedClientId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -176,7 +238,6 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Create new token */}
           <div className="border rounded-lg p-4 space-y-4">
             <h3 className="font-semibold flex items-center gap-2">
               <Plus className="h-4 w-4" />
@@ -187,7 +248,7 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
               <div className="space-y-2">
                 <Label>Роль</Label>
                 <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as UserRole)}>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-role">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -207,6 +268,7 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
                   placeholder={generateCode(selectedRole)}
                   className="uppercase font-mono"
                   maxLength={20}
+                  data-testid="input-code"
                 />
               </div>
             </div>
@@ -215,7 +277,7 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
               <div className="space-y-2">
                 <Label>Выберите партнера</Label>
                 <Select value={selectedPartnerId} onValueChange={setSelectedPartnerId}>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-partner">
                     <SelectValue placeholder="Выберите партнера" />
                   </SelectTrigger>
                   <SelectContent>
@@ -233,7 +295,7 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
               <div className="space-y-2">
                 <Label>Выберите клиента</Label>
                 <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="select-client">
                     <SelectValue placeholder="Выберите клиента" />
                   </SelectTrigger>
                   <SelectContent>
@@ -249,54 +311,70 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
 
             <Button 
               onClick={handleCreateToken} 
-              disabled={loading || (selectedRole === 'partner' && !selectedPartnerId) || (selectedRole === 'client' && !selectedClientId)}
+              disabled={isCreateDisabled}
               className="w-full"
+              data-testid="button-create-code"
             >
+              {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Создать код
             </Button>
           </div>
 
-          {/* Tokens list */}
           <div>
             <h3 className="font-semibold mb-4">Список кодов</h3>
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Код</TableHead>
-                    <TableHead>Роль</TableHead>
-                    <TableHead>Привязка</TableHead>
-                    <TableHead>Последнее использование</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tokens.map((token) => (
-                    <TableRow key={token.id}>
-                      <TableCell className="font-mono font-semibold">{token.code}</TableCell>
-                      <TableCell>{getRoleBadge(token.role)}</TableCell>
-                      <TableCell>
-                        {token.partners?.name || token.clients?.name || '—'}
-                      </TableCell>
-                      <TableCell>
-                        {token.last_used_at 
-                          ? new Date(token.last_used_at).toLocaleDateString('ru-RU')
-                          : 'Не использовался'}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteToken(token.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Код</TableHead>
+                      <TableHead>Роль</TableHead>
+                      <TableHead>Привязка</TableHead>
+                      <TableHead>Последнее использование</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {tokens.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          Нет созданных кодов
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      tokens.map((token) => (
+                        <TableRow key={token.id} data-testid={`row-token-${token.id}`}>
+                          <TableCell className="font-mono font-semibold">{token.code}</TableCell>
+                          <TableCell>{getRoleBadge(token.role)}</TableCell>
+                          <TableCell>
+                            {token.partnerName || token.clientName || '—'}
+                          </TableCell>
+                          <TableCell>
+                            {token.lastUsedAt 
+                              ? new Date(token.lastUsedAt).toLocaleDateString('ru-RU')
+                              : 'Не использовался'}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteToken(token.id)}
+                              data-testid={`button-delete-token-${token.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>

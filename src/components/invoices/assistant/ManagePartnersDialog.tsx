@@ -1,49 +1,94 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, Loader2, Pencil, Trash2, Users, Phone, Send, Mail, X, Check } from "lucide-react";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
 import { toast } from "sonner";
 import { PartnersTableSkeleton } from "../InvoicesSkeleton";
 import { handleValidationError, showSuccess } from "@/lib/errorHandler";
 import { useRateLimit } from "@/hooks/useRateLimit";
-import { invoiceService, PartnerListItem } from "@/lib/services/invoices";
+import { invoiceService, PartnerListItem, ClientListItem } from "@/lib/services/invoices";
+import { useAuth } from "@/hooks/useAuth";
 
 interface ManagePartnersDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+interface PartnerFormData {
+  name: string;
+  telegram: string;
+  phone: string;
+  email: string;
+}
+
+const emptyForm: PartnerFormData = { name: "", telegram: "", phone: "", email: "" };
+
 export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialogProps) => {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
+  
   const [partners, setPartners] = useState<PartnerListItem[]>([]);
-  const [name, setName] = useState("");
+  const [form, setForm] = useState<PartnerFormData>(emptyForm);
   const [loading, setLoading] = useState(false);
   const [fetchingData, setFetchingData] = useState(true);
   const { setRef } = useStaggerAnimation(partners.length, 40);
   const { checkLimit } = useRateLimit('form');
+  
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<PartnerFormData>(emptyForm);
+  
+  const [selectedPartner, setSelectedPartner] = useState<PartnerListItem | null>(null);
+  const [partnerClients, setPartnerClients] = useState<ClientListItem[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [partnerToDelete, setPartnerToDelete] = useState<PartnerListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (open) {
       fetchPartners();
+      setSelectedPartner(null);
+      setPartnerClients([]);
     }
   }, [open]);
 
   const fetchPartners = async () => {
     setFetchingData(true);
-    console.log("[ManagePartnersDialog] Starting to fetch partners...");
     try {
       const data = await invoiceService.fetchPartners();
-      console.log("[ManagePartnersDialog] Partners loaded:", data);
       setPartners(data);
     } catch (error: any) {
       console.error("[ManagePartnersDialog] Error fetching partners:", error);
-      console.error("[ManagePartnersDialog] Error message:", error?.message);
       toast.error("Не удалось загрузить партнёров");
     } finally {
       setFetchingData(false);
+    }
+  };
+
+  const fetchPartnerClients = async (partner: PartnerListItem) => {
+    if (!isAdmin) {
+      setSelectedPartner(partner);
+      return;
+    }
+    
+    setSelectedPartner(partner);
+    setLoadingClients(true);
+    try {
+      const clients = await invoiceService.fetchPartnerClients(partner.id);
+      setPartnerClients(clients);
+    } catch (error: any) {
+      console.error("[ManagePartnersDialog] Error fetching partner clients:", error);
+      toast.error("Не удалось загрузить клиентов партнёра");
+    } finally {
+      setLoadingClients(false);
     }
   };
 
@@ -51,102 +96,423 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
     const limitCheck = checkLimit();
     if (!limitCheck.allowed) return;
 
-    if (!name.trim()) {
+    if (!form.name.trim()) {
       handleValidationError("Форма", "Введите название партнёра");
       return;
     }
 
     setLoading(true);
     try {
-      const { partnerSchema } = await import('@/lib/validationSchemas');
-      const validated = partnerSchema.parse({ name, telegram: "", phone: "" });
-
-      await invoiceService.createPartner(validated.name);
+      await invoiceService.createPartner({
+        name: form.name.trim(),
+        telegram: form.telegram.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+      });
       showSuccess("Успешно", "Партнер добавлен");
-      setName("");
+      setForm(emptyForm);
       fetchPartners();
     } catch (error: any) {
-      if (error.name === 'ZodError') {
-        handleValidationError("Форма", error.errors[0]?.message || 'Ошибка валидации данных');
-      } else {
-        toast.error(error.message || "Не удалось добавить партнёра");
-      }
+      toast.error(error.message || "Не удалось добавить партнёра");
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>Управление партнерами</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          <div className="border rounded-lg p-4 space-y-4">
-            <h3 className="font-medium">Добавить партнера</h3>
-            <div className="flex gap-4 items-end">
-              <div className="flex-1 space-y-2">
-                <Label>Название *</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="ООО Компания"
-                  data-testid="input-partner-name"
-                />
-              </div>
-              <Button onClick={handleAdd} disabled={loading} data-testid="button-add-partner">
-                {loading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4 mr-2" />
-                )}
-                Добавить
-              </Button>
-            </div>
-          </div>
+  const startEdit = (partner: PartnerListItem) => {
+    setEditingId(partner.id);
+    setEditForm({
+      name: partner.name,
+      telegram: partner.telegram || "",
+      phone: partner.phone || "",
+      email: partner.email || "",
+    });
+  };
 
-          <div className="space-y-4">
-            <h3 className="font-medium">Существующие партнеры</h3>
-            {fetchingData ? (
-              <PartnersTableSkeleton />
-            ) : (
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Название</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {partners.length === 0 ? (
-                      <TableRow>
-                        <TableCell className="text-center text-muted-foreground py-8">
-                          Нет партнёров
-                        </TableCell>
-                      </TableRow>
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm(emptyForm);
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    
+    if (!editForm.name.trim()) {
+      handleValidationError("Форма", "Введите название партнёра");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await invoiceService.updatePartner(editingId, {
+        name: editForm.name.trim(),
+        telegram: editForm.telegram.trim() || undefined,
+        phone: editForm.phone.trim() || undefined,
+        email: editForm.email.trim() || undefined,
+      });
+      showSuccess("Успешно", "Партнер обновлён");
+      setEditingId(null);
+      setEditForm(emptyForm);
+      fetchPartners();
+      
+      if (selectedPartner?.id === editingId) {
+        const updated = partners.find(p => p.id === editingId);
+        if (updated) {
+          setSelectedPartner({
+            ...updated,
+            name: editForm.name.trim(),
+            telegram: editForm.telegram.trim() || null,
+            phone: editForm.phone.trim() || null,
+            email: editForm.email.trim() || null,
+          });
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Не удалось обновить партнёра");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmDelete = (partner: PartnerListItem) => {
+    setPartnerToDelete(partner);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!partnerToDelete) return;
+    
+    setDeleting(true);
+    try {
+      const result = await invoiceService.deletePartner(partnerToDelete.id);
+      if (result.success) {
+        showSuccess("Успешно", "Партнер удалён");
+        fetchPartners();
+        if (selectedPartner?.id === partnerToDelete.id) {
+          setSelectedPartner(null);
+          setPartnerClients([]);
+        }
+      } else {
+        toast.error(result.error || "Не удалось удалить партнёра");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Не удалось удалить партнёра");
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+      setPartnerToDelete(null);
+    }
+  };
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Управление партнерами</DialogTitle>
+          </DialogHeader>
+          
+          <div className={`grid gap-4 ${isAdmin ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Добавить партнера</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Название *</Label>
+                    <Input
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      placeholder="ООО Компания"
+                      data-testid="input-partner-name"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        <Send className="h-3 w-3" />
+                        Telegram
+                      </Label>
+                      <Input
+                        value={form.telegram}
+                        onChange={(e) => setForm({ ...form, telegram: e.target.value })}
+                        placeholder="@username"
+                        data-testid="input-partner-telegram"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-1">
+                        <Phone className="h-3 w-3" />
+                        Телефон
+                      </Label>
+                      <Input
+                        value={form.phone}
+                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        placeholder="+7 999 123-45-67"
+                        data-testid="input-partner-phone"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1">
+                      <Mail className="h-3 w-3" />
+                      Email
+                    </Label>
+                    <Input
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      placeholder="partner@company.com"
+                      type="email"
+                      data-testid="input-partner-email"
+                    />
+                  </div>
+                  <Button onClick={handleAdd} disabled={loading} className="w-full" data-testid="button-add-partner">
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
-                      partners.map((partner, index) => (
-                        <TableRow 
-                          key={partner.id} 
-                          ref={setRef(index)}
-                          className="table-row-hover group"
-                          data-testid={`row-partner-${partner.id}`}
-                        >
-                          <TableCell className="font-medium table-cell-highlight">
-                            {partner.name}
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      <Plus className="h-4 w-4 mr-2" />
                     )}
-                  </TableBody>
-                </Table>
+                    Добавить
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm text-muted-foreground">Партнеры ({partners.length})</h3>
+                {fetchingData ? (
+                  <PartnersTableSkeleton />
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Название</TableHead>
+                          <TableHead>Контакты</TableHead>
+                          <TableHead className="w-[100px]"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {partners.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                              Нет партнёров
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          partners.map((partner, index) => (
+                            <TableRow 
+                              key={partner.id} 
+                              ref={setRef(index)}
+                              className={`hover-elevate cursor-pointer ${selectedPartner?.id === partner.id ? 'bg-accent' : ''}`}
+                              onClick={() => fetchPartnerClients(partner)}
+                              data-testid={`row-partner-${partner.id}`}
+                            >
+                              <TableCell>
+                                {editingId === partner.id ? (
+                                  <Input
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="h-8"
+                                    onClick={(e) => e.stopPropagation()}
+                                    data-testid="input-edit-partner-name"
+                                  />
+                                ) : (
+                                  <span className="font-medium">{partner.name}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {editingId === partner.id ? (
+                                  <div className="space-y-1">
+                                    <Input
+                                      value={editForm.telegram}
+                                      onChange={(e) => setEditForm({ ...editForm, telegram: e.target.value })}
+                                      placeholder="Telegram"
+                                      className="h-7 text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <Input
+                                      value={editForm.phone}
+                                      onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                      placeholder="Телефон"
+                                      className="h-7 text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <Input
+                                      value={editForm.email}
+                                      onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                      placeholder="Email"
+                                      className="h-7 text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1">
+                                    {partner.telegram && (
+                                      <Badge variant="outline" className="text-xs">
+                                        <Send className="h-3 w-3 mr-1" />
+                                        {partner.telegram}
+                                      </Badge>
+                                    )}
+                                    {partner.phone && (
+                                      <Badge variant="outline" className="text-xs">
+                                        <Phone className="h-3 w-3 mr-1" />
+                                        {partner.phone}
+                                      </Badge>
+                                    )}
+                                    {partner.email && (
+                                      <Badge variant="outline" className="text-xs">
+                                        <Mail className="h-3 w-3 mr-1" />
+                                        {partner.email}
+                                      </Badge>
+                                    )}
+                                    {!partner.telegram && !partner.phone && !partner.email && (
+                                      <span className="text-xs text-muted-foreground">Нет контактов</span>
+                                    )}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                  {editingId === partner.id ? (
+                                    <>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={saveEdit}
+                                        disabled={loading}
+                                        data-testid="button-save-partner"
+                                      >
+                                        <Check className="h-4 w-4 text-green-600" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={cancelEdit}
+                                        data-testid="button-cancel-edit-partner"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        onClick={() => startEdit(partner)}
+                                        data-testid={`button-edit-partner-${partner.id}`}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                      {isAdmin && (
+                                        <Button
+                                          size="icon"
+                                          variant="ghost"
+                                          onClick={() => confirmDelete(partner)}
+                                          data-testid={`button-delete-partner-${partner.id}`}
+                                        >
+                                          <Trash2 className="h-4 w-4 text-destructive" />
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {isAdmin && (
+              <div className="space-y-2">
+                <h3 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  {selectedPartner ? `Клиенты: ${selectedPartner.name}` : "Выберите партнёра"}
+                </h3>
+                
+                {selectedPartner ? (
+                  <Card>
+                    <CardContent className="pt-4">
+                      {loadingClients ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : partnerClients.length === 0 ? (
+                        <div className="text-center text-muted-foreground py-8">
+                          Нет клиентов у этого партнёра
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {partnerClients.map((client) => (
+                            <div 
+                              key={client.id} 
+                              className="p-3 rounded-md border bg-muted/30"
+                              data-testid={`client-of-partner-${client.id}`}
+                            >
+                              <div className="font-medium">{client.name}</div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {client.telegram && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Send className="h-3 w-3 mr-1" />
+                                    {client.telegram}
+                                  </Badge>
+                                )}
+                                {client.phone && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <Phone className="h-3 w-3 mr-1" />
+                                    {client.phone}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="text-center text-muted-foreground py-8">
+                      Нажмите на партнёра в таблице чтобы увидеть его клиентов
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               </div>
             )}
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить партнёра?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить партнёра "{partnerToDelete?.name}"?
+              Это действие нельзя отменить.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete-partner"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

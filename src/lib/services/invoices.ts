@@ -3,13 +3,27 @@ import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 export interface ClientListItem {
   id: string;
   name: string;
+  telegram: string | null;
+  phone: string | null;
+  partnerId: string | null;
   createdAt?: string;
+}
+
+export interface ClientWithPartner extends ClientListItem {
+  partner?: PartnerListItem;
 }
 
 export interface PartnerListItem {
   id: string;
   name: string;
+  telegram: string | null;
+  phone: string | null;
+  email: string | null;
   createdAt?: string;
+}
+
+export interface PartnerWithClients extends PartnerListItem {
+  clients: ClientListItem[];
 }
 
 export interface InvoiceExpense {
@@ -267,6 +281,9 @@ export const invoiceService = {
     return data.map((client) => ({
       id: client.id,
       name: client.name,
+      telegram: client.telegram || null,
+      phone: client.phone || null,
+      partnerId: client.partnerId || null,
       createdAt: client.createdAt,
     }));
   },
@@ -276,44 +293,129 @@ export const invoiceService = {
     return data.map((partner) => ({
       id: partner.id,
       name: partner.name,
+      telegram: partner.telegram || null,
+      phone: partner.phone || null,
+      email: partner.email || null,
       createdAt: partner.createdAt,
     }));
   },
 
-  async createClient(name: string): Promise<ClientListItem> {
-    const data = await apiPost<any>("/clients", { name });
+  async fetchPartnerClients(partnerId: string): Promise<ClientListItem[]> {
+    const data = await apiGet<any[]>(`/partners/${partnerId}/clients`);
+    return data.map((client) => ({
+      id: client.id,
+      name: client.name,
+      telegram: client.telegram || null,
+      phone: client.phone || null,
+      partnerId: client.partnerId || null,
+      createdAt: client.createdAt,
+    }));
+  },
+
+  async fetchClientWithPartner(clientId: string): Promise<ClientWithPartner> {
+    const data = await apiGet<any>(`/clients/${clientId}/with-partner`);
     return {
       id: data.id,
       name: data.name,
+      telegram: data.telegram || null,
+      phone: data.phone || null,
+      partnerId: data.partnerId || null,
+      createdAt: data.createdAt,
+      partner: data.partner ? {
+        id: data.partner.id,
+        name: data.partner.name,
+        telegram: data.partner.telegram || null,
+        phone: data.partner.phone || null,
+        email: data.partner.email || null,
+        createdAt: data.partner.createdAt,
+      } : undefined,
+    };
+  },
+
+  async createClient(client: {
+    name: string;
+    telegram?: string;
+    phone?: string;
+    partnerId?: string;
+  }): Promise<ClientListItem> {
+    const data = await apiPost<any>("/clients", client);
+    return {
+      id: data.id,
+      name: data.name,
+      telegram: data.telegram || null,
+      phone: data.phone || null,
+      partnerId: data.partnerId || null,
       createdAt: data.createdAt,
     };
   },
 
-  async updateClient(id: string, name: string): Promise<ClientListItem> {
-    const data = await apiPatch<any>(`/clients/${id}`, { name });
+  async updateClient(id: string, updates: {
+    name?: string;
+    telegram?: string;
+    phone?: string;
+    partnerId?: string;
+  }): Promise<ClientListItem> {
+    const data = await apiPatch<any>(`/clients/${id}`, updates);
     return {
       id: data.id,
       name: data.name,
+      telegram: data.telegram || null,
+      phone: data.phone || null,
+      partnerId: data.partnerId || null,
       createdAt: data.createdAt,
     };
   },
 
-  async createPartner(name: string): Promise<PartnerListItem> {
-    const data = await apiPost<any>("/partners", { name });
+  async deleteClient(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await apiDelete(`/clients/${id}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message || "Failed to delete client" };
+    }
+  },
+
+  async createPartner(partner: {
+    name: string;
+    telegram?: string;
+    phone?: string;
+    email?: string;
+  }): Promise<PartnerListItem> {
+    const data = await apiPost<any>("/partners", partner);
     return {
       id: data.id,
       name: data.name,
+      telegram: data.telegram || null,
+      phone: data.phone || null,
+      email: data.email || null,
       createdAt: data.createdAt,
     };
   },
 
-  async updatePartner(id: string, name: string): Promise<PartnerListItem> {
-    const data = await apiPatch<any>(`/partners/${id}`, { name });
+  async updatePartner(id: string, updates: {
+    name?: string;
+    telegram?: string;
+    phone?: string;
+    email?: string;
+  }): Promise<PartnerListItem> {
+    const data = await apiPatch<any>(`/partners/${id}`, updates);
     return {
       id: data.id,
       name: data.name,
+      telegram: data.telegram || null,
+      phone: data.phone || null,
+      email: data.email || null,
       createdAt: data.createdAt,
     };
+  },
+
+  async deletePartner(id: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await apiDelete(`/partners/${id}`);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message || "Failed to delete partner" };
+    }
   },
 
   async fetchPartnerPayments(): Promise<any[]> {

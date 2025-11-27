@@ -265,6 +265,41 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.delete("/api/partners/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await storage.deletePartner(id);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete partner error:", error);
+      res.status(500).json({ error: "Failed to delete partner" });
+    }
+  });
+
+  app.get("/api/partners/:id/clients", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const role = req.user?.role;
+      
+      if (role === "assistant") {
+        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      }
+      
+      if (role === "partner" && req.user?.partnerId !== id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      const clients = await storage.getPartnerClients(id);
+      res.json(clients);
+    } catch (error) {
+      console.error("Get partner clients error:", error);
+      res.status(500).json({ error: "Failed to get partner clients" });
+    }
+  });
+
   app.get("/api/clients", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       let partnerId: string | undefined;
@@ -322,6 +357,40 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Update client error:", error);
       res.status(500).json({ error: "Failed to update client" });
+    }
+  });
+
+  app.delete("/api/clients/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result = await storage.deleteClient(id);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete client error:", error);
+      res.status(500).json({ error: "Failed to delete client" });
+    }
+  });
+
+  app.get("/api/clients/:id/with-partner", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const client = await storage.getClientWithPartner(id);
+      
+      if (!client) {
+        return res.status(404).json({ error: "Client not found" });
+      }
+      
+      if (req.user?.role === "partner" && client.partnerId !== req.user.partnerId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      res.json(client);
+    } catch (error) {
+      console.error("Get client with partner error:", error);
+      res.status(500).json({ error: "Failed to get client" });
     }
   });
 

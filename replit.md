@@ -20,8 +20,22 @@ This project is an invoice management system migrating from Supabase to Replit w
 - CreateInvoiceDialog - invoice creation with local calculations pre-submit
 - AddExpenseDialog / EditExpenseDialog - expense CRUD operations
 - ClientCombobox / PartnerCombobox - entity selection with server data
-- ManagePartnersDialog / ManageClientsDialog - entity management
+- ManagePartnersDialog - full CRUD with contact fields (name, telegram, phone, email), view partner's clients (admin only), delete with confirmation (admin only)
+- ManageClientsDialog - full CRUD with contact fields (name, telegram, phone), partner association, delete with confirmation (admin only)
 - RecordPaymentDialog - partner payment recording with server-side filtering
+
+**API Endpoints for Partners/Clients:**
+- GET/POST/PATCH /api/partners - full contact info
+- DELETE /api/partners/:id - admin only, checks for linked invoices/clients
+- GET /api/partners/:id/clients - get partner's clients
+- GET/POST/PATCH /api/clients - full contact info
+- DELETE /api/clients/:id - admin only, checks for linked invoices
+- GET /api/clients/:id/with-partner - get client with partner info
+
+**Privacy Rules Enforced:**
+- Assistants cannot see partner's clients list (admin only)
+- Assistants cannot delete partners/clients (admin only)
+- All financial calculations hidden from assistants (server-side filtering)
 
 **Temporarily disabled:**
 - UploadDocumentDialog - requires Replit file storage configuration

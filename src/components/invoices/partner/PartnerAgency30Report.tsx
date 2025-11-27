@@ -376,13 +376,19 @@ export const PartnerAgency30Report = () => {
 
         {/* Формула */}
         <div className="rounded-lg bg-muted/50 p-4 space-y-2">
-          <div className="text-sm font-medium">Формула расчета:</div>
+          <div className="text-sm font-medium">Схема «Агентство 30%»:</div>
           <div className="text-xs text-muted-foreground space-y-1 font-mono">
-            <div>Общая сумма от клиента: <span className="text-foreground">{formatCurrency(data.total_from_client)}</span></div>
-            <div className="ml-4">├─ Ваша комиссия (15%): <span className="text-primary font-semibold">{formatCurrency(data.partner_share_15)}</span></div>
-            <div className="ml-4">├─ Часть для админа (15%): <span className="text-foreground">{formatCurrency(data.admin_share_15)}</span></div>
-            <div className="ml-4 pt-1 border-t border-border">└─ К оплате админу: <span className="text-foreground font-semibold">{formatCurrency(data.total_debt_to_admin)}</span></div>
-            <div className="pt-2">Деньги клиента (70% - расходы): <span className="text-muted-foreground">{formatCurrency(data.client_remaining_70)}</span></div>
+            <div>Деньги клиента (100%): <span className="text-foreground font-semibold">{formatCurrency(data.total_from_client)}</span></div>
+            <div className="ml-4">├─ Бюджет на проект (70%): <span className="text-foreground">{formatCurrency(data.total_from_client * 0.70)}</span></div>
+            <div className="ml-4">└─ Маржа агентства (30%): <span className="text-foreground">{formatCurrency(data.total_from_client * 0.30)}</span></div>
+            <div className="ml-8">├─ Ваша доля (15%): <span className="text-primary font-semibold">{formatCurrency(data.partner_share_15)}</span></div>
+            <div className="ml-8">└─ Доля админа (15%): <span className="text-foreground">{formatCurrency(data.admin_share_15)}</span></div>
+            <div className="pt-2 border-t border-border mt-2">
+              <span className="font-medium">К переводу админу:</span> <span className="text-foreground font-semibold">{formatCurrency(data.total_debt_to_admin)}</span>
+            </div>
+            <div className="pt-1">
+              <span className="font-medium">Остаток бюджета клиента (70% − расходы):</span> <span className="text-destructive font-semibold">{formatCurrency(data.client_remaining_70)}</span>
+            </div>
           </div>
         </div>
       </CardContent>

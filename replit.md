@@ -54,7 +54,10 @@ The system supports four user roles (admin, assistant, partner, client) with dis
 
 - **Partner debt formulas** (scheme-specific):
   - Partner Agreement (commission_based): `debt = clientBill - partnerCommission - executorExpenses`
-  - Agency 30%: `debt = partnerCommission (15% only)` - client funds tracked separately in "Do Not Spend" dashboard
+  - Agency 30%: `debt = clientBill * 0.15` (admin's 15% share from 30% margin)
+    - Structure: 100% client money = 70% project budget + 30% agency margin
+    - 30% margin split 50/50: 15% partner keeps + 15% partner owes to admin
+    - "Do Not Spend" = 70% project budget - executor expenses
 - **Centralized calculation**: `calculatePartnerDebt()` function in `invoiceCalculations.ts` prevents formula drift across components
 - **Partner-facing components updated**: PartnerCommissionReport, PartnerAgency30Report, PartnerVirtualStatement all use centralized calculation
 - **Real-time expense updates**: All debt components subscribe to invoice_expenses for instant recalculation

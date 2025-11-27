@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate, getSchemeLabel } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice, calculatePartnerDebt } from "@/lib/invoiceCalculations";
 import { Progress } from "@/components/ui/progress";
 import { Eye, Trash2, Loader2, FileText, Trash, EyeOff, Clock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -486,6 +486,13 @@ export const UnifiedInvoicesList = ({
                     <TableHead className="font-semibold">Остаток</TableHead>
                   </>
                 )}
+                {role === 'admin' && (
+                  <>
+                    <TableHead className="font-semibold">Расходы</TableHead>
+                    <TableHead className="font-semibold">Прибыль</TableHead>
+                    <TableHead className="font-semibold">Долг партнёра</TableHead>
+                  </>
+                )}
                 <TableHead className="font-semibold">Статус</TableHead>
                 {(role === 'admin' || role === 'assistant') && (
                   <TableHead className="font-semibold">Комментарий</TableHead>
@@ -544,6 +551,24 @@ export const UnifiedInvoicesList = ({
                         <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
                       </>
                     )}
+                    {role === 'admin' && (() => {
+                      const scheme = invoice.scheme as 'agency_30' | 'commission_based';
+                      const clientBill = invoice.client_bill || 0;
+                      const executorExpenses = invoice.executor_expenses_total || 0;
+                      const commissionRate = invoice.partner_commission_rate || invoice.commission_rate || 10;
+                      
+                      const calc = calculateInvoice(scheme, clientBill, commissionRate, executorExpenses);
+                      const commissionAmount = calc.commission_amount || 0;
+                      const debtResult = calculatePartnerDebt(scheme, clientBill, commissionAmount, executorExpenses);
+                      
+                      return (
+                        <>
+                          <TableCell className="text-muted-foreground">{formatCurrency(executorExpenses)}</TableCell>
+                          <TableCell className="font-semibold text-primary">{formatCurrency(calc.net_profit_admin)}</TableCell>
+                          <TableCell className="font-semibold text-destructive">{formatCurrency(debtResult.debtToAdmin)}</TableCell>
+                        </>
+                      );
+                    })()}
                     <TableCell>
                       <InvoiceProgressBadge status={invoice.status} />
                     </TableCell>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InvoiceProgressBadge } from "./InvoiceProgressBadge";
-import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice, calculatePartnerDebt } from "@/lib/invoiceCalculations";
 import { Eye, CheckCircle2, Send, Trash2, EyeOff, Clock } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -203,6 +203,40 @@ export const InvoiceCard = ({
                 </div>
               )}
             </div>
+
+            {/* Admin Financial Details - полная информация для админа */}
+            {role === 'admin' && (() => {
+              const debtResult = calculatePartnerDebt(scheme, clientBill, commissionAmount, executorExpensesTotal);
+              return (
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Расходы</p>
+                      <p className="font-medium">{formatCurrency(executorExpensesTotal)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {scheme === 'agency_30' ? 'Доля админа (15%)' : 'Прибыль админа'}
+                      </p>
+                      <p className="font-semibold text-primary">{formatCurrency(calc.net_profit_admin)}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Долг партнёра</p>
+                      <p className="font-semibold text-destructive">{formatCurrency(debtResult.debtToAdmin)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">
+                        {scheme === 'agency_30' ? 'Остаток 70%' : 'Остаток клиента'}
+                      </p>
+                      <p className="font-medium">{formatCurrency(clientRemaining)}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Partner (for admin/assistant) */}
             {(role === 'admin' || role === 'assistant') && (

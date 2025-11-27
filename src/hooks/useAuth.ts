@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 
 export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
 
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+  message?: string;
+  data?: any;
+  locked_until?: string;
+  attempts_remaining?: number;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -77,9 +86,10 @@ export function useAuth() {
     }
   }, []);
 
-  const login = useCallback(async (code: string) => {
+  const login = useCallback(async (code: string): Promise<LoginResult> => {
     try {
-      console.log('[useAuth] Login started');
+      console.log('[useAuth] Login started for code:', code.substring(0, 3) + '***');
+      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -89,18 +99,33 @@ export function useAuth() {
         body: JSON.stringify({ code: code.toUpperCase() }),
       });
 
-      const data = await response.json();
+      console.log('[useAuth] Login response status:', response.status);
 
-      if (!response.ok || !data?.success) {
-        console.log('[useAuth] Login failed:', data?.error);
+      let data;
+      try {
+        data = await response.json();
+        console.log('[useAuth] Login response data:', { success: data?.success, error: data?.error });
+      } catch (parseError) {
+        console.error('[useAuth] Failed to parse response:', parseError);
         return {
           success: false,
-          error: data?.error || 'Login failed',
-          message: data?.message,
+          error: 'parse_error',
+          message: 'Ошибка обработки ответа сервера',
         };
       }
 
-      console.log('[useAuth] Login successful');
+      if (!response.ok || !data?.success) {
+        console.log('[useAuth] Login failed:', data?.error, data?.message);
+        return {
+          success: false,
+          error: data?.error || 'login_failed',
+          message: data?.message || 'Неверный код доступа',
+          locked_until: data?.locked_until,
+          attempts_remaining: data?.attempts_remaining,
+        };
+      }
+
+      console.log('[useAuth] Login successful, role:', data.user?.role);
       
       localStorage.setItem('csrf_token', data.csrfToken);
       
@@ -115,11 +140,12 @@ export function useAuth() {
 
       return { success: true, data };
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('[useAuth] Login network error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       return {
         success: false,
         error: 'network_error',
-        message: 'Ошибка соединения с сервером',
+        message: `Ошибка соединения с сервером: ${errorMessage}`,
       };
     }
   }, []);

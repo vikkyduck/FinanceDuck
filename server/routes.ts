@@ -128,13 +128,21 @@ export function registerRoutes(app: Express): void {
       const { code } = req.body;
       
       if (!code) {
-        return res.status(400).json({ error: "Access code required" });
+        return res.status(400).json({ 
+          success: false,
+          error: "missing_code",
+          message: "Код доступа обязателен"
+        });
       }
       
       const token = await storage.verifyAccessCode(code);
       
       if (!token) {
-        return res.status(401).json({ error: "Invalid access code" });
+        return res.status(401).json({ 
+          success: false,
+          error: "invalid_code",
+          message: "Неверный код доступа"
+        });
       }
       
       const session = await storage.createSession(
@@ -143,10 +151,11 @@ export function registerRoutes(app: Express): void {
         req.headers["user-agent"]
       );
       
+      const isSecure = process.env.NODE_ENV === "production" || req.headers['x-forwarded-proto'] === 'https';
       res.cookie(SESSION_COOKIE, session.sessionId, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        secure: isSecure,
+        sameSite: isSecure ? "none" : "lax",
         maxAge: 30 * 60 * 1000,
       });
       
@@ -161,7 +170,11 @@ export function registerRoutes(app: Express): void {
       });
     } catch (error) {
       console.error("Login error:", error);
-      res.status(500).json({ error: "Login failed" });
+      res.status(500).json({ 
+        success: false,
+        error: "server_error",
+        message: "Ошибка сервера при входе"
+      });
     }
   });
 
@@ -212,10 +225,11 @@ export function registerRoutes(app: Express): void {
       return res.status(401).json({ error: "Session expired" });
     }
     
+    const isSecure = process.env.NODE_ENV === "production" || req.headers['x-forwarded-proto'] === 'https';
     res.cookie(SESSION_COOKIE, sessionId, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isSecure,
+      sameSite: isSecure ? "none" : "lax",
       maxAge: 30 * 60 * 1000,
     });
     

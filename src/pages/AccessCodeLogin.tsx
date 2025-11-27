@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, type LoginResult } from "@/hooks/useAuth";
 import { Wallet, LogIn, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -31,8 +31,8 @@ const AccessCodeLogin = () => {
       const result = await login(code.toUpperCase());
 
       if (!result.success) {
-        if (result.error === 'account_locked') {
-          const lockedUntil = new Date(result.locked_until!);
+        if (result.error === 'account_locked' && result.locked_until) {
+          const lockedUntil = new Date(result.locked_until);
           const minutesRemaining = Math.ceil((lockedUntil.getTime() - Date.now()) / 60000);
           toast({
             variant: "destructive",
@@ -40,7 +40,7 @@ const AccessCodeLogin = () => {
             description: result.message || `Попробуйте снова через ${minutesRemaining} мин.`,
           });
         } else if (result.error === 'invalid_code') {
-          const attemptsRemaining = result.attempts_remaining || 0;
+          const attemptsRemaining = result.attempts_remaining ?? 0;
           toast({
             variant: "destructive",
             title: "Неверный код",

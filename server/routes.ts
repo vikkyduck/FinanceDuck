@@ -15,7 +15,6 @@ const ASSISTANT_ALLOWED_INVOICE_FIELDS = [
   'id',
   'invoiceNumber',
   'clientId',
-  'partnerId',
   'status',
   'description',
   'clientBill',
@@ -54,9 +53,6 @@ function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<
     result.calculations = calc;
   }
   
-  if (invoice.partner) {
-    result.partner = { id: invoice.partner.id, name: invoice.partner.name };
-  }
   if (invoice.client) {
     result.client = { id: invoice.client.id, name: invoice.client.name };
   }
@@ -72,6 +68,20 @@ function stripSensitiveFieldsForRole<T extends Record<string, any>>(data: T, rol
 function stripSensitiveFieldsFromList<T extends Record<string, any>>(data: T[], role: UserRole): T[] {
   if (role !== 'assistant') return data;
   return data.map(item => createAssistantInvoiceProjection(item)) as T[];
+}
+
+function stripPartnerInfoFromClient<T extends Record<string, any>>(client: T, role: UserRole): T {
+  if (role !== 'assistant') return client;
+  const { partnerId, partner, ...rest } = client;
+  return rest as T;
+}
+
+function stripPartnerInfoFromClients<T extends Record<string, any>>(clients: T[], role: UserRole): T[] {
+  if (role !== 'assistant') return clients;
+  return clients.map(client => {
+    const { partnerId, partner, ...rest } = client;
+    return rest as T;
+  });
 }
 
 const SESSION_COOKIE = "session_id";
@@ -302,14 +312,16 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/clients", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const role = req.user?.role || "client";
       let partnerId: string | undefined;
       
-      if (req.user?.role === "partner") {
-        partnerId = req.user.partnerId;
+      if (role === "partner") {
+        partnerId = req.user?.partnerId;
       }
       
       const result = await storage.getClients(partnerId);
-      res.json(result);
+      const filtered = stripPartnerInfoFromClients(result, role);
+      res.json(filtered);
     } catch (error) {
       console.error("Get clients error:", error);
       res.status(500).json({ error: "Failed to get clients" });
@@ -319,17 +331,19 @@ export function registerRoutes(app: Express): void {
   app.get("/api/clients/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const client = await storage.getClient(id);
       
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
       
-      if (req.user?.role === "partner" && client.partnerId !== req.user.partnerId) {
+      if (role === "partner" && client.partnerId !== req.user?.partnerId) {
         return res.status(403).json({ error: "Forbidden" });
       }
       
-      res.json(client);
+      const filtered = stripPartnerInfoFromClient(client, role);
+      res.json(filtered);
     } catch (error) {
       console.error("Get client error:", error);
       res.status(500).json({ error: "Failed to get client" });
@@ -338,8 +352,10 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/clients", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const role = req.user?.role || "client";
       const client = await storage.createClient(req.body);
-      res.status(201).json(client);
+      const filtered = stripPartnerInfoFromClient(client, role);
+      res.status(201).json(filtered);
     } catch (error) {
       console.error("Create client error:", error);
       res.status(500).json({ error: "Failed to create client" });
@@ -349,11 +365,13 @@ export function registerRoutes(app: Express): void {
   app.patch("/api/clients/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const client = await storage.updateClient(id, req.body);
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
-      res.json(client);
+      const filtered = stripPartnerInfoFromClient(client, role);
+      res.json(filtered);
     } catch (error) {
       console.error("Update client error:", error);
       res.status(500).json({ error: "Failed to update client" });
@@ -377,13 +395,19 @@ export function registerRoutes(app: Express): void {
   app.get("/api/clients/:id/with-partner", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
+      
+      if (role === "assistant") {
+        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      }
+      
       const client = await storage.getClientWithPartner(id);
       
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
       
-      if (req.user?.role === "partner" && client.partnerId !== req.user.partnerId) {
+      if (role === "partner" && client.partnerId !== req.user?.partnerId) {
         return res.status(403).json({ error: "Forbidden" });
       }
       
@@ -553,10 +577,16 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/partner-payments", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const role = req.user?.role;
+      
+      if (role === "assistant") {
+        return res.status(403).json({ error: "Forbidden: assistants cannot view partner payments" });
+      }
+      
       let partnerId: string | undefined;
       
-      if (req.user?.role === "partner") {
-        partnerId = req.user.partnerId;
+      if (role === "partner") {
+        partnerId = req.user?.partnerId;
       }
       
       const payments = await storage.getPartnerPayments(partnerId);

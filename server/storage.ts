@@ -824,6 +824,155 @@ export class DatabaseStorage implements IStorage {
     
     return stats;
   }
+
+  async getPartnerDebtSummaries(): Promise<{
+    partnerId: string;
+    partnerName: string;
+    totalToTransfer: number;
+    totalPaid: number;
+    remaining: number;
+    invoiceCount: number;
+  }[]> {
+    const paidInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        partnerName: partners.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id))
+      .where(eq(invoices.status, 'paid'));
+
+    const allPayments = await db.select().from(partnerPayments);
+
+    const partnerMap = new Map<string, {
+      partnerId: string;
+      partnerName: string;
+      totalToTransfer: number;
+      totalPaid: number;
+      remaining: number;
+      invoiceCount: number;
+    }>();
+
+    for (const row of paidInvoices) {
+      if (!row.invoice.partnerId || !row.calculations) continue;
+      
+      const pid = row.invoice.partnerId;
+      const pName = row.partnerName || 'Unknown';
+      const scheme = row.invoice.scheme;
+      
+      const cBill = parseFloat(row.calculations.clientBill || "0");
+      let debt = 0;
+
+      if (scheme === 'agency_30') {
+        debt = parseFloat(row.calculations.partnerShareFromMargin || "0");
+      } else if (scheme === 'commission_based') {
+        const comm = parseFloat(row.calculations.commissionAmount || "0");
+        debt = cBill - comm;
+      } else {
+        debt = parseFloat(row.calculations.amountToAdmin || "0");
+      }
+
+      if (!partnerMap.has(pid)) {
+        partnerMap.set(pid, {
+          partnerId: pid,
+          partnerName: pName,
+          totalToTransfer: 0,
+          totalPaid: 0,
+          remaining: 0,
+          invoiceCount: 0,
+        });
+      }
+
+      const summary = partnerMap.get(pid)!;
+      summary.totalToTransfer += debt;
+      summary.invoiceCount += 1;
+    }
+
+    for (const payment of allPayments) {
+      if (partnerMap.has(payment.partnerId)) {
+        const summary = partnerMap.get(payment.partnerId)!;
+        summary.totalPaid += parseFloat(payment.amount);
+      }
+    }
+
+    return Array.from(partnerMap.values())
+      .map(s => ({
+        ...s,
+        remaining: Math.max(0, s.totalToTransfer - s.totalPaid),
+      }))
+      .filter(s => s.totalToTransfer > 0)
+      .sort((a, b) => b.remaining - a.remaining);
+  }
+
+  async getDoNotSpendData(): Promise<{
+    clientId: string;
+    clientName: string;
+    totalBudget: number;
+    totalSpent: number;
+    remaining: number;
+    invoiceCount: number;
+  }[]> {
+    const agency30Invoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(and(
+        eq(invoices.scheme, 'agency_30'),
+        inArray(invoices.status, ['paid', 'sent'])
+      ));
+
+    const clientMap = new Map<string, {
+      clientId: string;
+      clientName: string;
+      totalBudget: number;
+      totalSpent: number;
+      remaining: number;
+      invoiceCount: number;
+    }>();
+
+    for (const row of agency30Invoices) {
+      if (!row.invoice.clientId || !row.calculations) continue;
+
+      const clientId = row.invoice.clientId;
+      const clientName = row.clientName || 'Unknown';
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const executorExpenses = parseFloat(row.calculations.executorExpensesTotal || "0");
+      
+      const clientBase = clientBill * 0.7;
+      const doNotSpendBudget = clientBase;
+      
+      if (!clientMap.has(clientId)) {
+        clientMap.set(clientId, {
+          clientId,
+          clientName,
+          totalBudget: 0,
+          totalSpent: 0,
+          remaining: 0,
+          invoiceCount: 0,
+        });
+      }
+
+      const summary = clientMap.get(clientId)!;
+      summary.totalBudget += doNotSpendBudget;
+      summary.totalSpent += executorExpenses;
+      summary.invoiceCount += 1;
+    }
+
+    return Array.from(clientMap.values())
+      .map(s => ({
+        ...s,
+        remaining: Math.max(0, s.totalBudget - s.totalSpent),
+      }))
+      .filter(s => s.totalBudget > 0)
+      .sort((a, b) => b.remaining - a.remaining);
+  }
 }
 
 export const storage = new DatabaseStorage();

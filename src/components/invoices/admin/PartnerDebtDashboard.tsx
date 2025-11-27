@@ -1,22 +1,20 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { PartnerDebtCard } from "./PartnerDebtCard";
 import { PartnerInvoicesDetail } from "./PartnerInvoicesDetail";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatCurrency, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
+import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface PartnerDebtSummary {
-  partner_id: string;
-  partner_name: string;
-  total_to_transfer: number;
-  total_paid: number;
+  partnerId: string;
+  partnerName: string;
+  totalToTransfer: number;
+  totalPaid: number;
   remaining: number;
-  invoice_count: number;
+  invoiceCount: number;
 }
 
 interface PartnerDebtDashboardProps {
@@ -28,139 +26,47 @@ export const PartnerDebtDashboard = ({
   showTitle = true,
   className 
 }: PartnerDebtDashboardProps) => {
+  const { isAuthenticated } = useAuth();
   const [summaries, setSummaries] = useState<PartnerDebtSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
+    
     try {
-      await ensureSessionContext();
-
-      const { data: invoices, error: invoicesError } = await supabase
-        .from("invoices")
-        .select(`
-          partner_id,
-          scheme,
-          status,
-          partners(name),
-          invoice_calculations(
-            client_bill,
-            partner_share_from_margin,
-            commission_amount,
-            executor_expenses_total
-          )
-        `)
-        .eq("status", "paid");
-
-      if (invoicesError) {
-        console.error("Error fetching invoices:", invoicesError);
-        setLoading(false);
-        return;
-      }
-
-      const { data: payments, error: paymentsError } = await supabase
-        .from("partner_payments")
-        .select("partner_id, amount");
-
-      if (paymentsError) {
-        console.error("Error fetching payments:", paymentsError);
-        setLoading(false);
-        return;
-      }
-
-      const partnerMap = new Map<string, PartnerDebtSummary>();
-
-      invoices?.forEach((invoice: any) => {
-        const partnerId = invoice.partner_id;
-        const partnerName = invoice.partners?.name || "Unknown";
-        const calc = invoice.invoice_calculations?.[0];
-        const scheme = invoice.scheme as InvoiceScheme;
-
-        if (!calc) return;
-
-        const clientBill = Number(calc.client_bill) || 0;
-        const executorExpenses = Number(calc.executor_expenses_total) || 0;
-        let partnerCommission = 0;
-        
-        if (scheme === 'agency_30') {
-          partnerCommission = Number(calc.partner_share_from_margin) || 0;
-        } else if (scheme === 'commission_based') {
-          partnerCommission = Number(calc.commission_amount) || 0;
-        }
-        
-        // Use centralized debt calculation function
-        const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
-
-        if (!partnerMap.has(partnerId)) {
-          partnerMap.set(partnerId, {
-            partner_id: partnerId,
-            partner_name: partnerName,
-            total_to_transfer: 0,
-            total_paid: 0,
-            remaining: 0,
-            invoice_count: 0,
-          });
-        }
-
-        const summary = partnerMap.get(partnerId)!;
-        summary.total_to_transfer += debtToAdmin;
-        summary.invoice_count += 1;
+      const response = await fetch('/api/partner-debt', {
+        credentials: 'include',
       });
-
-      payments?.forEach((payment: any) => {
-        if (partnerMap.has(payment.partner_id)) {
-          const summary = partnerMap.get(payment.partner_id)!;
-          summary.total_paid += Number(payment.amount);
-        }
-      });
-
-      const summariesArray = Array.from(partnerMap.values())
-        .map((summary) => ({
-          ...summary,
-          remaining: Math.max(0, summary.total_to_transfer - summary.total_paid),
-        }))
-        .filter((summary) => summary.total_to_transfer > 0)
-        .sort((a, b) => b.remaining - a.remaining);
-
-      setSummaries(summariesArray);
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSummaries(data);
+      } else if (response.status !== 401 && response.status !== 403) {
+        console.error("Error fetching partner debt data:", await response.text());
+      }
     } catch (error) {
       console.error("Error fetching partner debt data:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
   }, [fetchData]);
-
-  useRealtimeSubscription({
-    channelName: 'partner_debt_dashboard_payments',
-    table: 'partner_payments',
-    onUpdate: fetchData,
-    enabled: true,
-  });
-
-  useRealtimeSubscription({
-    channelName: 'partner_debt_dashboard_invoices',
-    table: 'invoices',
-    onUpdate: fetchData,
-    enabled: true,
-  });
-
-  useRealtimeSubscription({
-    channelName: 'partner_debt_dashboard_expenses',
-    table: 'invoice_expenses',
-    onUpdate: fetchData,
-    enabled: true,
-  });
 
   const handleExpand = (partnerId: string) => {
     setExpandedPartnerId(expandedPartnerId === partnerId ? null : partnerId);
   };
 
   const totalRemaining = summaries.reduce((sum, s) => sum + s.remaining, 0);
-  const totalPaid = summaries.reduce((sum, s) => sum + s.total_paid, 0);
+  const totalPaid = summaries.reduce((sum, s) => sum + s.totalPaid, 0);
 
   if (loading) {
     return (
@@ -273,14 +179,21 @@ export const PartnerDebtDashboard = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {summaries.map((summary) => (
             <PartnerDebtCard
-              key={summary.partner_id}
-              summary={summary}
-              onExpand={() => handleExpand(summary.partner_id)}
-              isExpanded={expandedPartnerId === summary.partner_id}
+              key={summary.partnerId}
+              summary={{
+                partner_id: summary.partnerId,
+                partner_name: summary.partnerName,
+                total_to_transfer: summary.totalToTransfer,
+                total_paid: summary.totalPaid,
+                remaining: summary.remaining,
+                invoice_count: summary.invoiceCount,
+              }}
+              onExpand={() => handleExpand(summary.partnerId)}
+              isExpanded={expandedPartnerId === summary.partnerId}
             >
               <PartnerInvoicesDetail
-                partnerId={summary.partner_id}
-                partnerName={summary.partner_name}
+                partnerId={summary.partnerId}
+                partnerName={summary.partnerName}
                 onPaymentRecorded={fetchData}
               />
             </PartnerDebtCard>

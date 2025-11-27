@@ -699,6 +699,26 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/partner-debt", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const summaries = await storage.getPartnerDebtSummaries();
+      res.json(summaries);
+    } catch (error) {
+      console.error("Get partner debt error:", error);
+      res.status(500).json({ error: "Failed to get partner debt data" });
+    }
+  });
+
+  app.get("/api/do-not-spend", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getDoNotSpendData();
+      res.json(data);
+    } catch (error) {
+      console.error("Get do-not-spend error:", error);
+      res.status(500).json({ error: "Failed to get do-not-spend data" });
+    }
+  });
+
   app.get("/api/access-tokens", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const tokens = await storage.getAccessTokens();

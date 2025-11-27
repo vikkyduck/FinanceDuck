@@ -628,10 +628,18 @@ export class DatabaseStorage implements IStorage {
         const scheme = inv.scheme;
         
         if (scheme === 'agency_30') {
+          // Agency 30%: 15% to partner, 15% to admin (both from margin)
           totalPartnerCommission += parseFloat(calc.partnerShareFromMargin || "0");
           totalAdminShare += parseFloat(calc.adminShareFromMargin || "0");
           clientRemaining += parseFloat(calc.clientBaseAfterMargin || "0") - expenses;
+        } else if (scheme === 'vika_ie_7') {
+          // ИП Вики: No partner, all goes to admin after 7% tax
+          // amountAfterTax = clientBill * 0.93
+          const amountAfterTax = clientBill * 0.93;
+          totalAdminShare += amountAfterTax;
+          // No partner commission for this scheme
         } else {
+          // partner_10, partner_15, commission_based
           totalPartnerCommission += parseFloat(calc.commissionAmount || "0");
           totalAdminShare += parseFloat(calc.amountToAdmin || "0");
           clientRemaining += parseFloat(calc.clientRemaining || "0");
@@ -651,15 +659,17 @@ export class DatabaseStorage implements IStorage {
         if (r.invoice.status === 'paid' && r.calculations) {
           const scheme = r.invoice.scheme;
           const clientBill = parseFloat(r.calculations.clientBill || "0");
-          const commission = scheme === 'agency_30' 
-            ? parseFloat(r.calculations.partnerShareFromMargin || "0")
-            : parseFloat(r.calculations.commissionAmount || "0");
-          const expenses = parseFloat(r.calculations.executorExpensesTotal || "0");
           
           if (scheme === 'agency_30') {
-            debtToAdmin += clientBill - commission - expenses;
+            // Agency 30%: Partner owes admin their 15% share (adminShareFromMargin)
+            debtToAdmin += parseFloat(r.calculations.adminShareFromMargin || "0");
+          } else if (scheme === 'vika_ie_7') {
+            // ИП Вики: No partner involvement, debt = 0
+            // Skip
           } else {
-            debtToAdmin += clientBill - commission;
+            // partner_10, partner_15, commission_based:
+            // Partner owes admin: clientBill - commission (amountToAdmin)
+            debtToAdmin += parseFloat(r.calculations.amountToAdmin || "0");
           }
         }
       }

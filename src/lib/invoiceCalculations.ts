@@ -1,6 +1,7 @@
 // Utility functions for invoice calculations
 
-export type InvoiceScheme = 'agency_30' | 'commission_based';
+// All scheme types from database
+export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'vika_ie_7' | 'commission_based';
 
 export interface InvoiceCalculations {
   client_bill: number;
@@ -17,6 +18,8 @@ export interface InvoiceCalculations {
   net_profit_admin: number;
   admin_share_50: number;
   cat_share_50: number;
+  tax_amount?: number;
+  amount_after_tax?: number;
 }
 
 export function calculateInvoice(
@@ -41,7 +44,8 @@ export function calculateInvoice(
       //   ├─ Партнеру (15%): X × 0.15
       //   └─ Админу (15%): X × 0.15
       // Средства клиента для трат: X × 0.70
-      // Чистая прибыль админа: X × 0.15 (фиксированная!)
+      // Остаток клиента: (X × 0.70) - Y
+      // Чистая прибыль админа: X × 0.15 (ФИКСИРОВАННАЯ!)
       
       const agencyMargin = clientBill * 0.30;
       const partnerShare = clientBill * 0.15; // Партнеру 15%
@@ -64,8 +68,83 @@ export function calculateInvoice(
       break;
     }
 
+    case 'partner_10': {
+      // Схема 1: Комиссия партнера 10%
+      // Клиент платит: X
+      // Комиссия партнера: X × 0.10
+      // Партнер переводит админу: X × 0.90
+      // Расходы на исполнителей: Y
+      // Чистая прибыль админа: (X × 0.90) - Y
+      
+      const commissionRate = 10;
+      const commissionAmount = clientBill * 0.10;
+      const amountToAdmin = clientBill * 0.90;
+      const netProfitAdmin = amountToAdmin - executorExpenses;
+      
+      calculations = {
+        ...calculations,
+        commission_rate: commissionRate,
+        commission_amount: commissionAmount,
+        amount_to_admin: amountToAdmin,
+        net_profit_admin: netProfitAdmin,
+        admin_share_50: netProfitAdmin / 2,
+        cat_share_50: netProfitAdmin / 2,
+      };
+      break;
+    }
+
+    case 'partner_15': {
+      // Схема 2: Комиссия партнера 15%
+      // Клиент платит: X
+      // Комиссия партнера: X × 0.15
+      // Партнер переводит админу: X × 0.85
+      // Расходы на исполнителей: Y
+      // Чистая прибыль админа: (X × 0.85) - Y
+      
+      const commissionRate = 15;
+      const commissionAmount = clientBill * 0.15;
+      const amountToAdmin = clientBill * 0.85;
+      const netProfitAdmin = amountToAdmin - executorExpenses;
+      
+      calculations = {
+        ...calculations,
+        commission_rate: commissionRate,
+        commission_amount: commissionAmount,
+        amount_to_admin: amountToAdmin,
+        net_profit_admin: netProfitAdmin,
+        admin_share_50: netProfitAdmin / 2,
+        cat_share_50: netProfitAdmin / 2,
+      };
+      break;
+    }
+
+    case 'vika_ie_7': {
+      // Схема 4: ИП Вики, 7% налоги
+      // Клиент платит: X
+      // Налоги (7%): X × 0.07
+      // После налогов: X × 0.93
+      // Расходы на исполнителей: Y
+      // Чистая прибыль админа: (X × 0.93) - Y
+      
+      const taxRate = 7;
+      const taxAmount = clientBill * 0.07;
+      const amountAfterTax = clientBill * 0.93;
+      const netProfitAdmin = amountAfterTax - executorExpenses;
+      
+      calculations = {
+        ...calculations,
+        tax_amount: taxAmount,
+        amount_after_tax: amountAfterTax,
+        net_profit_admin: netProfitAdmin,
+        admin_share_50: netProfitAdmin / 2,
+        cat_share_50: netProfitAdmin / 2,
+      };
+      break;
+    }
+
     case 'commission_based': {
-      // Схема 1 и 2: Комиссия партнера (10% или 15%)
+      // Универсальная схема с произвольной комиссией
+      // Используется когда партнер имеет нестандартный процент
       // Клиент платит: X
       // Комиссия партнера: X × (rate / 100)
       // Партнер переводит админу: X × (1 - rate / 100)
@@ -88,6 +167,24 @@ export function calculateInvoice(
       };
       break;
     }
+
+    default: {
+      // Fallback: treat as commission_based with 10%
+      const commissionRate = partnerCommissionRate || 10;
+      const commissionAmount = clientBill * (commissionRate / 100);
+      const amountToAdmin = clientBill - commissionAmount;
+      const netProfitAdmin = amountToAdmin - executorExpenses;
+      
+      calculations = {
+        ...calculations,
+        commission_rate: commissionRate,
+        commission_amount: commissionAmount,
+        amount_to_admin: amountToAdmin,
+        net_profit_admin: netProfitAdmin,
+        admin_share_50: netProfitAdmin / 2,
+        cat_share_50: netProfitAdmin / 2,
+      };
+    }
   }
 
   return calculations;
@@ -96,9 +193,10 @@ export function calculateInvoice(
 /**
  * Calculates partner debt to admin based on scheme
  * 
- * Partner Agreement (commission_based):
- *   debt = clientBill - partnerCommission - executorExpenses
- *   (Partner collects from client, keeps commission, pays expenses, transfers rest to admin)
+ * Partner Agreement (partner_10, partner_15, commission_based):
+ *   debt = amountToAdmin = clientBill × (1 - rate/100)
+ *   (Partner collects from client, keeps commission, owes remainder to admin)
+ *   Expenses are paid from admin's account
  * 
  * Agency 30%:
  *   Client pays 100%
@@ -109,6 +207,10 @@ export function calculateInvoice(
  *   
  *   debt = admin_share_from_margin (15% of client bill)
  *   doNotSpendAmount = 70% of client bill - executor expenses
+ * 
+ * ИП Вики (vika_ie_7):
+ *   No partner involved, all income goes to admin after 7% tax
+ *   debt = 0 (no partner to owe money)
  */
 export function calculatePartnerDebt(
   scheme: InvoiceScheme,
@@ -131,14 +233,36 @@ export function calculatePartnerDebt(
     };
   }
   
-  // Partner Agreement (commission_based):
+  if (scheme === 'vika_ie_7') {
+    // ИП Вики: No partner involvement
+    // All money goes to admin (minus 7% tax)
+    return {
+      debtToAdmin: 0,
+      doNotSpendAmount: 0,
+    };
+  }
+  
+  // Partner Agreement (partner_10, partner_15, commission_based):
   // Partner collects full amount from client, keeps their commission,
-  // pays executor expenses, and transfers the remainder to admin
-  const debtToAdmin = Math.max(0, clientBill - partnerCommission - executorExpenses);
+  // and transfers the remainder to admin
+  // Expenses are paid by admin, not deducted from partner's debt
+  
+  let commissionRate: number;
+  if (scheme === 'partner_10') {
+    commissionRate = 10;
+  } else if (scheme === 'partner_15') {
+    commissionRate = 15;
+  } else {
+    // commission_based - use provided rate
+    commissionRate = (partnerCommission / clientBill) * 100 || 10;
+  }
+  
+  const commissionAmount = clientBill * (commissionRate / 100);
+  const debtToAdmin = clientBill - commissionAmount; // What partner owes admin
   
   return {
     debtToAdmin,
-    doNotSpendAmount: 0, // No separate "do not spend" pool for commission-based scheme
+    doNotSpendAmount: 0, // No separate "do not spend" pool for commission-based schemes
   };
 }
 
@@ -167,15 +291,21 @@ export function getSchemeLabel(
   role?: 'admin' | 'assistant' | 'partner' | 'client',
   commissionRate?: number
 ): string {
-  if (scheme === 'agency_30') {
-    return 'Агентство 30%';
+  switch (scheme) {
+    case 'agency_30':
+      return 'Агентство 30%';
+    case 'partner_10':
+      return 'Партнер 10%';
+    case 'partner_15':
+      return 'Партнер 15%';
+    case 'vika_ie_7':
+      return 'ИП Вики (7%)';
+    case 'commission_based':
+      if (commissionRate) {
+        return `Партнер ${commissionRate}%`;
+      }
+      return 'Партнерское соглашение';
+    default:
+      return String(scheme);
   }
-  
-  if (scheme === 'commission_based') {
-    // В заголовке показываем только тип схемы, без процента,
-    // чтобы избежать дублирования с редактируемым полем.
-    return 'Партнерское соглашение';
-  }
-  
-  return scheme;
 }

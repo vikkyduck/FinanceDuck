@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatCurrency, calculatePartnerDebt } from "@/lib/invoiceCalculations";
 import { Loader2, TrendingUp, Wallet, Receipt, CreditCard, ShieldAlert } from "lucide-react";
 
 interface CommissionData {
@@ -34,13 +34,17 @@ export const PartnerCommissionReport = () => {
 
     setLoading(true);
     try {
-      // Fetch commission-based invoices (only paid)
+      // Fetch commission-based invoices (only paid) with invoice_calculations for executor_expenses_total
       const invoices = await querySupabaseWithFilter<any>(
         'invoices',
         `
           *,
-          invoice_calculations(*),
-          executor_expenses(amount, is_admin_expense)
+          invoice_calculations(
+            client_bill,
+            commission_amount,
+            client_remaining,
+            executor_expenses_total
+          )
         `,
         (query) => query
           .eq('partner_id', partnerId)
@@ -63,33 +67,39 @@ export const PartnerCommissionReport = () => {
         { operation: 'fetch_partner_payments' }
       );
 
-      // Calculate totals
+      // Calculate totals using centralized debt calculation
       let totalFromClient = 0;
       let partnerCommission = 0;
       let clientRemaining = 0;
+      let totalDebtToAdmin = 0;
 
       invoices.forEach((invoice: any) => {
         const calcSource = invoice.invoice_calculations;
         const calc = Array.isArray(calcSource) ? calcSource[0] : calcSource;
         if (calc) {
-          totalFromClient += calc.client_bill || 0;
-          partnerCommission += calc.commission_amount || 0;
+          const clientBill = calc.client_bill || 0;
+          const commission = calc.commission_amount || 0;
+          const executorExpenses = calc.executor_expenses_total || 0;
+          
+          totalFromClient += clientBill;
+          partnerCommission += commission;
           clientRemaining += calc.client_remaining || 0;
+          
+          // Use centralized calculation: debt = clientBill - commission - expenses
+          const { debtToAdmin } = calculatePartnerDebt('commission_based', clientBill, commission, executorExpenses);
+          totalDebtToAdmin += debtToAdmin;
         }
       });
 
-      // К переводу админу = Сумма от клиентов - Комиссия партнёра
-      // Расходы админа НЕ добавляются к долгу партнёра
-      const totalToAdmin = totalFromClient - partnerCommission;
       const paymentsToAdmin = payments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
-      const remainingDebt = totalToAdmin - paymentsToAdmin;
+      const remainingDebt = totalDebtToAdmin - paymentsToAdmin;
 
       setData({
         total_from_client: totalFromClient,
         partner_commission: partnerCommission,
-        admin_remainder: totalToAdmin,
-        admin_expenses: 0, // Не учитываем - это расходы админа, не долг партнёра
-        total_to_admin: totalToAdmin,
+        admin_remainder: totalDebtToAdmin,
+        admin_expenses: 0,
+        total_to_admin: totalDebtToAdmin,
         payments_to_admin: paymentsToAdmin,
         remaining_debt: remainingDebt,
         client_remaining: clientRemaining,
@@ -99,7 +109,7 @@ export const PartnerCommissionReport = () => {
         invoicesCount: invoices.length,
         totalFromClient,
         partnerCommission,
-        totalToAdmin,
+        totalDebtToAdmin,
         paymentsToAdmin,
         remainingDebt,
         clientRemaining
@@ -134,6 +144,13 @@ export const PartnerCommissionReport = () => {
     channelName: 'partner_commission_payments',
     table: 'partner_payments',
     filter: partnerId ? `partner_id=eq.${partnerId}` : undefined,
+    onUpdate: fetchData,
+    enabled: !!partnerId,
+  });
+
+  useRealtimeSubscription({
+    channelName: 'partner_commission_expenses',
+    table: 'invoice_expenses',
     onUpdate: fetchData,
     enabled: !!partnerId,
   });

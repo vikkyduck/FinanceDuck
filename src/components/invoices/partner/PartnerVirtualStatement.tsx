@@ -8,7 +8,7 @@ import { ArrowDownRight, ArrowUpRight, Calendar, FileText, TrendingDown, Trendin
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
@@ -53,7 +53,20 @@ export function PartnerVirtualStatement() {
       const dates = getPeriodDates(period);
       let query = supabase
         .from("invoices")
-        .select("id, invoice_number, client_bill, status, created_at, clients(name), partner_commission_rate, scheme")
+        .select(`
+          id, 
+          invoice_number, 
+          status, 
+          created_at, 
+          scheme,
+          clients(name),
+          invoice_calculations(
+            client_bill,
+            commission_amount,
+            partner_share_from_margin,
+            executor_expenses_total
+          )
+        `)
         .eq("partner_id", partnerId)
         .order("created_at", { ascending: true });
 
@@ -104,18 +117,34 @@ export function PartnerVirtualStatement() {
     let runningBalance = 0;
 
     invoices.forEach((inv: any) => {
-      const partnerDebt = inv.scheme === "agency_30" 
-        ? inv.client_bill * 0.70 
-        : inv.client_bill * (1 - (inv.partner_commission_rate || 10) / 100);
+      const calc = Array.isArray(inv.invoice_calculations) 
+        ? inv.invoice_calculations[0] 
+        : inv.invoice_calculations;
       
-      runningBalance += partnerDebt;
+      if (!calc) return;
+      
+      const scheme = inv.scheme as InvoiceScheme;
+      const clientBill = calc.client_bill || 0;
+      const executorExpenses = calc.executor_expenses_total || 0;
+      let partnerCommission = 0;
+      
+      if (scheme === 'agency_30') {
+        partnerCommission = calc.partner_share_from_margin || 0;
+      } else {
+        partnerCommission = calc.commission_amount || 0;
+      }
+      
+      // Use centralized debt calculation
+      const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
+      
+      runningBalance += debtToAdmin;
       
       entries.push({
         id: `inv-${inv.id}`,
         date: inv.created_at,
         type: "invoice",
         description: `${inv.invoice_number || "Счёт"} - ${inv.clients?.name || "Клиент"}`,
-        amount: partnerDebt,
+        amount: debtToAdmin,
         balance: runningBalance,
         invoiceId: inv.id,
         status: inv.status,

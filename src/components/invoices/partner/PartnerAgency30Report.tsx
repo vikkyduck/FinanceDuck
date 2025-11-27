@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatCurrency, calculatePartnerDebt } from "@/lib/invoiceCalculations";
 import { useAuth } from "@/hooks/useAuth";
 import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -60,12 +60,8 @@ export const PartnerAgency30Report = () => {
             client_bill,
             partner_share_from_margin,
             admin_share_from_margin,
-            amount_to_admin,
-            client_remaining
-          ),
-          executor_expenses(
-            amount,
-            is_admin_expense
+            client_base_after_margin,
+            executor_expenses_total
           )
         `)
         .eq("partner_id", partnerId)
@@ -86,7 +82,6 @@ export const PartnerAgency30Report = () => {
       let totalFromClient = 0;
       let partnerShare = 0;
       let adminShare = 0;
-      let adminExpenses = 0;
       let totalDebtToAdmin = 0;
       let clientRemaining = 0;
 
@@ -98,18 +93,22 @@ export const PartnerAgency30Report = () => {
         const calc = Array.isArray(calcSource) ? calcSource[0] : calcSource;
         if (!calc) return;
 
-        totalFromClient += Number(calc.client_bill) || 0;
-        partnerShare += Number(calc.partner_share_from_margin) || 0;
-        adminShare += Number(calc.admin_share_from_margin) || 0;
-        totalDebtToAdmin += Number(calc.amount_to_admin) || 0;
-        clientRemaining += Number(calc.client_remaining) || 0;
+        const clientBill = Number(calc.client_bill) || 0;
+        const partnerShareAmt = Number(calc.partner_share_from_margin) || 0;
+        const clientBase = Number(calc.client_base_after_margin) || clientBill * 0.70;
+        const executorExpenses = Number(calc.executor_expenses_total) || 0;
 
-        // Считаем расходы админа
-        (invoice.executor_expenses || []).forEach((expense: any) => {
-          if (expense.is_admin_expense) {
-            adminExpenses += Number(expense.amount) || 0;
-          }
-        });
+        totalFromClient += clientBill;
+        partnerShare += partnerShareAmt;
+        adminShare += Number(calc.admin_share_from_margin) || 0;
+        
+        // For Agency 30%, partner debt = just 15% commission (partner_share_from_margin)
+        // Client remaining (70% - expenses) tracked separately in DoNotSpendDashboard
+        const { debtToAdmin } = calculatePartnerDebt('agency_30', clientBill, partnerShareAmt, executorExpenses);
+        totalDebtToAdmin += debtToAdmin;
+        
+        // Client remaining is 70% base minus executor expenses
+        clientRemaining += Math.max(0, clientBase - executorExpenses);
       });
 
       const paymentsToAdmin = (payments || []).reduce(
@@ -121,7 +120,7 @@ export const PartnerAgency30Report = () => {
         total_from_client: totalFromClient,
         partner_share_15: partnerShare,
         admin_share_15: adminShare,
-        admin_expenses: adminExpenses,
+        admin_expenses: 0, // No longer relevant - expenses tracked in DoNotSpend dashboard
         total_debt_to_admin: totalDebtToAdmin,
         payments_to_admin: paymentsToAdmin,
         remaining_debt: totalDebtToAdmin - paymentsToAdmin,
@@ -165,6 +164,13 @@ export const PartnerAgency30Report = () => {
     channelName: 'partner_agency30_payments',
     table: 'partner_payments',
     filter: partnerId ? `partner_id=eq.${partnerId}` : undefined,
+    onUpdate: fetchData,
+    enabled: !!partnerId,
+  });
+
+  useRealtimeSubscription({
+    channelName: 'partner_agency30_expenses',
+    table: 'invoice_expenses',
     onUpdate: fetchData,
     enabled: !!partnerId,
   });
@@ -373,13 +379,10 @@ export const PartnerAgency30Report = () => {
           <div className="text-sm font-medium">Формула расчета:</div>
           <div className="text-xs text-muted-foreground space-y-1 font-mono">
             <div>Общая сумма от клиента: <span className="text-foreground">{formatCurrency(data.total_from_client)}</span></div>
-            <div className="ml-4">├─ Ваша комиссия: <span className="text-primary font-semibold">{formatCurrency(data.partner_share_15)}</span></div>
-            <div className="ml-4">├─ Часть для админа: <span className="text-foreground">{formatCurrency(data.admin_share_15)}</span></div>
-            {data.admin_expenses > 0 && (
-              <div className="ml-4">├─ Расходы админа: <span className="text-orange-600">{formatCurrency(data.admin_expenses)}</span></div>
-            )}
+            <div className="ml-4">├─ Ваша комиссия (15%): <span className="text-primary font-semibold">{formatCurrency(data.partner_share_15)}</span></div>
+            <div className="ml-4">├─ Часть для админа (15%): <span className="text-foreground">{formatCurrency(data.admin_share_15)}</span></div>
             <div className="ml-4 pt-1 border-t border-border">└─ К оплате админу: <span className="text-foreground font-semibold">{formatCurrency(data.total_debt_to_admin)}</span></div>
-            <div className="pt-2">Деньги клиента (нельзя трогать): <span className="text-muted-foreground">{formatCurrency(data.client_remaining_70)}</span></div>
+            <div className="pt-2">Деньги клиента (70% - расходы): <span className="text-muted-foreground">{formatCurrency(data.client_remaining_70)}</span></div>
           </div>
         </div>
       </CardContent>

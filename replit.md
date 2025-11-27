@@ -56,6 +56,8 @@ The system supports four user roles (admin, assistant, partner, client) with dis
   - Partner Agreement (commission_based): `debt = clientBill - partnerCommission - executorExpenses`
   - Agency 30%: `debt = partnerCommission (15% only)` - client funds tracked separately in "Do Not Spend" dashboard
 - **Centralized calculation**: `calculatePartnerDebt()` function in `invoiceCalculations.ts` prevents formula drift across components
+- **Partner-facing components updated**: PartnerCommissionReport, PartnerAgency30Report, PartnerVirtualStatement all use centralized calculation
+- **Real-time expense updates**: All debt components subscribe to invoice_expenses for instant recalculation
 - **Terminology**: Use "приход" (not "платёж/выплату") for partner payments to admin
 - **Design**: Apple HIG principles - simplicity, clarity, minimal text, intuitive icons
 - **Assistant visibility**: Assistant role cannot see commission percentages, partner/admin shares, or profit analytics

@@ -136,8 +136,12 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         return;
       }
 
-      const invoiceData = await apiGet<any>(`/invoices/${invoiceId}`);
+      const [invoiceData, expensesData] = await Promise.all([
+        apiGet<any>(`/invoices/${invoiceId}`),
+        apiGet<any[]>(`/invoices/${invoiceId}/expenses`).catch(() => [])
+      ]);
       console.log('[InvoiceDetailsDialog] Invoice loaded:', invoiceData);
+      console.log('[InvoiceDetailsDialog] Expenses loaded:', expensesData);
 
       const mappedInvoice = {
         id: invoiceData.id,
@@ -159,18 +163,23 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
           client_bill: invoiceData.calculations.clientBill,
           commission_rate: invoiceData.calculations.commissionRate,
           commission_amount: invoiceData.calculations.commissionAmount,
+          amount_to_admin: invoiceData.calculations.amountToAdmin,
+          agency_margin: invoiceData.calculations.agencyMargin,
           partner_share_from_margin: invoiceData.calculations.partnerShareFromMargin,
           admin_share_from_margin: invoiceData.calculations.adminShareFromMargin,
+          client_base_after_margin: invoiceData.calculations.clientBaseAfterMargin,
+          client_spent: invoiceData.calculations.clientSpent,
           executor_expenses_total: invoiceData.calculations.executorExpensesTotal,
           net_profit_admin: invoiceData.calculations.netProfitAdmin,
+          admin_share_50: invoiceData.calculations.adminShare50,
+          cat_share_50: invoiceData.calculations.catShare50,
           client_remaining: invoiceData.calculations.clientRemaining,
         } : null,
       };
 
       setInvoice(mappedInvoice);
 
-      const expensesData = invoiceData.expenses || [];
-      const mappedExpenses = expensesData.map((exp: any) => ({
+      const mappedExpenses = (expensesData || []).map((exp: any) => ({
         id: exp.id,
         invoice_id: exp.invoiceId,
         description: exp.description,

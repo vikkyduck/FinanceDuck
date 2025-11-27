@@ -1,5 +1,17 @@
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
 
+export interface ClientListItem {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
+
+export interface PartnerListItem {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
+
 export interface InvoiceExpense {
   id: string;
   invoice_id: string;
@@ -41,7 +53,7 @@ export interface InvoiceViewModel {
   invoice_number: string;
   client_id: string | null;
   partner_id: string | null;
-  scheme: "agency_30_margin" | "commission_based";
+  scheme: "partner_10" | "partner_15" | "agency_30" | "vika_ie_7" | "commission_based";
   status: "draft" | "sent" | "paid" | "cancelled";
   payment_date: string | null;
   actual_payment_date: string | null;
@@ -167,8 +179,9 @@ function normalizeDocumentFromApi(data: any): InvoiceDocument {
 }
 
 export const invoiceService = {
-  async fetchInvoices(): Promise<InvoiceListItem[]> {
-    const data = await apiGet<any[]>("/invoices");
+  async fetchInvoices(partnerId?: string): Promise<InvoiceListItem[]> {
+    const url = partnerId ? `/invoices?partnerId=${encodeURIComponent(partnerId)}` : "/invoices";
+    const data = await apiGet<any[]>(url);
     return data.map(normalizeInvoiceListFromApi);
   },
 
@@ -247,6 +260,74 @@ export const invoiceService = {
         ...invoice.calculations,
       },
     });
+  },
+
+  async fetchClients(): Promise<ClientListItem[]> {
+    const data = await apiGet<any[]>("/clients");
+    return data.map((client) => ({
+      id: client.id,
+      name: client.name,
+      createdAt: client.createdAt,
+    }));
+  },
+
+  async fetchPartners(): Promise<PartnerListItem[]> {
+    const data = await apiGet<any[]>("/partners");
+    return data.map((partner) => ({
+      id: partner.id,
+      name: partner.name,
+      createdAt: partner.createdAt,
+    }));
+  },
+
+  async createClient(name: string): Promise<ClientListItem> {
+    const data = await apiPost<any>("/clients", { name });
+    return {
+      id: data.id,
+      name: data.name,
+      createdAt: data.createdAt,
+    };
+  },
+
+  async updateClient(id: string, name: string): Promise<ClientListItem> {
+    const data = await apiPatch<any>(`/clients/${id}`, { name });
+    return {
+      id: data.id,
+      name: data.name,
+      createdAt: data.createdAt,
+    };
+  },
+
+  async createPartner(name: string): Promise<PartnerListItem> {
+    const data = await apiPost<any>("/partners", { name });
+    return {
+      id: data.id,
+      name: data.name,
+      createdAt: data.createdAt,
+    };
+  },
+
+  async updatePartner(id: string, name: string): Promise<PartnerListItem> {
+    const data = await apiPatch<any>(`/partners/${id}`, { name });
+    return {
+      id: data.id,
+      name: data.name,
+      createdAt: data.createdAt,
+    };
+  },
+
+  async fetchPartnerPayments(): Promise<any[]> {
+    return apiGet<any[]>("/partner-payments");
+  },
+
+  async createPartnerPayment(payment: {
+    partnerId: string;
+    invoiceId?: string;
+    amount: number;
+    paymentDate: string;
+    notes?: string;
+  }): Promise<any> {
+    return apiPost("/partner-payments", payment);
   },
 };
 

@@ -210,7 +210,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(invoices.createdAt));
     
     let results;
-    if (role === 'partner' && partnerId) {
+    if (partnerId) {
       results = await baseQuery.where(eq(invoices.partnerId, partnerId));
     } else if (role === 'client' && clientId) {
       results = await baseQuery.where(eq(invoices.clientId, clientId));

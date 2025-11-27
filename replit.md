@@ -1,6 +1,25 @@
 # Overview
 
-This project is an invoice management system built with React, TypeScript, and Supabase. It offers role-based dashboards for admins, assistants, partners, and clients to manage invoices, partners, clients, and financial reporting. Key features include secure cookie-based authentication with CSRF protection, real-time updates via Supabase subscriptions, and comprehensive financial calculations for various commission schemes. The system aims to provide a clear overview of financial flows, including a waterfall visualization of fund distribution and a "Do Not Spend" dashboard for tracking project budgets.
+This project is an invoice management system migrating from Supabase to Replit with Neon PostgreSQL backend. It offers role-based dashboards for admins, assistants, partners, and clients to manage invoices, partners, clients, and financial reporting. Key features include secure cookie-based authentication with CSRF protection and comprehensive financial calculations for various commission schemes. The system aims to provide a clear overview of financial flows, including a waterfall visualization of fund distribution and a "Do Not Spend" dashboard for tracking project budgets.
+
+## Migration Status
+
+**Completed migrations (Supabase → invoiceService API):**
+- InvoiceDetailsDialog - full invoice view with expenses and documents
+- CreateInvoiceDialog - invoice creation with local calculations pre-submit
+- AddExpenseDialog / EditExpenseDialog - expense CRUD operations
+- ClientCombobox / PartnerCombobox - entity selection with server data
+- ManagePartnersDialog / ManageClientsDialog - entity management
+- RecordPaymentDialog - partner payment recording with server-side filtering
+
+**Temporarily disabled:**
+- UploadDocumentDialog - requires Replit file storage configuration
+
+**Remaining components to migrate (45+ files):**
+- Admin dashboards (InvoiceList, Analytics, Reports)
+- Partner/Client dashboards
+- Financial calculation components
+- Real-time subscription hooks
 
 # User Preferences
 
@@ -14,11 +33,11 @@ The frontend is built with React 18, TypeScript, and Vite, utilizing React Route
 
 ## Authentication & Authorization
 
-The system employs cookie-based session management with HttpOnly cookies and CSRF protection for secure authentication. It features a robust Role-Based Access Control (RBAC) system with four roles (admin, assistant, partner, client), enforced by Supabase Row-Level Security (RLS) and protected frontend routes. Access codes manage role assignment, and security events are logged for suspicious activities.
+The system employs cookie-based session management with HttpOnly cookies and CSRF protection for secure authentication. It features a robust Role-Based Access Control (RBAC) system with four roles (admin, assistant, partner, client), enforced by server-side allowlist filtering and protected frontend routes. Access codes manage role assignment. Security note: Assistants MUST NEVER see commission percentages, profit analytics, or agency margins - server strips these fields.
 
 ## Backend Architecture
 
-Supabase serves as the Backend-as-a-Service, providing a PostgreSQL database with RLS, Edge Functions for authentication, and real-time subscriptions. A custom access code system replaces Supabase's built-in auth. The database schema includes tables for invoices, partners, clients, access tokens, user sessions, expenses, documents, security events, login attempts, partner payments, and assistant bonuses. Database functions (RPCs) handle session management, access code verification, and financial calculations.
+Express.js server with Neon PostgreSQL database via Drizzle ORM. Cookie-based session management with HttpOnly cookies and CSRF protection. Server-side RBAC uses allowlist approach - assistants only receive explicitly permitted fields (id, invoiceNumber, clientId, partnerId, status, clientBill, executorExpensesTotal). The database schema includes tables for invoices, partners, clients, access tokens, user sessions, expenses, documents, and partner payments. API routes in server/routes.ts, storage layer in server/storage.ts.
 
 ## Data Flow
 

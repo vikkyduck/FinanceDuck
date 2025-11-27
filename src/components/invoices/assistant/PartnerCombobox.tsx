@@ -15,18 +15,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { supabase } from "@/integrations/supabase/client";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
-import { format } from "date-fns";
-import { ru } from "date-fns/locale";
+import { invoiceService, PartnerListItem } from "@/lib/services/invoices";
 import { useDebounce } from "use-debounce";
-
-interface Partner {
-  id: string;
-  name: string;
-  invoiceCount?: number;
-  lastInvoiceDate?: string;
-}
 
 interface PartnerComboboxProps {
   value: string;
@@ -42,7 +32,7 @@ export const PartnerCombobox = ({
   onCreateNew,
 }: PartnerComboboxProps) => {
   const [open, setOpen] = useState(false);
-  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partners, setPartners] = useState<PartnerListItem[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebounce(search, 300);
   const [loading, setLoading] = useState(false);
@@ -51,63 +41,25 @@ export const PartnerCombobox = ({
     if (clientId) {
       fetchPartners();
     }
-  }, [clientId, debouncedSearch]);
+  }, [clientId]);
 
   const fetchPartners = async () => {
-    if (!clientId) return;
-    
     setLoading(true);
     try {
-      await ensureSessionContext();
-      
-      let query = supabase
-        .from("client_partners")
-        .select(
-          `
-          partner_id,
-          partners(id, name),
-          partner:partners(invoices(id, created_at))
-        `
-        )
-        .eq("client_id", clientId);
-
-      const { data } = await query;
-
-      let partnersData =
-        data?.map((cp: any) => ({
-          id: cp.partners.id,
-          name: cp.partners.name,
-          invoiceCount: cp.partner?.invoices?.length || 0,
-          lastInvoiceDate: cp.partner?.invoices?.[0]?.created_at,
-        })) || [];
-
-      if (debouncedSearch) {
-        partnersData = partnersData.filter((p: Partner) =>
-          p.name.toLowerCase().includes(debouncedSearch.toLowerCase())
-        );
-      }
-
-      // Группировка по активности
-      const active = partnersData.filter(
-        (p: Partner) =>
-          p.lastInvoiceDate &&
-          new Date(p.lastInvoiceDate) >
-            new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-      );
-      const inactive = partnersData.filter(
-        (p: Partner) =>
-          !p.lastInvoiceDate ||
-          new Date(p.lastInvoiceDate) <
-            new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-      );
-
-      setPartners([...active, ...inactive]);
+      const data = await invoiceService.fetchPartners();
+      setPartners(data);
     } catch (error) {
       console.error("Error fetching partners:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const filteredPartners = debouncedSearch
+    ? partners.filter((p) =>
+        p.name.toLowerCase().includes(debouncedSearch.toLowerCase())
+      )
+    : partners;
 
   const selectedPartner = partners.find((p) => p.id === value);
 
@@ -120,6 +72,7 @@ export const PartnerCombobox = ({
           aria-expanded={open}
           className="w-full justify-between h-11"
           disabled={!clientId}
+          data-testid="combobox-partner"
         >
           {selectedPartner ? selectedPartner.name : "Выберите партнера..."}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -131,13 +84,14 @@ export const PartnerCombobox = ({
             placeholder="Поиск партнера..."
             value={search}
             onValueChange={setSearch}
+            data-testid="input-search-partner"
           />
           <CommandList>
             <CommandEmpty>
               {loading ? "Загрузка..." : "Партнеры не найдены"}
             </CommandEmpty>
             <CommandGroup>
-              {partners.map((partner) => (
+              {filteredPartners.map((partner) => (
                 <CommandItem
                   key={partner.id}
                   value={partner.id}
@@ -146,6 +100,7 @@ export const PartnerCombobox = ({
                     setOpen(false);
                   }}
                   className="flex items-center justify-between"
+                  data-testid={`item-partner-${partner.id}`}
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <Check
@@ -168,15 +123,6 @@ export const PartnerCombobox = ({
                         )}
                         {!search && partner.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {partner.invoiceCount} счетов
-                        {partner.lastInvoiceDate &&
-                          ` • ${format(
-                            new Date(partner.lastInvoiceDate),
-                            "d MMM",
-                            { locale: ru }
-                          )}`}
-                      </p>
                     </div>
                   </div>
                 </CommandItem>
@@ -190,6 +136,7 @@ export const PartnerCombobox = ({
                     setOpen(false);
                   }}
                   className="text-primary"
+                  data-testid="button-create-new-partner"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Создать нового партнера

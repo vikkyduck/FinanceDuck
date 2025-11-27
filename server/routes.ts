@@ -328,8 +328,12 @@ export function registerRoutes(app: Express): void {
   app.get("/api/invoices", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";
-      const partnerId = req.user?.partnerId;
+      let partnerId = req.user?.partnerId;
       const clientId = req.user?.clientId;
+      
+      if (role === "admin" && req.query.partnerId) {
+        partnerId = req.query.partnerId as string;
+      }
       
       const result = await storage.getInvoices(role, partnerId, clientId);
       const filtered = stripSensitiveFieldsFromList(result, role);

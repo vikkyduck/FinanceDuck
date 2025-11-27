@@ -5,13 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
 import { useRateLimit } from "@/hooks/useRateLimit";
-import { useUserRole } from "@/hooks/useUserRole";
-import { useAuth } from "@/hooks/useAuth";
-import { handleSupabaseError, handleValidationError, showSuccess } from "@/lib/errorHandler";
+import { handleValidationError, showSuccess } from "@/lib/errorHandler";
+import { toast } from "sonner";
 import { sanitizeText, sanitizeFileName, isValidUuid } from "@/lib/sanitize";
-import { Upload, Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface UploadDocumentDialogProps {
   open: boolean;
@@ -22,8 +21,6 @@ interface UploadDocumentDialogProps {
 
 export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess }: UploadDocumentDialogProps) => {
   const { checkLimit } = useRateLimit('form');
-  const { getSession } = useUserRole();
-  const { accessTokenId: authAccessTokenId } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState<string>("client_act");
   const [notes, setNotes] = useState("");
@@ -36,7 +33,6 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
   };
 
   const handleUpload = async () => {
-    // Check rate limit
     const limitCheck = checkLimit();
     if (!limitCheck.allowed) {
       return;
@@ -47,14 +43,12 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
       return;
     }
 
-    // Валидация размера файла (макс 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       handleValidationError("Файл", "Размер файла не должен превышать 10MB");
       return;
     }
 
-    // Валидация типа файла
     const allowedTypes = [
       'application/pdf',
       'application/msword',
@@ -76,66 +70,7 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
       return;
     }
 
-    const sanitizedNotes = sanitizeText(notes);
-
-    setUploading(true);
-
-    try {
-      // Get uploaded_by from either auth system (email login) or access token system (code login)
-      const session = getSession();
-      const uploadedByTokenId = authAccessTokenId || session?.accessTokenId;
-
-      if (!uploadedByTokenId) {
-        handleValidationError("Сессия", "Сессия не найдена");
-        setUploading(false);
-        return;
-      }
-
-      // Санитизация имени файла
-      const sanitizedFileName = sanitizeFileName(file.name);
-      
-      // Upload file to storage
-      const fileExt = sanitizedFileName.split('.').pop();
-      const fileName = `${invoiceId}/${Date.now()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('invoice-documents')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      // Save metadata to database
-      const { error: dbError } = await supabase
-        .from('invoice_documents')
-        .insert({
-          invoice_id: invoiceId,
-          file_name: sanitizedFileName,
-          file_path: fileName,
-          file_size: file.size,
-          mime_type: file.type,
-          uploaded_by_token_id: uploadedByTokenId,
-          document_type: documentType,
-          notes: sanitizedNotes || null,
-        });
-
-      if (dbError) throw dbError;
-
-      showSuccess("Успешно", `Документ "${sanitizedFileName}" загружен`);
-
-      setFile(null);
-      setNotes("");
-      setDocumentType("client_act");
-      onOpenChange(false);
-      onSuccess();
-    } catch (error: any) {
-      console.error('Error uploading document:', error);
-      handleSupabaseError(error, {
-        operation: "upload_document",
-        details: { fileName: file.name, documentType }
-      });
-    } finally {
-      setUploading(false);
-    }
+    toast.error("Загрузка документов временно недоступна. Функция будет добавлена позже.");
   };
 
   return (
@@ -148,6 +83,13 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
           </DialogDescription>
         </DialogHeader>
 
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Загрузка документов временно недоступна. Функция будет добавлена позже.
+          </AlertDescription>
+        </Alert>
+
         <div className="space-y-4">
           <div>
             <Label htmlFor="file">Файл</Label>
@@ -157,23 +99,24 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
               onChange={handleFileChange}
               accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
               disabled={uploading}
+              data-testid="input-file"
             />
-              {file && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Выбран: {file.name} ({(file.size / 1024).toFixed(0)} KB)
-                </p>
-              )}
+            {file && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Выбран: {file.name} ({(file.size / 1024).toFixed(0)} KB)
+              </p>
+            )}
           </div>
 
           <div>
             <Label htmlFor="documentType">Тип документа</Label>
             <Select value={documentType} onValueChange={setDocumentType} disabled={uploading}>
-              <SelectTrigger id="documentType">
+              <SelectTrigger id="documentType" data-testid="select-document-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="client_act">Акт от Заказчика (+2000₽)</SelectItem>
-                <SelectItem value="executor_receipt">Акт/Чек от Исполнителя (+1000₽)</SelectItem>
+                <SelectItem value="client_act">Акт от Заказчика (+2000)</SelectItem>
+                <SelectItem value="executor_receipt">Акт/Чек от Исполнителя (+1000)</SelectItem>
                 <SelectItem value="invoice">Счет</SelectItem>
                 <SelectItem value="contract">Договор</SelectItem>
                 <SelectItem value="other">Другое</SelectItem>
@@ -189,14 +132,15 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Дополнительная информация о документе"
               disabled={uploading}
+              data-testid="input-document-notes"
             />
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={uploading}>
+            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={uploading} data-testid="button-cancel-upload">
               Отмена
             </Button>
-            <Button onClick={handleUpload} disabled={!file || uploading}>
+            <Button onClick={handleUpload} disabled={true} data-testid="button-upload-document">
               {uploading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {uploading ? "Загрузка..." : "Загрузить"}
             </Button>

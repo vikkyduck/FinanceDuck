@@ -5,15 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { useUserRole } from "@/hooks/useUserRole";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { insertSupabaseNoReturn, querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { useRateLimit } from "@/hooks/useRateLimit";
+import { invoiceService, type InvoiceListItem } from "@/lib/services/invoices";
+import { Loader2 } from "lucide-react";
 
 interface RecordPaymentDialogProps {
   open: boolean;
@@ -36,33 +34,37 @@ export const RecordPaymentDialog = ({
   const [date, setDate] = useState<Date>(new Date());
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
-  const { accessTokenId } = useUserRole();
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
   const [invoiceOptions, setInvoiceOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
   const { checkLimit } = useRateLimit('form');
 
   useEffect(() => {
     const loadInvoices = async () => {
       if (!open) return;
-      const data = await querySupabaseWithFilter<any>(
-        "invoices",
-        "id, invoice_number, scheme, invoice_calculations(amount_to_admin, admin_share_from_margin)",
-        (q) => q.eq("partner_id", partnerId).order("created_at", { ascending: false })
-      );
-      
-      if (!data) return;
-      
-      const options = data.map((inv: any) => {
-        const calc = inv.invoice_calculations?.[0];
-        const toTransfer = inv.scheme === 'agency_30'
-          ? (Number(calc?.admin_share_from_margin) || 0)
-          : (Number(calc?.amount_to_admin) || 0);
-        return {
-          id: inv.id,
-          label: `№ ${inv.invoice_number} — к переводу ${formatCurrency(toTransfer)}`
-        };
-      });
-      setInvoiceOptions(options);
+      setLoadingInvoices(true);
+      setInvoiceError(null);
+      try {
+        const invoices = await invoiceService.fetchInvoices(partnerId);
+        
+        const options = invoices.map((inv: InvoiceListItem) => {
+          const isMarginScheme = ['agency_30', 'partner_10', 'partner_15', 'vika_ie_7'].includes(inv.scheme);
+          const toTransfer = isMarginScheme
+            ? (Number(inv.admin_share_from_margin) || 0)
+            : (Number(inv.commission_amount) || 0);
+          return {
+            id: inv.id,
+            label: `${inv.invoice_number} - ${formatCurrency(toTransfer)}`
+          };
+        });
+        setInvoiceOptions(options);
+      } catch (error) {
+        console.error("Error loading invoices:", error);
+        setInvoiceError("Не удалось загрузить список счетов");
+      } finally {
+        setLoadingInvoices(false);
+      }
     };
     loadInvoices();
   }, [open, partnerId]);
@@ -73,79 +75,53 @@ export const RecordPaymentDialog = ({
     const limitCheck = checkLimit();
     if (!limitCheck.allowed) return;
 
+    if (!amount || parseFloat(amount) <= 0) {
+      toast({
+        title: "Ошибка",
+        description: "Введите сумму платежа",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amountNum = parseFloat(amount);
+    if (amountNum > remaining) {
+      toast({
+        title: "Ошибка",
+        description: "Сумма платежа не может превышать остаток долга",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Validate inputs with zod
-      const { paymentSchema } = await import('@/lib/validationSchemas');
-      const validated = paymentSchema.parse({ 
-        amount, 
+      await invoiceService.createPartnerPayment({
+        partnerId,
+        invoiceId: invoiceId || undefined,
+        amount: amountNum,
         paymentDate: format(date, 'yyyy-MM-dd'),
-        paymentMethod: '',
-        notes,
-        invoiceId: invoiceId || '',
-        partnerId
+        notes: notes || undefined,
       });
 
-      if (!accessTokenId) {
-        toast({
-          title: "Ошибка",
-          description: "Не удалось определить пользователя",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (validated.amount > remaining) {
-        toast({
-          title: "Ошибка",
-          description: "Сумма платежа не может превышать остаток долга",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      const success = await insertSupabaseNoReturn(
-        "partner_payments",
-        {
-          partner_id: validated.partnerId!,
-          invoice_id: validated.invoiceId,
-          amount: validated.amount,
-          payment_date: validated.paymentDate,
-          notes: validated.notes || null,
-          created_by: accessTokenId,
-        },
-        { operation: "record_partner_payment" }
-      );
-
-      if (success) {
-        toast({
-          title: "Приход записан",
-          description: `Приход от ${partnerName} записан`,
-        });
-        setAmount("");
-        setDate(new Date());
-        setNotes("");
-        setInvoiceId(null);
-        onSuccess();
-        onOpenChange(false);
-      }
+      toast({
+        title: "Приход записан",
+        description: `Приход от ${partnerName} записан`,
+      });
+      setAmount("");
+      setDate(new Date());
+      setNotes("");
+      setInvoiceId(null);
+      onSuccess();
+      onOpenChange(false);
     } catch (error: any) {
-      if (error.name === 'ZodError') {
-        toast({
-          title: "Ошибка валидации",
-          description: error.errors[0]?.message || 'Ошибка валидации данных',
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Ошибка",
-          description: "Не удалось записать приход",
-          variant: "destructive",
-        });
-      }
+      console.error("Error recording payment:", error);
+      toast({
+        title: "Ошибка",
+        description: error.message || "Не удалось записать приход",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -160,21 +136,23 @@ export const RecordPaymentDialog = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label>Партнёр</Label>
-            <div className="text-sm text-muted-foreground mt-1">{partnerName}</div>
+            <div className="text-sm text-muted-foreground mt-1" data-testid="text-partner-name">
+              {partnerName}
+            </div>
           </div>
 
           <div>
             <Label>Осталось оплатить</Label>
-            <div className="text-lg font-semibold text-red-600 mt-1">
+            <div className="text-lg font-semibold text-red-600 mt-1" data-testid="text-remaining-amount">
               {formatCurrency(remaining)}
             </div>
           </div>
 
           <div>
-            <Label>Счёт *</Label>
-            <Select value={invoiceId || ""} onValueChange={setInvoiceId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите счёт" />
+            <Label>Счёт</Label>
+            <Select value={invoiceId || ""} onValueChange={setInvoiceId} disabled={loadingInvoices}>
+              <SelectTrigger data-testid="select-invoice">
+                <SelectValue placeholder={loadingInvoices ? "Загрузка..." : "Выберите счёт (опционально)"} />
               </SelectTrigger>
               <SelectContent>
                 {invoiceOptions.map((inv) => (
@@ -184,6 +162,9 @@ export const RecordPaymentDialog = ({
                 ))}
               </SelectContent>
             </Select>
+            {invoiceError && (
+              <p className="text-sm text-destructive mt-1">{invoiceError}</p>
+            )}
           </div>
 
           <div>
@@ -198,6 +179,7 @@ export const RecordPaymentDialog = ({
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               required
+              data-testid="input-payment-amount"
             />
           </div>
 
@@ -218,6 +200,7 @@ export const RecordPaymentDialog = ({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Необязательно"
               rows={3}
+              data-testid="input-payment-notes"
             />
           </div>
 
@@ -227,10 +210,12 @@ export const RecordPaymentDialog = ({
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={loading}
+              data-testid="button-cancel-payment"
             >
               Отмена
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} data-testid="button-submit-payment">
+              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {loading ? "Записываю..." : "Записать"}
             </Button>
           </div>

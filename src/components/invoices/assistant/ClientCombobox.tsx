@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Check, ChevronsUpDown, Plus, Search } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,18 +15,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { supabase } from "@/integrations/supabase/client";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
-import { format } from "date-fns";
-import { ru } from "date-fns/locale";
+import { invoiceService, ClientListItem } from "@/lib/services/invoices";
 import { useDebounce } from "use-debounce";
-
-interface Client {
-  id: string;
-  name: string;
-  invoiceCount?: number;
-  lastInvoiceDate?: string;
-}
 
 interface ClientComboboxProps {
   value: string;
@@ -40,66 +30,32 @@ export const ClientCombobox = ({
   onCreateNew,
 }: ClientComboboxProps) => {
   const [open, setOpen] = useState(false);
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<ClientListItem[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch] = useDebounce(search, 300);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchClients();
-  }, [debouncedSearch]);
+  }, []);
 
   const fetchClients = async () => {
     setLoading(true);
     try {
-      await ensureSessionContext();
-      
-      let query = supabase
-        .from("clients")
-        .select(
-          `
-          id,
-          name,
-          invoices(id, created_at)
-        `
-        )
-        .order("name");
-
-      if (debouncedSearch) {
-        query = query.ilike("name", `%${debouncedSearch}%`);
-      }
-
-      const { data } = await query;
-
-      const clientsWithStats =
-        data?.map((client: any) => ({
-          id: client.id,
-          name: client.name,
-          invoiceCount: client.invoices?.length || 0,
-          lastInvoiceDate: client.invoices?.[0]?.created_at,
-        })) || [];
-
-      // Группировка по активности
-      const active = clientsWithStats.filter(
-        (c) =>
-          c.lastInvoiceDate &&
-          new Date(c.lastInvoiceDate) >
-            new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-      );
-      const inactive = clientsWithStats.filter(
-        (c) =>
-          !c.lastInvoiceDate ||
-          new Date(c.lastInvoiceDate) <
-            new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-      );
-
-      setClients([...active, ...inactive]);
+      const data = await invoiceService.fetchClients();
+      setClients(data);
     } catch (error) {
       console.error("Error fetching clients:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const filteredClients = debouncedSearch
+    ? clients.filter((c) =>
+        c.name.toLowerCase().includes(debouncedSearch.toLowerCase())
+      )
+    : clients;
 
   const selectedClient = clients.find((c) => c.id === value);
 
@@ -111,6 +67,7 @@ export const ClientCombobox = ({
           role="combobox"
           aria-expanded={open}
           className="w-full justify-between h-11"
+          data-testid="combobox-client"
         >
           {selectedClient ? selectedClient.name : "Выберите клиента..."}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -122,13 +79,14 @@ export const ClientCombobox = ({
             placeholder="Поиск клиента..."
             value={search}
             onValueChange={setSearch}
+            data-testid="input-search-client"
           />
           <CommandList>
             <CommandEmpty>
               {loading ? "Загрузка..." : "Клиенты не найдены"}
             </CommandEmpty>
             <CommandGroup>
-              {clients.map((client) => (
+              {filteredClients.map((client) => (
                 <CommandItem
                   key={client.id}
                   value={client.id}
@@ -137,6 +95,7 @@ export const ClientCombobox = ({
                     setOpen(false);
                   }}
                   className="flex items-center justify-between"
+                  data-testid={`item-client-${client.id}`}
                 >
                   <div className="flex items-center gap-2 flex-1">
                     <Check
@@ -159,15 +118,6 @@ export const ClientCombobox = ({
                         )}
                         {!search && client.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {client.invoiceCount} счетов
-                        {client.lastInvoiceDate &&
-                          ` • ${format(
-                            new Date(client.lastInvoiceDate),
-                            "d MMM",
-                            { locale: ru }
-                          )}`}
-                      </p>
                     </div>
                   </div>
                 </CommandItem>
@@ -181,6 +131,7 @@ export const ClientCombobox = ({
                     setOpen(false);
                   }}
                   className="text-primary"
+                  data-testid="button-create-new-client"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Создать нового клиента

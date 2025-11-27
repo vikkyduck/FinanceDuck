@@ -27,6 +27,11 @@ This project is an invoice management system migrating from Supabase to Replit w
 - ManagePartnersDialog - full CRUD with contact fields (name, telegram, phone, email), view partner's clients (admin only), delete with confirmation (admin only)
 - ManageClientsDialog - full CRUD with contact fields (name, telegram, phone), **multi-partner selection** (admin only), delete with confirmation (admin only)
 - RecordPaymentDialog - partner payment recording with server-side filtering
+- **Dashboard Statistics (2025-11-27):**
+  - AdminStats, AdminHeroMetrics - admin dashboard metrics
+  - PartnerStats - partner commission and debt tracking
+  - ClientStats - client invoice summaries
+  - useDashboardStats hook with TanStack Query polling (30s) for near real-time updates
 
 **API Endpoints for Partners/Clients:**
 - GET/POST/PATCH /api/partners - full contact info

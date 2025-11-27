@@ -4,10 +4,99 @@ import {
   invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners,
   Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment,
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment,
-  AccessToken, UserSession, UserRole
+  AccessToken, UserSession, UserRole, InvoiceScheme
 } from "../shared/schema";
 import { eq, and, desc, isNull, gte, sql, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
+
+// Server-side invoice calculations
+function calculateInvoiceServer(
+  scheme: InvoiceScheme,
+  clientBill: number,
+  partnerCommissionRate?: number,
+  executorExpenses: number = 0
+): Partial<InvoiceCalculation> {
+  const result: Partial<InvoiceCalculation> = {
+    clientBill: clientBill.toString(),
+    executorExpensesTotal: executorExpenses.toString(),
+  };
+
+  switch (scheme) {
+    case 'agency_30': {
+      const agencyMargin = clientBill * 0.30;
+      const partnerShare = clientBill * 0.15;
+      const adminShare = clientBill * 0.15;
+      const clientBase = clientBill * 0.70;
+      const clientRemaining = clientBase - executorExpenses;
+      
+      result.agencyMargin = agencyMargin.toString();
+      result.partnerShareFromMargin = partnerShare.toString();
+      result.adminShareFromMargin = adminShare.toString();
+      result.clientBaseAfterMargin = clientBase.toString();
+      result.clientRemaining = clientRemaining.toString();
+      result.netProfitAdmin = adminShare.toString();
+      result.adminShare50 = (adminShare / 2).toString();
+      result.catShare50 = (adminShare / 2).toString();
+      break;
+    }
+    case 'partner_10': {
+      const commissionRate = 10;
+      const commissionAmount = clientBill * 0.10;
+      const amountToAdmin = clientBill * 0.90;
+      const netProfitAdmin = amountToAdmin - executorExpenses;
+      
+      result.commissionRate = commissionRate.toString();
+      result.commissionAmount = commissionAmount.toString();
+      result.amountToAdmin = amountToAdmin.toString();
+      result.netProfitAdmin = netProfitAdmin.toString();
+      result.adminShare50 = (netProfitAdmin / 2).toString();
+      result.catShare50 = (netProfitAdmin / 2).toString();
+      break;
+    }
+    case 'partner_15': {
+      const commissionRate = 15;
+      const commissionAmount = clientBill * 0.15;
+      const amountToAdmin = clientBill * 0.85;
+      const netProfitAdmin = amountToAdmin - executorExpenses;
+      
+      result.commissionRate = commissionRate.toString();
+      result.commissionAmount = commissionAmount.toString();
+      result.amountToAdmin = amountToAdmin.toString();
+      result.netProfitAdmin = netProfitAdmin.toString();
+      result.adminShare50 = (netProfitAdmin / 2).toString();
+      result.catShare50 = (netProfitAdmin / 2).toString();
+      break;
+    }
+    case 'vika_ie_7': {
+      const taxAmount = clientBill * 0.07;
+      const amountAfterTax = clientBill * 0.93;
+      const netProfitAdmin = amountAfterTax - executorExpenses;
+      
+      result.amountToAdmin = amountAfterTax.toString();
+      result.netProfitAdmin = netProfitAdmin.toString();
+      result.adminShare50 = (netProfitAdmin / 2).toString();
+      result.catShare50 = (netProfitAdmin / 2).toString();
+      break;
+    }
+    case 'commission_based':
+    default: {
+      const commissionRate = partnerCommissionRate || 10;
+      const commissionAmount = clientBill * (commissionRate / 100);
+      const amountToAdmin = clientBill - commissionAmount;
+      const netProfitAdmin = amountToAdmin - executorExpenses;
+      
+      result.commissionRate = commissionRate.toString();
+      result.commissionAmount = commissionAmount.toString();
+      result.amountToAdmin = amountToAdmin.toString();
+      result.netProfitAdmin = netProfitAdmin.toString();
+      result.adminShare50 = (netProfitAdmin / 2).toString();
+      result.catShare50 = (netProfitAdmin / 2).toString();
+      break;
+    }
+  }
+
+  return result;
+}
 
 export interface IStorage {
   verifyAccessCode(code: string): Promise<AccessToken | null>;
@@ -401,21 +490,21 @@ export class DatabaseStorage implements IStorage {
   async createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice> {
     const [created] = await db.insert(invoices).values(invoice).returning();
     
+    // Auto-calculate all fields based on scheme
+    const clientBill = parseFloat(calculations.clientBill || "0");
+    const commissionRate = calculations.commissionRate ? parseFloat(calculations.commissionRate) : undefined;
+    const executorExpenses = parseFloat(calculations.executorExpensesTotal || "0");
+    
+    const computed = calculateInvoiceServer(
+      created.scheme as InvoiceScheme,
+      clientBill,
+      commissionRate,
+      executorExpenses
+    );
+    
     await db.insert(invoiceCalculations).values({
       invoiceId: created.id,
-      clientBill: calculations.clientBill || "0",
-      commissionRate: calculations.commissionRate,
-      commissionAmount: calculations.commissionAmount,
-      amountToAdmin: calculations.amountToAdmin,
-      agencyMargin: calculations.agencyMargin,
-      partnerShareFromMargin: calculations.partnerShareFromMargin,
-      adminShareFromMargin: calculations.adminShareFromMargin,
-      clientBaseAfterMargin: calculations.clientBaseAfterMargin,
-      clientRemaining: calculations.clientRemaining,
-      executorExpensesTotal: calculations.executorExpensesTotal || "0",
-      netProfitAdmin: calculations.netProfitAdmin,
-      adminShare50: calculations.adminShare50,
-      catShare50: calculations.catShare50,
+      ...computed,
     });
     
     return created;
@@ -430,15 +519,38 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>): Promise<InvoiceCalculation | null> {
+    // Get the invoice to know the scheme
+    const invoice = await this.getInvoice(invoiceId);
+    if (!invoice) return null;
+    
     const [existing] = await db
       .select()
       .from(invoiceCalculations)
       .where(eq(invoiceCalculations.invoiceId, invoiceId))
       .limit(1);
     
+    // Get current values or use new ones
+    const clientBill = calculations.clientBill 
+      ? parseFloat(calculations.clientBill) 
+      : (existing?.clientBill ? parseFloat(existing.clientBill) : 0);
+    const commissionRate = calculations.commissionRate 
+      ? parseFloat(calculations.commissionRate) 
+      : (existing?.commissionRate ? parseFloat(existing.commissionRate) : undefined);
+    const executorExpenses = calculations.executorExpensesTotal 
+      ? parseFloat(calculations.executorExpensesTotal)
+      : (existing?.executorExpensesTotal ? parseFloat(existing.executorExpensesTotal) : 0);
+    
+    // Recalculate all fields
+    const computed = calculateInvoiceServer(
+      invoice.scheme as InvoiceScheme,
+      clientBill,
+      commissionRate,
+      executorExpenses
+    );
+    
     if (existing) {
       const [updated] = await db.update(invoiceCalculations)
-        .set({ ...calculations, updatedAt: new Date() })
+        .set({ ...computed, updatedAt: new Date() })
         .where(eq(invoiceCalculations.invoiceId, invoiceId))
         .returning();
       return updated || null;
@@ -446,8 +558,7 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db.insert(invoiceCalculations)
         .values({
           invoiceId,
-          clientBill: calculations.clientBill || "0",
-          ...calculations,
+          ...computed,
         })
         .returning();
       return created;
@@ -465,15 +576,13 @@ export class DatabaseStorage implements IStorage {
   async createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense> {
     const [created] = await db.insert(invoiceExpenses).values(expense).returning();
     
+    // Recalculate with new total expenses
     const expenses = await this.getInvoiceExpenses(expense.invoiceId);
     const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
     
-    await db.update(invoiceCalculations)
-      .set({ 
-        executorExpensesTotal: total.toString(),
-        updatedAt: new Date()
-      })
-      .where(eq(invoiceCalculations.invoiceId, expense.invoiceId));
+    await this.updateInvoiceCalculations(expense.invoiceId, {
+      executorExpensesTotal: total.toString()
+    });
     
     return created;
   }
@@ -492,15 +601,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoiceExpenses.id, id))
       .returning();
     
+    // Recalculate with updated total expenses
     const expenses = await this.getInvoiceExpenses(expense.invoiceId);
     const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
     
-    await db.update(invoiceCalculations)
-      .set({ 
-        executorExpensesTotal: total.toString(),
-        updatedAt: new Date()
-      })
-      .where(eq(invoiceCalculations.invoiceId, expense.invoiceId));
+    await this.updateInvoiceCalculations(expense.invoiceId, {
+      executorExpensesTotal: total.toString()
+    });
     
     return updated || null;
   }
@@ -515,15 +622,13 @@ export class DatabaseStorage implements IStorage {
     if (expense) {
       await db.delete(invoiceExpenses).where(eq(invoiceExpenses.id, id));
       
+      // Recalculate with updated total expenses
       const expenses = await this.getInvoiceExpenses(expense.invoiceId);
       const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
       
-      await db.update(invoiceCalculations)
-        .set({ 
-          executorExpensesTotal: total.toString(),
-          updatedAt: new Date()
-        })
-        .where(eq(invoiceCalculations.invoiceId, expense.invoiceId));
+      await this.updateInvoiceCalculations(expense.invoiceId, {
+        executorExpensesTotal: total.toString()
+      });
     }
   }
 

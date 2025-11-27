@@ -1,6 +1,4 @@
 import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
 interface UseRealtimeSubscriptionOptions {
   channelName: string;
@@ -8,30 +6,14 @@ interface UseRealtimeSubscriptionOptions {
   filter?: string;
   event?: 'INSERT' | 'UPDATE' | 'DELETE' | '*';
   schema?: string;
-  onUpdate: (payload?: RealtimePostgresChangesPayload<any>) => void;
+  onUpdate: (payload?: any) => void;
   enabled?: boolean;
   dependencies?: any[];
 }
 
-/**
- * Custom hook for Supabase realtime subscriptions
- * Consolidates realtime subscription logic to avoid duplication
- * 
- * @example
- * useRealtimeSubscription({
- *   channelName: 'client_stats',
- *   table: 'invoices',
- *   filter: `client_id=eq.${clientId}`,
- *   onUpdate: fetchStats,
- *   enabled: !!clientId
- * });
- */
 export const useRealtimeSubscription = ({
   channelName,
   table,
-  filter,
-  event = '*',
-  schema = 'public',
   onUpdate,
   enabled = true,
   dependencies = [],
@@ -40,38 +22,15 @@ export const useRealtimeSubscription = ({
     if (!enabled) return;
 
     if (import.meta.env.DEV) {
-      console.log(`[Realtime] Subscribing to ${table} on channel ${channelName}`);
+      console.log(`[Realtime] Subscription to ${table} on ${channelName} disabled during migration`);
     }
-
-    const config: any = {
-      event,
-      schema,
-      table,
-    };
-
-    if (filter) {
-      config.filter = filter;
-    }
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        config,
-        (payload: RealtimePostgresChangesPayload<any>) => {
-          if (import.meta.env.DEV) {
-            console.log(`[Realtime] ${table} event: ${payload.eventType}`);
-          }
-          onUpdate(payload);
-        }
-      )
-      .subscribe();
+    
+    const pollInterval = setInterval(() => {
+      onUpdate();
+    }, 30000);
 
     return () => {
-      if (import.meta.env.DEV) {
-        console.log(`[Realtime] Unsubscribing from ${channelName}`);
-      }
-      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
-  }, [enabled, channelName, table, filter, event, schema, onUpdate, ...dependencies]);
+  }, [enabled, channelName, table, onUpdate, ...dependencies]);
 };

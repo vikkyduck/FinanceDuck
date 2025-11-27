@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +19,7 @@ import { InvoiceCard } from "./InvoiceCard";
 import { InvoiceFilters } from "./filters/InvoiceFilters";
 import { useInvoiceFilters, InvoiceStatus } from "@/hooks/useInvoiceFilters";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
+import { apiGet, apiDelete } from "@/lib/api";
 import { useSearchParams } from "react-router-dom";
 import {
   AlertDialog,
@@ -95,111 +94,56 @@ export const UnifiedInvoicesList = ({
 
   useEffect(() => {
     if (!enableRealtime) return;
-    if (!partnerId && !clientId) return;
-
-    const filter = partnerId 
-      ? `partner_id=eq.${partnerId}` 
-      : clientId 
-        ? `client_id=eq.${clientId}` 
-        : null;
-
-    if (!filter) return;
-
-    const channel = supabase
-      .channel('invoices_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'invoices',
-          filter
-        },
-        () => {
-          fetchInvoices();
-        }
-      )
-      .subscribe();
+    
+    const pollInterval = setInterval(() => {
+      fetchInvoices();
+    }, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [partnerId, clientId, enableRealtime]);
 
   const fetchInvoices = async () => {
     try {
-      // Get correct access_token_id through ensureSessionContext
-      const sessionContext = await ensureSessionContext();
+      const data = await apiGet<any[]>('/invoices');
 
-      // Use RPC function with correct token_id
-      const { data, error } = await supabase.rpc('get_invoices_for_user', {
-        _token_id: sessionContext.accessTokenId,
-        _partner_id: partnerId || null,
-        _client_id: clientId || null,
-      });
+      console.log('[UnifiedInvoicesList] API returned data:', data.length, 'invoices');
+      
+      let processed = data;
 
-      if (error) {
-        console.error('Error fetching invoices:', error);
-        toast({
-          variant: "destructive",
-          title: "Ошибка загрузки",
-          description: error.message || "Не удалось загрузить счета",
-        });
-        return;
+      if (role === 'assistant') {
+        processed = processed.filter((inv: any) => !inv.hidden_from_assistant);
       }
 
-      if (data) {
-        console.log('[UnifiedInvoicesList] RPC returned data:', data.length, 'invoices');
-        
-        // Ищем счёт 004 для отладки
-        const invoice004 = data.find((inv: any) => inv.invoice_number === '004');
-        if (invoice004) {
-          console.log('[UnifiedInvoicesList] Invoice 004 data:', {
-            id: invoice004.id,
-            invoice_number: invoice004.invoice_number,
-            client_bill: invoice004.client_bill,
-            client_remaining: invoice004.client_remaining,
-            executor_expenses_total: invoice004.executor_expenses_total,
-            scheme: invoice004.scheme,
-            partner_commission_rate: invoice004.partner_commission_rate,
-          });
-        }
-        
-        let processed = data;
+      const mappedInvoices = processed.map((inv: any) => ({
+        id: inv.id,
+        invoice_number: inv.invoiceNumber,
+        client_id: inv.clientId,
+        partner_id: inv.partnerId,
+        scheme: inv.scheme,
+        status: inv.status,
+        payment_date: inv.paymentDate,
+        notes: inv.notes,
+        created_at: inv.createdAt,
+        client_name: inv.client?.name,
+        partner_name: inv.partner?.name,
+        client_bill: inv.calculations?.clientBill || inv.clientBill,
+        commission_rate: inv.calculations?.commissionRate,
+        commission_amount: inv.calculations?.commissionAmount,
+        partner_share_from_margin: inv.calculations?.partnerShareFromMargin,
+        admin_share_from_margin: inv.calculations?.adminShareFromMargin,
+        executor_expenses_total: inv.calculations?.executorExpensesTotal || '0',
+        net_profit_admin: inv.calculations?.netProfitAdmin,
+        client_remaining: inv.calculations?.clientRemaining,
+        hidden_from_assistant: inv.hiddenFromAssistant,
+      }));
 
-        // Safety filter: ассистент никогда не видит скрытые счета,
-        // даже если бэкенд по какой-то причине вернет их
-        if (role === 'assistant') {
-          processed = processed.filter((inv: any) => !inv.hidden_from_assistant);
-        }
-
-        // Проверяем, есть ли счета без client_bill (нужен пересчёт)
-        const invoicesNeedingRecalc = processed.filter(
-          (inv: any) => inv.client_bill == null || inv.client_bill === 0
-        );
-
-        if (invoicesNeedingRecalc.length > 0 && role === 'admin') {
-          console.warn(
-            '[UnifiedInvoicesList] Found invoices without calculations:',
-            invoicesNeedingRecalc.map((inv: any) => inv.invoice_number)
-          );
-          // Запускаем пересчёт для всех счетов в фоне
-          supabase.rpc('recalculate_all_invoices', {}).then(({ error }) => {
-            if (!error) {
-              console.log('[UnifiedInvoicesList] Recalculation triggered, refetching...');
-              // Перезагружаем данные после пересчёта
-              setTimeout(() => fetchInvoices(), 1000);
-            }
-          });
-        }
-
-        setInvoices(processed);
-      }
+      setInvoices(mappedInvoices);
     } catch (error: any) {
       console.error('Error fetching invoices:', error);
-      if (error.message?.includes('No valid session')) {
-        // Session expired, user needs to login again
-        window.location.href = '/access-code-login';
+      if (error.message?.includes('Not authenticated') || error.message?.includes('Session expired')) {
+        window.location.href = '/auth';
       } else {
         toast({
           variant: "destructive",
@@ -240,15 +184,7 @@ export const UnifiedInvoicesList = ({
 
     setDeletingInvoiceId(deleteInvoice.id);
     try {
-      // Ensure session context before delete
-      await ensureSessionContext();
-
-      const { error } = await supabase
-        .from('invoices')
-        .delete()
-        .eq('id', deleteInvoice.id);
-
-      if (error) throw error;
+      await apiDelete(`/invoices/${deleteInvoice.id}`);
 
       toast({
         title: "Счёт удалён",
@@ -289,15 +225,7 @@ export const UnifiedInvoicesList = ({
 
     setDeletingBulk(true);
     try {
-      // Ensure session context before bulk delete
-      await ensureSessionContext();
-
-      const { error } = await supabase
-        .from("invoices")
-        .delete()
-        .in("id", selectedInvoices);
-
-      if (error) throw error;
+      await Promise.all(selectedInvoices.map(id => apiDelete(`/invoices/${id}`)));
 
       toast({
         title: "Счета удалены",

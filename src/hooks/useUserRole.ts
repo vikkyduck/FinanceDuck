@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useEffect, useState, useCallback } from 'react';
 
 export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
 
@@ -19,8 +18,8 @@ interface AccessSession {
   role: UserRole;
   partnerId: string | null;
   clientId: string | null;
-  expiresAt?: number; // Optional for backward compatibility
-  lastActivity?: number; // Optional for backward compatibility
+  expiresAt?: number;
+  lastActivity?: number;
 }
 
 export function useUserRole(): UserRoleData {
@@ -33,7 +32,7 @@ export function useUserRole(): UserRoleData {
     accessTokenId: null,
   });
 
-  const getSession = (): AccessSession | null => {
+  const getSession = useCallback((): AccessSession | null => {
     try {
       const sessionStr = sessionStorage.getItem('access_session');
       if (!sessionStr) return null;
@@ -41,45 +40,52 @@ export function useUserRole(): UserRoleData {
     } catch {
       return null;
     }
-  };
-
-  useEffect(() => {
-    fetchUserRole();
   }, []);
 
-  const fetchUserRole = async () => {
-    try {
-      const sessionStr = sessionStorage.getItem('access_session');
-      
-      if (!sessionStr) {
-        setRoleData({ role: null, partnerId: null, clientId: null, loading: false, accessCode: null, accessTokenId: null });
-        return;
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const response = await fetch('/api/auth/validate', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        
+        const data = await response.json();
+        
+        if (!data?.valid) {
+          setRoleData({ 
+            role: null, 
+            partnerId: null, 
+            clientId: null, 
+            loading: false, 
+            accessCode: null, 
+            accessTokenId: null 
+          });
+          return;
+        }
+        
+        setRoleData({
+          role: data.user?.role as UserRole,
+          partnerId: data.user?.partnerId || null,
+          clientId: data.user?.clientId || null,
+          loading: false,
+          accessCode: null,
+          accessTokenId: null,
+        });
+      } catch {
+        setRoleData({ 
+          role: null, 
+          partnerId: null, 
+          clientId: null, 
+          loading: false, 
+          accessCode: null, 
+          accessTokenId: null 
+        });
       }
-
-      const session: AccessSession = JSON.parse(sessionStr);
-
-      // Check if session has expired
-      if (session.expiresAt && session.expiresAt < Date.now()) {
-        sessionStorage.removeItem('access_session');
-        setRoleData({ role: null, partnerId: null, clientId: null, loading: false, accessCode: null, accessTokenId: null });
-        return;
-      }
-
-      // Set session context for RLS policies
-      await supabase.rpc('set_session_context', { _token_id: session.accessTokenId });
-
-      setRoleData({
-        role: session.role as UserRole,
-        partnerId: session.partnerId,
-        clientId: session.clientId,
-        loading: false,
-        accessCode: session.code,
-        accessTokenId: session.accessTokenId,
-      });
-    } catch {
-      setRoleData({ role: null, partnerId: null, clientId: null, loading: false, accessCode: null, accessTokenId: null });
-    }
-  };
+    };
+    
+    fetchUserRole();
+  }, []);
 
   return { ...roleData, getSession };
 }

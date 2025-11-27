@@ -27,20 +27,20 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bun run dev"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bun run server/vite.ts"
+waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 33555
+localPort = 24678
 externalPort = 3002
 
 [[ports]]
@@ -50,3 +50,7 @@ externalPort = 3000
 [[ports]]
 localPort = 38727
 externalPort = 3001
+
+[[ports]]
+localPort = 42469
+externalPort = 3003

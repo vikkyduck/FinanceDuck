@@ -8,7 +8,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 async function setupVite(server: Express, vite: ViteDevServer) {
   server.use(vite.middlewares);
-  server.use("*", async (req, res, next) => {
+  server.use("/{*path}", async (req, res, next) => {
     const url = req.originalUrl;
 
     try {
@@ -40,7 +40,7 @@ function serveStatic(server: Express) {
 
   server.use(express.static(distPath));
 
-  server.use("*", (_req, res) => {
+  server.use("/{*path}", (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

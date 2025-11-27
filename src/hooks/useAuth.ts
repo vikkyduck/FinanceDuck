@@ -1,124 +1,77 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
 
-interface AuthSession {
-  role: UserRole;
-  partnerId: string | null;
-  clientId: string | null;
-  accessTokenId: string;
-  csrfToken: string;
-  sessionId: string;
-  expiresAt?: string;
-}
-
-interface AuthState extends Omit<AuthSession, 'expiresAt' | 'sessionId'> {
+interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
+  role: UserRole | null;
+  partnerId: string | null;
+  clientId: string | null;
+  csrfToken: string | null;
 }
 
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     isLoading: true,
-    role: null as any,
+    role: null,
     partnerId: null,
     clientId: null,
-    accessTokenId: null as any,
-    csrfToken: null as any,
+    csrfToken: null,
   });
 
   const validateSession = useCallback(async () => {
     try {
-      const sessionId = localStorage.getItem('session_id');
-      const csrfToken = localStorage.getItem('csrf_token');
+      console.log('[useAuth] Validating session');
       
-      if (!sessionId) {
-        console.log('[useAuth] No session_id in localStorage');
-        setAuthState({
-          isAuthenticated: false,
-          isLoading: false,
-          role: null as any,
-          partnerId: null,
-          clientId: null,
-          accessTokenId: null as any,
-          csrfToken: null as any,
-        });
-        return false;
-      }
-
-      console.log('[useAuth] Validating session from localStorage');
-      
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/auth-validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch('/api/auth/validate', {
+        method: 'GET',
         credentials: 'include',
-        body: JSON.stringify({
-          session_id: sessionId,
-          csrf_token: csrfToken,
-        }),
       });
 
       const data = await response.json();
 
-      if (!response.ok || !data?.valid) {
-        console.log('[useAuth] Session validation failed:', data?.error || 'response not ok');
-        localStorage.removeItem('session_id');
+      if (!data?.valid) {
+        console.log('[useAuth] Session validation failed');
         localStorage.removeItem('csrf_token');
         setAuthState({
           isAuthenticated: false,
           isLoading: false,
-          role: null as any,
+          role: null,
           partnerId: null,
           clientId: null,
-          accessTokenId: null as any,
-          csrfToken: null as any,
+          csrfToken: null,
         });
         return false;
       }
 
       console.log('[useAuth] Session validated successfully:', {
-        role: data.role,
-        partnerId: data.partner_id,
-        clientId: data.client_id,
-        accessTokenId: data.access_token_id
+        role: data.user?.role,
+        partnerId: data.user?.partnerId,
+        clientId: data.user?.clientId,
       });
-      
-      // Update csrf_token if changed
-      if (data.csrf_token) {
-        localStorage.setItem('csrf_token', data.csrf_token);
-      }
       
       setAuthState({
         isAuthenticated: true,
         isLoading: false,
-        role: data.role,
-        partnerId: data.partner_id,
-        clientId: data.client_id,
-        accessTokenId: data.access_token_id,
-        csrfToken: data.csrf_token,
+        role: data.user?.role,
+        partnerId: data.user?.partnerId || null,
+        clientId: data.user?.clientId || null,
+        csrfToken: localStorage.getItem('csrf_token'),
       });
-
-      // Set session context for Supabase RLS
-      await supabase.rpc('set_session_context', { _token_id: data.access_token_id });
 
       return true;
     } catch (err) {
       console.error('[useAuth] Session validation error:', err);
-      localStorage.removeItem('session_id');
       localStorage.removeItem('csrf_token');
       setAuthState({
         isAuthenticated: false,
         isLoading: false,
-        role: null as any,
+        role: null,
         partnerId: null,
         clientId: null,
-        accessTokenId: null as any,
-        csrfToken: null as any,
+        csrfToken: null,
       });
       return false;
     }
@@ -127,14 +80,13 @@ export function useAuth() {
   const login = useCallback(async (code: string) => {
     try {
       console.log('[useAuth] Login started');
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/auth-login`, {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code: code.toUpperCase() }),
       });
 
       const data = await response.json();
@@ -145,25 +97,20 @@ export function useAuth() {
           success: false,
           error: data?.error || 'Login failed',
           message: data?.message,
-          attempts_remaining: data?.attempts_remaining,
-          locked_until: data?.locked_until,
         };
       }
 
-      console.log('[useAuth] Login successful, storing session in localStorage');
+      console.log('[useAuth] Login successful');
       
-      // Store session data in localStorage
-      localStorage.setItem('session_id', data.session_id);
-      localStorage.setItem('csrf_token', data.csrf_token);
+      localStorage.setItem('csrf_token', data.csrfToken);
       
       setAuthState({
         isAuthenticated: true,
         isLoading: false,
-        role: data.role,
-        partnerId: data.partner_id,
-        clientId: data.client_id,
-        accessTokenId: data.access_token_id || '',
-        csrfToken: data.csrf_token,
+        role: data.user?.role,
+        partnerId: data.user?.partnerId || null,
+        clientId: data.user?.clientId || null,
+        csrfToken: data.csrfToken,
       });
 
       return { success: true, data };
@@ -179,64 +126,38 @@ export function useAuth() {
 
   const logout = useCallback(async () => {
     try {
-      const sessionId = localStorage.getItem('session_id');
-      
-      if (sessionId) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        await fetch(`${supabaseUrl}/functions/v1/auth-logout`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ session_id: sessionId }),
-        });
-      }
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      // Clear localStorage and state
-      localStorage.removeItem('session_id');
       localStorage.removeItem('csrf_token');
-      // Also clear legacy sessionStorage
+      localStorage.removeItem('session_id');
       sessionStorage.removeItem('access_session');
       sessionStorage.removeItem('session_data');
       setAuthState({
         isAuthenticated: false,
         isLoading: false,
-        role: null as any,
+        role: null,
         partnerId: null,
         clientId: null,
-        accessTokenId: null as any,
-        csrfToken: null as any,
+        csrfToken: null,
       });
     }
   }, []);
 
   const refreshSession = useCallback(async () => {
     try {
-      const sessionId = localStorage.getItem('session_id');
-      
-      if (!sessionId) {
-        console.log('[useAuth] No session to refresh');
-        return false;
-      }
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/auth-refresh`, {
+      const response = await fetch('/api/auth/refresh', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         credentials: 'include',
-        body: JSON.stringify({ session_id: sessionId }),
       });
 
       const data = await response.json();
 
       if (!response.ok || !data?.success) {
-        localStorage.removeItem('session_id');
-        localStorage.removeItem('csrf_token');
         return false;
       }
 
@@ -247,7 +168,6 @@ export function useAuth() {
     }
   }, []);
 
-  // Initial session validation on mount
   useEffect(() => {
     validateSession();
   }, [validateSession]);

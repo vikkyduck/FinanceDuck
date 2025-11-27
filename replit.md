@@ -32,10 +32,15 @@ This project is an invoice management system migrating from Supabase to Replit w
 - DELETE /api/clients/:id - admin only, checks for linked invoices
 - GET /api/clients/:id/with-partner - get client with partner info
 
-**Privacy Rules Enforced:**
-- Assistants cannot see partner's clients list (admin only)
+**Privacy Rules Enforced (Server-Side):**
+- Assistants cannot access partner-client relationships via ANY endpoint:
+  - GET /api/partners/:id/clients - returns 403
+  - GET /api/clients/:id/with-partner - returns 403
+  - GET /api/partner-payments - returns 403
+- partnerId field stripped from all client responses for assistants (GET, POST, PATCH)
+- partnerId and partner object stripped from invoice responses for assistants
 - Assistants cannot delete partners/clients (admin only)
-- All financial calculations hidden from assistants (server-side filtering)
+- All financial calculations hidden from assistants (server-side allowlist filtering)
 
 **Temporarily disabled:**
 - UploadDocumentDialog - requires Replit file storage configuration

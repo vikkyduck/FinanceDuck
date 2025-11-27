@@ -11,6 +11,56 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+const SENSITIVE_FIELDS_FOR_ASSISTANT = [
+  'commissionRate',
+  'commissionAmount', 
+  'partnerShareFromMargin',
+  'adminShareFromMargin',
+  'netProfitAdmin',
+  'agencyMargin',
+  'amountToAdmin',
+  'adminShare50',
+  'catShare50',
+  'partnerCommissionRate',
+  'clientBaseAfterMargin',
+  'clientRemaining',
+] as const;
+
+function stripSensitiveFieldsForRole<T extends Record<string, any>>(data: T, role: UserRole): T {
+  if (role !== 'assistant') return data;
+  
+  const result = { ...data } as any;
+  for (const field of SENSITIVE_FIELDS_FOR_ASSISTANT) {
+    if (field in result) {
+      result[field] = null;
+    }
+  }
+  
+  if (result.calculations && typeof result.calculations === 'object') {
+    result.calculations = {
+      ...result.calculations,
+      commissionRate: null,
+      commissionAmount: null,
+      partnerShareFromMargin: null,
+      adminShareFromMargin: null,
+      netProfitAdmin: null,
+      agencyMargin: null,
+      amountToAdmin: null,
+      adminShare50: null,
+      catShare50: null,
+      clientBaseAfterMargin: null,
+      clientRemaining: null,
+    };
+  }
+  
+  return result as T;
+}
+
+function stripSensitiveFieldsFromList<T extends Record<string, any>>(data: T[], role: UserRole): T[] {
+  if (role !== 'assistant') return data;
+  return data.map(item => stripSensitiveFieldsForRole(item, role));
+}
+
 const SESSION_COOKIE = "session_id";
 
 async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -269,7 +319,8 @@ export function registerRoutes(app: Express): void {
       const clientId = req.user?.clientId;
       
       const result = await storage.getInvoices(role, partnerId, clientId);
-      res.json(result);
+      const filtered = stripSensitiveFieldsFromList(result, role);
+      res.json(filtered);
     } catch (error) {
       console.error("Get invoices error:", error);
       res.status(500).json({ error: "Failed to get invoices" });
@@ -279,21 +330,23 @@ export function registerRoutes(app: Express): void {
   app.get("/api/invoices/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const invoice = await storage.getInvoice(id);
       
       if (!invoice) {
         return res.status(404).json({ error: "Invoice not found" });
       }
       
-      if (req.user?.role === "partner" && invoice.partnerId !== req.user.partnerId) {
+      if (role === "partner" && invoice.partnerId !== req.user?.partnerId) {
         return res.status(403).json({ error: "Forbidden" });
       }
       
-      if (req.user?.role === "client" && invoice.clientId !== req.user.clientId) {
+      if (role === "client" && invoice.clientId !== req.user?.clientId) {
         return res.status(403).json({ error: "Forbidden" });
       }
       
-      res.json(invoice);
+      const filtered = stripSensitiveFieldsForRole(invoice, role);
+      res.json(filtered);
     } catch (error) {
       console.error("Get invoice error:", error);
       res.status(500).json({ error: "Failed to get invoice" });
@@ -302,12 +355,14 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const role = req.user?.role || "client";
       const { calculations, ...invoiceData } = req.body;
       const invoice = await storage.createInvoice(
         { ...invoiceData, createdBy: req.user!.token.id },
         calculations || {}
       );
-      res.status(201).json(invoice);
+      const filtered = stripSensitiveFieldsForRole(invoice, role);
+      res.status(201).json(filtered);
     } catch (error) {
       console.error("Create invoice error:", error);
       res.status(500).json({ error: "Failed to create invoice" });
@@ -317,6 +372,7 @@ export function registerRoutes(app: Express): void {
   app.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const { calculations, ...invoiceData } = req.body;
       
       const invoice = await storage.updateInvoice(id, invoiceData);
@@ -328,7 +384,8 @@ export function registerRoutes(app: Express): void {
         await storage.updateInvoiceCalculations(id, calculations);
       }
       
-      res.json(invoice);
+      const filtered = stripSensitiveFieldsForRole(invoice, role);
+      res.json(filtered);
     } catch (error) {
       console.error("Update invoice error:", error);
       res.status(500).json({ error: "Failed to update invoice" });

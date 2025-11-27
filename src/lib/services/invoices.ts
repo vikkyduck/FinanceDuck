@@ -1,12 +1,4 @@
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
-import { calculateInvoice, type InvoiceScheme } from "@/lib/invoiceCalculations";
-
-function mapScheme(scheme: string): InvoiceScheme {
-  if (scheme === "agency_30_margin" || scheme === "agency_30") {
-    return "agency_30";
-  }
-  return "commission_based";
-}
 
 export interface InvoiceExpense {
   id: string;
@@ -190,32 +182,6 @@ export const invoiceService = {
     const invoice = normalizeInvoiceFromApi(data);
     const expenses = (data.expenses || []).map(normalizeExpenseFromApi);
     const documents = (data.documents || []).map(normalizeDocumentFromApi);
-
-    if (!invoice.invoice_calculations || invoice.invoice_calculations.client_bill === 0) {
-      const clientBill = invoice.client_bill;
-      const scheme = mapScheme(invoice.scheme);
-      const partnerRate = invoice.partner_commission_rate;
-      const expensesTotal = expenses.reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0);
-
-      if (clientBill > 0) {
-        const calculated = calculateInvoice(scheme, clientBill, partnerRate, expensesTotal);
-        invoice.invoice_calculations = {
-          client_bill: clientBill,
-          commission_rate: calculated.commission_rate,
-          commission_amount: calculated.commission_amount,
-          partner_share_from_margin: calculated.partner_share_from_margin,
-          admin_share_from_margin: calculated.admin_share_from_margin,
-          executor_expenses_total: String(expensesTotal),
-          net_profit_admin: calculated.net_profit_admin,
-          client_remaining: calculated.client_remaining,
-          client_base_after_margin: calculated.client_base_after_margin,
-          agency_margin: calculated.agency_margin,
-          amount_to_admin: calculated.amount_to_admin,
-          admin_share_50: calculated.admin_share_50,
-          cat_share_50: calculated.cat_share_50,
-        };
-      }
-    }
 
     return { invoice, expenses, documents };
   },

@@ -372,6 +372,28 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.delete("/api/invoices/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteInvoice(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete invoice error:", error);
+      res.status(500).json({ error: "Failed to delete invoice" });
+    }
+  });
+
+  app.delete("/api/documents/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteDocument(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete document error:", error);
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
   app.get("/api/partner-payments", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       let partnerId: string | undefined;

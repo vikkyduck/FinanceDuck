@@ -31,10 +31,13 @@ export interface IStorage {
   createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice>;
   updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | null>;
   updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>): Promise<InvoiceCalculation | null>;
+  deleteInvoice(id: string): Promise<void>;
   
   getInvoiceExpenses(invoiceId: string): Promise<InvoiceExpense[]>;
   createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense>;
   deleteInvoiceExpense(id: string): Promise<void>;
+  
+  deleteDocument(id: string): Promise<void>;
   
   getPartnerPayments(partnerId?: string): Promise<PartnerPayment[]>;
   createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment>;
@@ -347,6 +350,16 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(invoiceCalculations.invoiceId, expense.invoiceId));
     }
+  }
+
+  async deleteInvoice(id: string): Promise<void> {
+    await db.delete(invoiceExpenses).where(eq(invoiceExpenses.invoiceId, id));
+    await db.delete(invoiceCalculations).where(eq(invoiceCalculations.invoiceId, id));
+    await db.delete(invoices).where(eq(invoices.id, id));
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await db.execute(sql`DELETE FROM invoice_documents WHERE id = ${id}`);
   }
 
   async getPartnerPayments(partnerId?: string): Promise<PartnerPayment[]> {

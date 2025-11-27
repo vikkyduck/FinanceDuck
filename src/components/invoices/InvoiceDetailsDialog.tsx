@@ -11,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
 import { CalendarIcon, Plus, Trash2, Download, FileText, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
@@ -22,7 +21,7 @@ import { EditExpenseDialog } from "./assistant/EditExpenseDialog";
 import { UploadDocumentDialog } from "./UploadDocumentDialog";
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, getDocumentTypeLabel, formatFileSize, UserRole } from "@/lib/invoicePermissions";
-import { ensureSessionContext, callRPC, querySupabaseWithFilter } from "@/lib/supabaseHelpers";
+import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
 import { InvoiceWaterfallChart } from "./InvoiceWaterfallChart";
 import { CatShareBadge } from "./CatShareBadge";
 import {
@@ -137,195 +136,67 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         return;
       }
 
-      // Step 1: Ensure session context
-      console.log('[InvoiceDetailsDialog] Step 1: Setting session context...');
-      const sessionContext = await ensureSessionContext();
-      console.log('[InvoiceDetailsDialog] Session context set:', {
-        accessTokenId: sessionContext?.accessTokenId,
-        role: sessionContext?.role
-      });
+      const invoiceData = await apiGet<any>(`/invoices/${invoiceId}`);
+      console.log('[InvoiceDetailsDialog] Invoice loaded:', invoiceData);
 
-      // Step 2: Load invoice
-      console.log('[InvoiceDetailsDialog] Step 2: Loading invoice...');
-      const { data: invoiceRows, error: invoiceError } = await supabase
-        .from("invoices")
-        .select(`*, clients(name), partners(name), invoice_calculations(*)`)
-        .eq("id", invoiceId)
-        .limit(1);
+      const mappedInvoice = {
+        id: invoiceData.id,
+        invoice_number: invoiceData.invoiceNumber,
+        client_id: invoiceData.clientId,
+        partner_id: invoiceData.partnerId,
+        scheme: invoiceData.scheme,
+        status: invoiceData.status,
+        payment_date: invoiceData.paymentDate,
+        actual_payment_date: invoiceData.actualPaymentDate,
+        notes: invoiceData.notes,
+        created_at: invoiceData.createdAt,
+        hidden_from_assistant: invoiceData.hiddenFromAssistant,
+        clients: invoiceData.client ? { name: invoiceData.client.name } : null,
+        partners: invoiceData.partner ? { name: invoiceData.partner.name } : null,
+        client_bill: invoiceData.calculations?.clientBill || invoiceData.clientBill,
+        partner_commission_rate: invoiceData.calculations?.commissionRate,
+        invoice_calculations: invoiceData.calculations ? {
+          client_bill: invoiceData.calculations.clientBill,
+          commission_rate: invoiceData.calculations.commissionRate,
+          commission_amount: invoiceData.calculations.commissionAmount,
+          partner_share_from_margin: invoiceData.calculations.partnerShareFromMargin,
+          admin_share_from_margin: invoiceData.calculations.adminShareFromMargin,
+          executor_expenses_total: invoiceData.calculations.executorExpensesTotal,
+          net_profit_admin: invoiceData.calculations.netProfitAdmin,
+          client_remaining: invoiceData.calculations.clientRemaining,
+        } : null,
+      };
 
-      console.log('[InvoiceDetailsDialog] Invoice result:', {
-        hasData: !!invoiceRows,
-        count: invoiceRows?.length,
-        error: invoiceError?.message
-      });
+      setInvoice(mappedInvoice);
 
-      if (invoiceError) {
-        console.error('[InvoiceDetailsDialog] Invoice query FAILED:', invoiceError);
-        toast({
-          title: "Ошибка загрузки счета",
-          description: invoiceError.message,
-          variant: "destructive"
-        });
-      }
+      const expensesData = invoiceData.expenses || [];
+      const mappedExpenses = expensesData.map((exp: any) => ({
+        id: exp.id,
+        invoice_id: exp.invoiceId,
+        description: exp.description,
+        amount: exp.amount,
+        date: exp.date,
+        notes: exp.notes,
+      }));
+      setExpenses(mappedExpenses);
 
-      // Step 3: Load expenses - CRITICAL
-      console.log('[InvoiceDetailsDialog] Step 3: Loading expenses for invoice:', invoiceId);
-      const { data: expensesData, error: expensesError } = await supabase
-        .from("executor_expenses")
-        .select("*")
-        .eq("invoice_id", invoiceId)
-        .order("date", { ascending: false });
+      const documentsData = invoiceData.documents || [];
+      const mappedDocuments = documentsData.map((doc: any) => ({
+        id: doc.id,
+        invoice_id: doc.invoiceId,
+        file_name: doc.fileName,
+        file_size: doc.fileSize,
+        file_type: doc.fileType,
+        document_type: doc.documentType,
+        storage_path: doc.storagePath,
+        uploaded_at: doc.uploadedAt,
+      }));
+      setDocuments(mappedDocuments);
 
-      console.log('[InvoiceDetailsDialog] Expenses result:', {
-        hasData: !!expensesData,
-        count: expensesData?.length || 0,
-        error: expensesError?.message,
-        data: expensesData
-      });
-
-      if (expensesError) {
-        console.error('[InvoiceDetailsDialog] Expenses query FAILED:', expensesError);
-        toast({
-          title: "Ошибка загрузки расходов",
-          description: expensesError.message,
-          variant: "destructive"
-        });
-      }
-
-      // Step 4: Load documents
-      console.log('[InvoiceDetailsDialog] Step 4: Loading documents...');
-      const { data: documentsData, error: documentsError } = await supabase
-        .from("invoice_documents")
-        .select("*")
-        .eq("invoice_id", invoiceId)
-        .order("uploaded_at", { ascending: false });
-
-      console.log('[InvoiceDetailsDialog] Documents result:', {
-        hasData: !!documentsData,
-        count: documentsData?.length || 0,
-        error: documentsError?.message
-      });
-
-      if (documentsError) {
-        console.error('[InvoiceDetailsDialog] Documents query FAILED:', documentsError);
-      }
-
-      // Step 5: Set expenses and documents IMMEDIATELY
-      console.log('[InvoiceDetailsDialog] Step 5: Setting state...');
-      setExpenses(expensesData || []);
-      setDocuments(documentsData || []);
-      console.log('[InvoiceDetailsDialog] State set - expenses count:', expensesData?.length || 0);
-
-      let invoiceData = invoiceRows && invoiceRows.length > 0 ? invoiceRows[0] : null;
-
-      // If there are no calculations yet or client_bill is missing, try to fix this
-      const calcRaw = invoiceData?.invoice_calculations;
-      const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw;
-
-      if (invoiceData && (!calc || calc.client_bill == null)) {
-        console.warn("[InvoiceDetailsDialog] Missing calculations, triggering recalculate_all_invoices for", invoiceId);
-        const { error: recalcError } = await supabase.rpc("recalculate_all_invoices", {
-          _invoice_id: invoiceId,
-        });
-
-        if (recalcError) {
-          console.error("Error recalculating invoice totals:", recalcError);
-        } else {
-          // Reload data after recalculation
-          const { data: reloadedInvoiceRows } = await supabase
-            .from("invoices")
-            .select(`*, clients(name), partners(name), invoice_calculations(*)`)
-            .eq("id", invoiceId)
-            .limit(1);
-
-          const { data: reloadedExpensesData } = await supabase
-            .from("executor_expenses")
-            .select("*")
-            .eq("invoice_id", invoiceId)
-            .order("date", { ascending: false });
-
-          const { data: reloadedDocumentsData } = await supabase
-            .from("invoice_documents")
-            .select("*")
-            .eq("invoice_id", invoiceId)
-            .order("uploaded_at", { ascending: false });
-
-          invoiceData = reloadedInvoiceRows && reloadedInvoiceRows.length > 0 ? reloadedInvoiceRows[0] : invoiceData;
-          
-          console.log('[InvoiceDetailsDialog] After recalc - updating expenses:', reloadedExpensesData?.length || 0);
-          setExpenses(reloadedExpensesData || []);
-          setDocuments(reloadedDocumentsData || []);
-        }
-      }
-
-      // Final safety net: if calculations are still missing (e.g. из-за RLS),
-      // восстанавливаем их из RPC get_invoices_for_user и пересчитываем на фронте
-      const finalCalcRaw = invoiceData?.invoice_calculations;
-      const finalCalc = Array.isArray(finalCalcRaw) ? finalCalcRaw[0] : finalCalcRaw;
-
-      if (invoiceData && (!finalCalc || finalCalc.client_bill == null)) {
-        try {
-          const { data: summaryData, error: summaryError } = await supabase.rpc("get_invoices_for_user", {
-            _token_id: sessionContext.accessTokenId,
-            _partner_id: null,
-            _client_id: null,
-          });
-
-          if (!summaryError && Array.isArray(summaryData)) {
-            const summaryInvoice = summaryData.find((inv: any) => inv.id === invoiceId);
-
-            if (summaryInvoice && summaryInvoice.client_bill != null) {
-              const baseClientBill = summaryInvoice.client_bill;
-              const expensesTotal = summaryInvoice.executor_expenses_total || 0;
-              const scheme = invoiceData.scheme;
-              const partnerRate = invoiceData.partner_commission_rate;
-
-              const calculations = calculateInvoice(scheme, baseClientBill, partnerRate, expensesTotal);
-
-              const calcObject = {
-                client_bill: baseClientBill,
-                executor_expenses_total: expensesTotal,
-                client_spent: expensesTotal,
-                client_base_after_margin: calculations.client_base_after_margin,
-                client_remaining: calculations.client_remaining,
-                agency_margin: calculations.agency_margin,
-                partner_share_from_margin: calculations.partner_share_from_margin,
-                admin_share_from_margin: calculations.admin_share_from_margin,
-                commission_rate: calculations.commission_rate,
-                commission_amount: calculations.commission_amount,
-                amount_to_admin: calculations.amount_to_admin,
-                net_profit_admin: calculations.net_profit_admin,
-                admin_share_50: calculations.admin_share_50,
-                cat_share_50: calculations.cat_share_50,
-              };
-
-              const existingCalc = Array.isArray(invoiceData.invoice_calculations)
-                ? invoiceData.invoice_calculations[0] || {}
-                : invoiceData.invoice_calculations || {};
-
-              invoiceData = {
-                ...invoiceData,
-                invoice_calculations: [
-                  {
-                    ...existingCalc,
-                    ...calcObject,
-                  },
-                ] as any,
-              };
-            }
-          } else if (summaryError) {
-            console.error("[InvoiceDetailsDialog] get_invoices_for_user error:", summaryError);
-          }
-        } catch (err) {
-          console.error("[InvoiceDetailsDialog] Error loading summary invoice for calculations:", err);
-        }
-      }
-
-      setInvoice(invoiceData);
       console.log('[InvoiceDetailsDialog] === FETCH COMPLETE ===', {
-        hasInvoice: !!invoiceData,
-        expensesCount: expenses.length,
-        documentsCount: documents.length
+        hasInvoice: !!mappedInvoice,
+        expensesCount: mappedExpenses.length,
+        documentsCount: mappedDocuments.length
       });
     } catch (error: any) {
       console.error("[InvoiceDetailsDialog] === FETCH FAILED ===", error);
@@ -343,25 +214,19 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     if (!deleteExpense) return;
     setDeletingExpenseId(deleteExpense.id);
     
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("executor_expenses")
-      .delete()
-      .eq("id", deleteExpense.id);
-
-    if (error) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    try {
+      await apiDelete(`/expenses/${deleteExpense.id}`);
       toast({
         title: "Успешно",
         description: "Расход удалён",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
     
     setDeleteExpense(null);
@@ -385,25 +250,19 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   };
 
   const handleStatusChange = async (newStatus: "draft" | "sent" | "paid" | "cancelled") => {
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("invoices")
-      .update({ status: newStatus })
-      .eq("id", invoiceId);
-
-    if (error) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { status: newStatus });
       toast({
         title: "Успешно",
         description: "Статус обновлен",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -412,31 +271,23 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     
     setUpdatingStatus(true);
     
-    // Оптимистичное обновление UI
     const previousStatus = invoice.status;
-    setInvoice(prev => ({ ...prev, status: pendingStatusChange.status }));
+    setInvoice((prev: any) => ({ ...prev, status: pendingStatusChange.status }));
     
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("invoices")
-      .update({ status: pendingStatusChange.status })
-      .eq("id", invoiceId);
-
-    if (error) {
-      // Откатить изменения
-      setInvoice(prev => ({ ...prev, status: previousStatus }));
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { status: pendingStatusChange.status });
       toast({
         title: "Успешно",
         description: "Статус обновлён",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      setInvoice((prev: any) => ({ ...prev, status: previousStatus }));
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
     
     setPendingStatusChange(null);
@@ -449,20 +300,8 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     setUpdatingPaymentDate(true);
     const formattedDate = newDate ? format(newDate, 'yyyy-MM-dd') : null;
     
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("invoices")
-      .update({ payment_date: formattedDate })
-      .eq("id", invoiceId);
-
-    if (error) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { paymentDate: formattedDate });
       toast({
         title: "Успешно",
         description: newDate 
@@ -470,6 +309,12 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
           : "Планируемая дата оплаты удалена",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
     
     setUpdatingPaymentDate(false);
@@ -483,23 +328,11 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     const formattedDate = newDate ? format(newDate, 'yyyy-MM-dd') : null;
     const newStatus = newDate ? 'paid' : (invoice.status === 'paid' ? 'sent' : invoice.status);
     
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("invoices")
-      .update({ 
-        actual_payment_date: formattedDate,
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { 
+        actualPaymentDate: formattedDate,
         status: newStatus
-      })
-      .eq("id", invoiceId);
-
-    if (error) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
       });
-    } else {
       toast({
         title: "Успешно",
         description: newDate 
@@ -507,6 +340,12 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
           : "Фактическая дата оплаты удалена",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
     
     setUpdatingPaymentDate(false);
@@ -517,25 +356,19 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     
     setUpdatingNotes(true);
     
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("invoices")
-      .update({ notes: notes.trim() || null })
-      .eq("id", invoiceId);
-
-    if (error) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { notes: notes.trim() || null });
       toast({
         title: "Успешно",
         description: "Комментарий обновлён",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
     
     setUpdatingNotes(false);
@@ -556,25 +389,19 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     
     setUpdatingInvoiceNumber(true);
     
-    await ensureSessionContext();
-
-    const { error } = await supabase
-      .from("invoices")
-      .update({ invoice_number: trimmedNumber })
-      .eq("id", invoiceId);
-
-    if (error) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { invoiceNumber: trimmedNumber });
       toast({
         title: "Успешно",
         description: "Номер счета обновлён",
       });
       fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message,
+        variant: "destructive",
+      });
     }
     
     setUpdatingInvoiceNumber(false);
@@ -611,32 +438,14 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
 
     try {
       setUpdatingPartnerRate(true);
-      await ensureSessionContext();
-
-      // 1. Обновляем процент партнёра в самом счёте
-      const { error: invoiceError } = await supabase
-        .from("invoices")
-        .update({ partner_commission_rate: rate })
-        .eq("id", invoiceId);
-
-      if (invoiceError) {
-        toast({
-          title: "Ошибка обновления счёта",
-          description: invoiceError.message,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Пересчёт теперь делает триггер в базе (on_invoice_commission_change)
-      // поэтому дополнительный RPC-вызов здесь не нужен.
-
+      await apiPatch(`/invoices/${invoiceId}`, { 
+        partnerCommissionRate: rate,
+        calculations: { commissionRate: rate }
+      });
       toast({
         title: "Успешно",
         description: `Комиссия ${rate}% установлена, расчёты будут обновлены`,
       });
-
-      // Обновляем данные счёта в интерфейсе
       fetchInvoiceDetails();
     } catch (error: any) {
       toast({
@@ -668,40 +477,14 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
 
     try {
       setUpdatingClientBill(true);
-      await ensureSessionContext();
-
-      const { error: invoiceError } = await supabase
-        .from("invoices")
-        .update({ client_bill: newBill } as any)
-        .eq("id", invoiceId);
-
-      if (invoiceError) {
-        toast({
-          title: "Ошибка обновления счёта",
-          description: invoiceError.message,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { error: recalcError } = await supabase.rpc("recalculate_all_invoices", {
-        _invoice_id: invoiceId,
+      await apiPatch(`/invoices/${invoiceId}`, { 
+        clientBill: newBill,
+        calculations: { clientBill: newBill.toString() }
       });
-
-      if (recalcError) {
-        console.error("Error recalculating:", recalcError);
-        toast({
-          title: "Частично выполнено",
-          description: `Сумма обновлена (${formatCurrency(newBill)}), но пересчёт не удался`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Успешно",
-          description: `Сумма счёта обновлена: ${formatCurrency(newBill)}`,
-        });
-      }
-
+      toast({
+        title: "Успешно",
+        description: `Сумма счёта обновлена: ${formatCurrency(newBill)}`,
+      });
       fetchInvoiceDetails();
     } catch (error: any) {
       toast({
@@ -725,52 +508,19 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   };
 
   const handleDownloadDocument = async (doc: any) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from('invoice-documents')
-        .download(doc.file_path);
-
-      if (error) throw error;
-
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = doc.file_name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error: any) {
-      toast({
-        title: "Ошибка загрузки",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: "В разработке",
+      description: "Загрузка документов временно недоступна",
+    });
   };
 
   const handleDeleteDocument = async () => {
     if (!deleteDocument) return;
-    
-    const doc = documents.find(d => d.id === deleteDocument.id);
-    if (!doc) return;
 
     setDeletingDocumentId(deleteDocument.id);
 
     try {
-      const { error: storageError } = await supabase.storage
-        .from('invoice-documents')
-        .remove([doc.file_path]);
-
-      if (storageError) throw storageError;
-
-      const { error: dbError } = await supabase
-        .from('invoice_documents')
-        .delete()
-        .eq('id', deleteDocument.id);
-
-      if (dbError) throw dbError;
-
+      await apiDelete(`/documents/${deleteDocument.id}`);
       toast({
         title: "Успешно",
         description: "Документ удалён",

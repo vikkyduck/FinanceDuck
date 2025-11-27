@@ -218,6 +218,36 @@ export const invoiceService = {
   async deleteDocument(documentId: string): Promise<void> {
     await apiDelete(`/documents/${documentId}`);
   },
+
+  async createInvoice(invoice: {
+    invoiceNumber: string;
+    clientId: string;
+    partnerId: string;
+    scheme: string;
+    partnerCommissionRate?: number;
+    status?: string;
+    notes?: string;
+    paymentDate?: string;
+    hiddenFromAssistant?: boolean;
+    clientBill: number;
+    calculations: Record<string, any>;
+  }): Promise<any> {
+    return apiPost("/invoices", {
+      invoiceNumber: invoice.invoiceNumber,
+      clientId: invoice.clientId,
+      partnerId: invoice.partnerId,
+      scheme: invoice.scheme,
+      partnerCommissionRate: invoice.partnerCommissionRate,
+      status: invoice.status || "draft",
+      notes: invoice.notes,
+      paymentDate: invoice.paymentDate,
+      hiddenFromAssistant: invoice.hiddenFromAssistant,
+      calculations: {
+        clientBill: invoice.clientBill.toString(),
+        ...invoice.calculations,
+      },
+    });
+  },
 };
 
 export default invoiceService;

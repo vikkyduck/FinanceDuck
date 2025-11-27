@@ -5,10 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeText, sanitizeNumber, sanitizeDate } from "@/lib/sanitize";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
+import { invoiceService } from "@/lib/services/invoices";
 import { Loader2 } from "lucide-react";
 
 interface EditExpenseDialogProps {
@@ -79,26 +78,12 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
     setLoading(true);
 
     try {
-      await ensureSessionContext();
-
-      const { error } = await supabase
-        .from("executor_expenses")
-        .update({
-          description: sanitizedDescription,
-          amount: sanitizedAmount,
-          date: sanitizedDate,
-          is_admin_expense: isAdminExpense,
-        })
-        .eq("id", expense.id);
-
-      if (error) {
-        toast({
-          title: "Ошибка",
-          description: error.message || "Не удалось обновить расход",
-          variant: "destructive",
-        });
-        return;
-      }
+      await invoiceService.updateExpense(expense.id, {
+        description: sanitizedDescription,
+        amount: sanitizedAmount.toString(),
+        date: sanitizedDate,
+        notes: isAdminExpense ? "admin_expense" : null,
+      });
 
       toast({
         title: "Успешно",
@@ -111,7 +96,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
       console.error("Error updating expense:", error);
       toast({
         title: "Ошибка",
-        description: "Не удалось обновить расход",
+        description: error.message || "Не удалось обновить расход",
         variant: "destructive",
       });
     } finally {
@@ -130,6 +115,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
             <Label htmlFor="description">Описание *</Label>
             <Textarea
               id="description"
+              data-testid="input-edit-expense-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Работы исполнителя..."
@@ -139,9 +125,10 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="amount">Сумма (₽) *</Label>
+              <Label htmlFor="amount">Сумма *</Label>
               <Input
                 id="amount"
+                data-testid="input-edit-expense-amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -156,6 +143,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
               <Label htmlFor="date">Дата</Label>
               <Input
                 id="date"
+                data-testid="input-edit-expense-date"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
@@ -167,6 +155,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
           <div className="flex items-center space-x-2">
             <Checkbox
               id="isAdminExpense"
+              data-testid="checkbox-edit-admin-expense"
               checked={isAdminExpense}
               onCheckedChange={(checked) => setIsAdminExpense(checked as boolean)}
             />
@@ -176,10 +165,15 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button 
+              type="button" 
+              variant="ghost" 
+              onClick={() => onOpenChange(false)}
+              data-testid="button-cancel-edit-expense"
+            >
               Отмена
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} data-testid="button-submit-edit-expense">
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Сохранить
             </Button>

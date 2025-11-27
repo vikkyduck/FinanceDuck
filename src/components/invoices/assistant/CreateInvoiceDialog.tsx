@@ -1,17 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
-import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/hooks/useAuth";
 import { calculateInvoice, type InvoiceScheme } from "@/lib/invoiceCalculations";
-import { handleSupabaseError, handleValidationError, showSuccess } from "@/lib/errorHandler";
-import { sanitizeText, sanitizeNumber, isValidUuid } from "@/lib/sanitize";
-import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
+import { handleValidationError, showSuccess } from "@/lib/errorHandler";
 import { Loader2, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useRateLimit } from "@/hooks/useRateLimit";
@@ -23,6 +20,7 @@ import { ClientCombobox } from "./ClientCombobox";
 import { PartnerCombobox } from "./PartnerCombobox";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { invoiceService } from "@/lib/services/invoices";
 
 interface CreateInvoiceDialogProps {
   open: boolean;
@@ -31,8 +29,8 @@ interface CreateInvoiceDialogProps {
 }
 
 export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInvoiceDialogProps) => {
-  const { role, getSession } = useUserRole();
-  const { role: authRole, accessTokenId: authAccessTokenId } = useAuth();
+  const { role } = useUserRole();
+  const { role: authRole } = useAuth();
   const effectiveRole = role || authRole;
   const [loading, setLoading] = useState(false);
   const { checkLimit } = useRateLimit('form');
@@ -88,18 +86,14 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     setLoading(true);
 
     try {
-      // Validate inputs with zod
       const { invoiceSchema } = await import('@/lib/validationSchemas');
       
-      // Map UI scheme values to DB scheme and commission rate
       let dbScheme: InvoiceScheme;
       let commissionRate: number | undefined;
       
       switch(scheme) {
         case 'commission_based':
           dbScheme = 'commission_based';
-          // Для ассистента устанавливаем дефолтную комиссию 10%
-          // Это значение может быть изменено админом позже через InvoiceDetailsDialog
           commissionRate = 10;
           break;
         case 'partner_10':
@@ -143,39 +137,22 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         paymentDate
       });
 
-      const session = getSession();
-      const createdBy = authAccessTokenId || session?.accessTokenId;
-      if (!createdBy) throw new Error("User not found");
-
-      if (!isValidUuid(createdBy)) {
-        throw new Error("Invalid session");
-      }
-
       const calculations = calculateInvoice(dbScheme, validated.clientBill, commissionRate);
-      const formattedPaymentDate = validated.paymentDate ? format(validated.paymentDate, 'yyyy-MM-dd') : null;
+      const formattedPaymentDate = validated.paymentDate ? format(validated.paymentDate, 'yyyy-MM-dd') : undefined;
 
-      // Use RPC function that handles session context and permissions properly
-      const { data, error } = await supabase.rpc('create_invoice_with_context', {
-        _token_id: createdBy,
-        _invoice_number: trimmedInvoiceNumber,
-        _client_id: validated.clientId,
-        _partner_id: validated.partnerId,
-        _scheme: dbScheme,
-        _partner_commission_rate: commissionRate || null,
-        _status: 'draft',
-        _notes: validated.notes || null,
-        _payment_date: formattedPaymentDate,
-        _hidden_from_assistant: effectiveRole === 'admin' ? hiddenFromAssistant : false,
-        _calculations: calculations as any
+      await invoiceService.createInvoice({
+        invoiceNumber: trimmedInvoiceNumber,
+        clientId: validated.clientId,
+        partnerId: validated.partnerId,
+        scheme: dbScheme,
+        partnerCommissionRate: commissionRate,
+        status: 'draft',
+        notes: validated.notes || undefined,
+        paymentDate: formattedPaymentDate,
+        hiddenFromAssistant: effectiveRole === 'admin' ? hiddenFromAssistant : false,
+        clientBill: validated.clientBill,
+        calculations: calculations,
       });
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data || data.length === 0 || !data[0].success) {
-        throw new Error(data?.[0]?.message || "Failed to create invoice");
-      }
 
       showSuccess("Успешно", "Счет создан");
 
@@ -188,10 +165,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         console.error("Zod validation error:", error.errors);
         handleValidationError("Форма", error.errors[0]?.message || 'Ошибка валидации данных');
       } else {
-        handleSupabaseError(error, { 
-          operation: "create_invoice",
-          details: { invoiceNumber, clientBill, selectedPartner, selectedClient, scheme }
-        });
+        toast.error(error.message || "Не удалось создать счет");
       }
     } finally {
       setLoading(false);
@@ -232,7 +206,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                   transition={{ duration: 0.3 }}
                   className="space-y-6"
                 >
-                  {/* Step 1: Client and Partner */}
                   {currentStep === 1 && (
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold">Выберите клиента и партнера</h3>
@@ -259,7 +232,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                     </div>
                   )}
 
-                  {/* Step 2: Scheme and Amount */}
                   {currentStep === 2 && (
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold">Выберите схему и укажите сумму</h3>
@@ -274,7 +246,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           description="Схема с фиксированной комиссией агентства"
                         />
 
-                        {/* Ассистент видит только тип схемы, без процентов и условий сотрудничества */}
                         {effectiveRole === 'assistant' && (
                           <SchemeCard
                             value="commission_based"
@@ -286,7 +257,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           />
                         )}
 
-                        {/* Ниже — только для админа, ассистент этого не видит */}
                         {effectiveRole === 'admin' && (
                           <>
                             <SchemeCard
@@ -333,6 +303,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           <Label>Процент партнера (%) *</Label>
                           <Input
                             type="number"
+                            data-testid="input-custom-commission-rate"
                             value={partnerCommissionRate}
                             onChange={(e) => setPartnerCommissionRate(e.target.value)}
                             min="0"
@@ -345,9 +316,10 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       )}
 
                       <div className="space-y-2">
-                        <Label>Счет клиенту (₽) *</Label>
+                        <Label>Счет клиенту *</Label>
                         <Input
                           type="number"
+                          data-testid="input-client-bill"
                           value={clientBill}
                           onChange={(e) => setClientBill(e.target.value)}
                           placeholder="1000000"
@@ -360,7 +332,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                     </div>
                   )}
 
-                  {/* Step 3: Additional Details */}
                   {currentStep === 3 && (
                     <div className="space-y-4">
                       <h3 className="text-lg font-semibold">Дополнительная информация</h3>
@@ -368,6 +339,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       <div className="space-y-2">
                         <Label>Номер счета *</Label>
                         <Input
+                          data-testid="input-invoice-number"
                           value={invoiceNumber}
                           onChange={(e) => setInvoiceNumber(e.target.value)}
                           placeholder="Введите номер счета"
@@ -387,6 +359,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       <div className="space-y-2">
                         <Label>Примечания</Label>
                         <Textarea
+                          data-testid="input-invoice-notes"
                           value={notes}
                           onChange={(e) => setNotes(e.target.value)}
                           placeholder="Дополнительная информация..."
@@ -398,6 +371,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                         <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-lg">
                           <Checkbox
                             id="hidden"
+                            data-testid="checkbox-hidden-from-assistant"
                             checked={hiddenFromAssistant}
                             onCheckedChange={(checked) => setHiddenFromAssistant(checked as boolean)}
                           />
@@ -415,7 +389,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
               </AnimatePresence>
             </div>
 
-            {/* Calculator Sidebar: only for admin, ассистент не видит конфиденциальные условия */}
             <div className="lg:col-span-1">
               {effectiveRole === 'admin' && (
                 <InvoiceCalculator
@@ -435,6 +408,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                 onClick={handleBack}
                 size="lg"
                 className="mr-auto"
+                data-testid="button-wizard-back"
               >
                 <ChevronLeft className="w-4 h-4 mr-2" />
                 Назад
@@ -445,6 +419,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
               variant="outline" 
               onClick={() => onOpenChange(false)}
               size="lg"
+              data-testid="button-cancel-create-invoice"
             >
               Отмена
             </Button>
@@ -453,6 +428,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                 type="button"
                 onClick={handleNext}
                 size="lg"
+                data-testid="button-wizard-next"
               >
                 Далее
                 <ChevronRight className="w-4 h-4 ml-2" />
@@ -462,6 +438,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                 type="submit" 
                 disabled={loading}
                 size="lg"
+                data-testid="button-submit-create-invoice"
               >
                 {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {loading ? "Создание..." : "Создать счет"}

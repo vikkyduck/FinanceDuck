@@ -35,6 +35,7 @@ export interface IStorage {
   
   getInvoiceExpenses(invoiceId: string): Promise<InvoiceExpense[]>;
   createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense>;
+  updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null>;
   deleteInvoiceExpense(id: string): Promise<void>;
   
   deleteDocument(id: string): Promise<void>;
@@ -328,6 +329,33 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoiceCalculations.invoiceId, expense.invoiceId));
     
     return created;
+  }
+
+  async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null> {
+    const [expense] = await db
+      .select()
+      .from(invoiceExpenses)
+      .where(eq(invoiceExpenses.id, id))
+      .limit(1);
+    
+    if (!expense) return null;
+    
+    const [updated] = await db.update(invoiceExpenses)
+      .set(updates)
+      .where(eq(invoiceExpenses.id, id))
+      .returning();
+    
+    const expenses = await this.getInvoiceExpenses(expense.invoiceId);
+    const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    
+    await db.update(invoiceCalculations)
+      .set({ 
+        executorExpensesTotal: total.toString(),
+        updatedAt: new Date()
+      })
+      .where(eq(invoiceCalculations.invoiceId, expense.invoiceId));
+    
+    return updated || null;
   }
 
   async deleteInvoiceExpense(id: string): Promise<void> {

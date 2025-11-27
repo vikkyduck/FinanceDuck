@@ -11,54 +11,67 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-const SENSITIVE_FIELDS_FOR_ASSISTANT = [
-  'commissionRate',
-  'commissionAmount', 
-  'partnerShareFromMargin',
-  'adminShareFromMargin',
-  'netProfitAdmin',
-  'agencyMargin',
-  'amountToAdmin',
-  'adminShare50',
-  'catShare50',
-  'partnerCommissionRate',
-  'clientBaseAfterMargin',
-  'clientRemaining',
+const ASSISTANT_ALLOWED_INVOICE_FIELDS = [
+  'id',
+  'invoiceNumber',
+  'clientId',
+  'partnerId',
+  'status',
+  'description',
+  'clientBill',
+  'createdAt',
+  'updatedAt',
+  'createdBy',
+  'dueDate',
+  'paidDate',
+  'notes',
+  'scheme',
 ] as const;
 
-function stripSensitiveFieldsForRole<T extends Record<string, any>>(data: T, role: UserRole): T {
-  if (role !== 'assistant') return data;
+const ASSISTANT_ALLOWED_CALCULATION_FIELDS = [
+  'id',
+  'invoiceId',
+  'clientBill',
+  'executorExpensesTotal',
+] as const;
+
+function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
   
-  const result = { ...data } as any;
-  for (const field of SENSITIVE_FIELDS_FOR_ASSISTANT) {
-    if (field in result) {
-      result[field] = null;
+  for (const field of ASSISTANT_ALLOWED_INVOICE_FIELDS) {
+    if (field in invoice) {
+      result[field] = invoice[field];
     }
   }
   
-  if (result.calculations && typeof result.calculations === 'object') {
-    result.calculations = {
-      ...result.calculations,
-      commissionRate: null,
-      commissionAmount: null,
-      partnerShareFromMargin: null,
-      adminShareFromMargin: null,
-      netProfitAdmin: null,
-      agencyMargin: null,
-      amountToAdmin: null,
-      adminShare50: null,
-      catShare50: null,
-      clientBaseAfterMargin: null,
-      clientRemaining: null,
-    };
+  if (invoice.calculations && typeof invoice.calculations === 'object') {
+    const calc: Record<string, any> = {};
+    for (const field of ASSISTANT_ALLOWED_CALCULATION_FIELDS) {
+      if (field in invoice.calculations) {
+        calc[field] = invoice.calculations[field];
+      }
+    }
+    result.calculations = calc;
   }
   
-  return result as T;
+  if (invoice.partner) {
+    result.partner = { id: invoice.partner.id, name: invoice.partner.name };
+  }
+  if (invoice.client) {
+    result.client = { id: invoice.client.id, name: invoice.client.name };
+  }
+  
+  return result;
+}
+
+function stripSensitiveFieldsForRole<T extends Record<string, any>>(data: T, role: UserRole): T {
+  if (role !== 'assistant') return data;
+  return createAssistantInvoiceProjection(data) as T;
 }
 
 function stripSensitiveFieldsFromList<T extends Record<string, any>>(data: T[], role: UserRole): T[] {
   if (role !== 'assistant') return data;
-  return data.map(item => stripSensitiveFieldsForRole(item, role));
+  return data.map(item => createAssistantInvoiceProjection(item)) as T[];
 }
 
 const SESSION_COOKIE = "session_id";
@@ -415,6 +428,20 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Create expense error:", error);
       res.status(500).json({ error: "Failed to create expense" });
+    }
+  });
+
+  app.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const expense = await storage.updateInvoiceExpense(id, req.body);
+      if (!expense) {
+        return res.status(404).json({ error: "Expense not found" });
+      }
+      res.json(expense);
+    } catch (error) {
+      console.error("Update expense error:", error);
+      res.status(500).json({ error: "Failed to update expense" });
     }
   });
 

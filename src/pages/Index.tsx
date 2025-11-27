@@ -34,10 +34,14 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!roleLoading && role === 'admin') {
+      navigate('/invoices', { replace: true });
+      return;
+    }
     if (!roleLoading && role) {
       fetchQuickStats();
     }
-  }, [role, roleLoading]);
+  }, [role, roleLoading, navigate]);
 
   const fetchQuickStats = async () => {
     try {

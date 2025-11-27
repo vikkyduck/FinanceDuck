@@ -66,10 +66,9 @@ BEGIN
     v_commission_rate := COALESCE(v_invoice.partner_commission_rate, 10);
     v_existing_calc := v_invoice.has_calculation;
     
-    -- Skip if no client_bill available at all
-    IF v_client_bill IS NULL OR v_client_bill = 0 THEN
-      CONTINUE;
-    END IF;
+    -- NOTE: We no longer skip invoices with NULL/0 client_bill
+    -- Admin must manually enter the correct client_bill via UI
+    -- After they enter a value, this function will recalculate properly
     
     -- Calculate total expenses
     SELECT COALESCE(SUM(amount), 0) INTO v_total_expenses

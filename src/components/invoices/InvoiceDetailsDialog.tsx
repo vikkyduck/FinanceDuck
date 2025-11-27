@@ -80,6 +80,10 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   // Локальное состояние для редактируемого процента партнёра (для админа)
   const [partnerRate, setPartnerRate] = useState<number | ''>('');
   const [updatingPartnerRate, setUpdatingPartnerRate] = useState(false);
+  
+  // Состояние для редактирования суммы счёта (client_bill) для админа
+  const [clientBillEdit, setClientBillEdit] = useState<number | ''>('');
+  const [updatingClientBill, setUpdatingClientBill] = useState(false);
 
   useEffect(() => {
     if (open && invoiceId) {
@@ -111,6 +115,14 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       setPartnerRate(rate);
     } else {
       setPartnerRate('');
+    }
+    
+    // Устанавливаем значение client_bill для редактирования
+    if (invoice) {
+      const calcRaw = invoice.invoice_calculations;
+      const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
+      const bill = calc?.client_bill ?? invoice.client_bill ?? 0;
+      setClientBillEdit(bill);
     }
   }, [invoice]);
 
@@ -637,6 +649,71 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     }
   };
 
+  const handleUpdateClientBill = async (newBill: number) => {
+    if (!invoiceId || !invoice) return;
+
+    if (Number.isNaN(newBill) || newBill < 0) {
+      toast({
+        title: "Некорректное значение",
+        description: "Сумма счёта должна быть положительным числом",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const calcRaw = invoice.invoice_calculations;
+    const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw;
+    const currentBill = calc?.client_bill ?? invoice.client_bill ?? 0;
+    if (currentBill === newBill) return;
+
+    try {
+      setUpdatingClientBill(true);
+      await ensureSessionContext();
+
+      const { error: invoiceError } = await supabase
+        .from("invoices")
+        .update({ client_bill: newBill } as any)
+        .eq("id", invoiceId);
+
+      if (invoiceError) {
+        toast({
+          title: "Ошибка обновления счёта",
+          description: invoiceError.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error: recalcError } = await supabase.rpc("recalculate_all_invoices", {
+        _invoice_id: invoiceId,
+      });
+
+      if (recalcError) {
+        console.error("Error recalculating:", recalcError);
+        toast({
+          title: "Частично выполнено",
+          description: `Сумма обновлена (${formatCurrency(newBill)}), но пересчёт не удался`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Успешно",
+          description: `Сумма счёта обновлена: ${formatCurrency(newBill)}`,
+        });
+      }
+
+      fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Системная ошибка",
+        description: error.message ?? "Не удалось обновить сумму счёта",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingClientBill(false);
+    }
+  };
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: "Черновик",
@@ -1022,7 +1099,38 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
 
                 <div className="flex justify-between text-lg font-bold">
                   <span>Счет клиенту:</span>
-                  <span>{formatCurrency(calc?.client_bill || 0)}</span>
+                  {userRole === 'admin' && canEdit ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={clientBillEdit}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setClientBillEdit(val === '' ? '' : Number(val));
+                        }}
+                        className="w-32 text-right"
+                        data-testid="input-client-bill"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (clientBillEdit !== '' && !Number.isNaN(clientBillEdit)) {
+                            handleUpdateClientBill(Number(clientBillEdit));
+                          }
+                        }}
+                        disabled={updatingClientBill || clientBillEdit === ''}
+                        data-testid="button-save-client-bill"
+                      >
+                        {updatingClientBill ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Сохранить'
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <span>{formatCurrency(calc?.client_bill || 0)}</span>
+                  )}
                 </div>
 
                 {isAgency30 ? (

@@ -50,6 +50,15 @@ The system supports four user roles (admin, assistant, partner, client) with dis
    - Shows per-invoice breakdown with expenses and remaining amounts
    - Visible to admin (all invoices) and partners (only their invoices)
 
+## Database Fixes (November 2025)
+
+1. **Fixed Missing invoice_calculations Data** (`20251127151831_fix_missing_invoice_calculations.sql`)
+   - Added `client_bill` column to `invoices` table as backup source of truth
+   - Updated `recalculate_all_invoices` to create missing rows via INSERT/UPDATE
+   - Updated `get_invoices_for_user` to fallback to `invoices.client_bill`
+   - Updated `create_invoice_with_context` to always save to both tables
+   - Added admin UI to manually edit `client_bill` for existing invoices
+
 ## Key Technical Decisions
 
 - **Partner debt formulas** (scheme-specific):

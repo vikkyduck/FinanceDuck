@@ -530,6 +530,23 @@ All colors MUST be HSL.
   animation: pulse-dot 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Apple HIG Shadow Utilities */
+.shadow-standard {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.shadow-elevated {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.dark .shadow-standard {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark .shadow-elevated {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
 /* Accessibility: Disable animations for users with motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .table-row-hover,

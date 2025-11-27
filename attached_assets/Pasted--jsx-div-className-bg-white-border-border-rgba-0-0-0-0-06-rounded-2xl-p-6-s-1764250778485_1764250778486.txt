@@ -1,0 +1,138 @@
+СПИСОК ТРАНЗАКЦИЙ
+```jsx
+<div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-6 shadow-standard">
+  <h3 className="mb-6">Все транзакции</h3>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {transactions.map(transaction => (
+      <TransactionCard key={transaction.id} transaction={transaction} />
+    ))}
+  </div>
+</div>
+```
+
+Контейнер:
+Фон: `#FFFFFF`
+Граница: `1px solid rgba(0, 0, 0, 0.06)`
+Border radius: `20px` (rounded-2xl)
+Padding: `24px` (p-6)
+Тень: `0 2px 8px rgba(0, 0, 0, 0.08)`
+
+Заголовок секции:
+Шрифт: `22px`, `600 weight`, `-0.2px letter-spacing`
+Цвет: `#1D1D1F`
+Отступ снизу: `24px` (mb-6)
+
+Сетка карточек:
+Мобильная: 1 колонка
+Десктоп: 2 колонки
+Gap: `16px`
+
+---
+
+5️⃣ КАРТОЧКА ТРАНЗАКЦИИ (TransactionCard)
+
+```jsx
+<div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-xl p-5 
+                shadow-standard hover:shadow-elevated transition-all duration-200">
+  
+  {/* Шапка */}
+  <div className="flex items-start justify-between mb-4">
+    <div>
+      <div style={{ 
+        fontSize: '17px', 
+        fontWeight: 600, 
+        color: 'var(--text-primary)',  /* #1D1D1F */
+        marginBottom: '4px' 
+      }}>
+        {transaction.clientName}
+      </div>
+      <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>  /* #86868B */
+        {new Date(transaction.date).toLocaleDateString('ru-RU', { 
+          day: 'numeric', 
+          month: 'long', 
+          year: 'numeric' 
+        })}
+      </div>
+    </div>
+    
+    {/* Бейдж статуса */}
+    <div style={{ 
+      background: status.bg, 
+      color: status.text, 
+      padding: '4px 12px', 
+      borderRadius: '100px', 
+      fontSize: '13px', 
+      fontWeight: 600 
+    }}>
+      {status.label}
+    </div>
+  </div>
+  
+  {/* Финансы */}
+  <div className="space-y-2">
+    <div className="flex justify-between" style={{ fontSize: '15px' }}>
+      <span style={{ color: 'var(--text-secondary)' }}>Сумма клиента</span>
+      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+        {formatCurrency(transaction.clientAmount)}
+      </span>
+    </div>
+    
+    {transaction.executorCost > 0 && (
+      <div className="flex justify-between" style={{ fontSize: '15px' }}>
+        <span style={{ color: 'var(--text-secondary)' }}>Расход на исполнителя</span>
+        <span style={{ fontWeight: 600, color: 'var(--accent-red)' }}>  /* #FF3B30 */
+          {formatCurrency(transaction.executorCost)}
+        </span>
+      </div>
+    )}
+    
+    <div className="flex justify-between" style={{ fontSize: '15px' }}>
+      <span style={{ color: 'var(--text-secondary)' }}>Чистая прибыль</span>
+      <span style={{ fontWeight: 600, color: 'var(--accent-green)' }}>  /* #34C759 */
+        {formatCurrency(profit)}
+      </span>
+    </div>
+  </div>
+  
+  {/* Схема */}
+  <div style={{ 
+    marginTop: '16px', 
+    paddingTop: '16px', 
+    borderTop: '1px solid var(--separator-light)',  /* rgba(0,0,0,0.06) */
+    fontSize: '13px',
+    color: 'var(--text-tertiary)'  /* #86868B */
+  }}>
+    {SCHEMES[transaction.scheme].name}
+  </div>
+</div>
+```
+
+Параметры карточки:
+Фон: `#FFFFFF`
+Граница: `1px solid rgba(0, 0, 0, 0.06)`
+Border radius: `12px` (rounded-xl)
+Padding: `20px` (p-5)
+Тень: `0 2px 8px rgba(0, 0, 0, 0.08)`
+Hover: тень → `0 8px 24px rgba(0, 0, 0, 0.12)`
+Transition: `all 0.2s`
+
+Бейджи статуса:
+```javascript
+const statusColors = {
+  completed: { 
+    bg: 'rgba(52, 199, 89, 0.1)',  // Светло-зелёный
+    text: '#34C759',                // Зелёный
+    label: 'Завершено' 
+  },
+  pending: { 
+    bg: 'rgba(255, 149, 0, 0.1)',  // Светло-оранжевый
+    text: '#FF9500',                // Оранжевый
+    label: 'В работе' 
+  },
+};
+```
+
+Параметры бейджа:
+Padding: `4px 12px`
+Border radius: `100px` (полная капсула)
+Шрифт: `13px`, `600 weight`

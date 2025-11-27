@@ -20,6 +20,7 @@ import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
+import { AdminTransactionsList } from "./admin/AdminTransactionsList";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
@@ -173,6 +174,8 @@ export const AdminDashboard = () => {
               >
                 <AdminStats />
               </CollapsibleSection>
+
+              <AdminTransactionsList limit={10} />
             </motion.div>
           </TabsContent>
 

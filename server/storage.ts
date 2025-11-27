@@ -53,6 +53,24 @@ export interface IStorage {
   getAccessTokens(): Promise<AccessToken[]>;
   createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string): Promise<AccessToken>;
   deleteAccessToken(id: string): Promise<void>;
+  
+  getDashboardStats(role: UserRole, partnerId?: string, clientId?: string): Promise<DashboardStats>;
+}
+
+export interface DashboardStats {
+  totalInvoices: number;
+  paidInvoices: number;
+  pendingInvoices: number;
+  overdueInvoices: number;
+  totalClientBill: number;
+  paidClientBill: number;
+  pendingClientBill: number;
+  totalExpenses: number;
+  totalPartnerCommission?: number;
+  totalAdminShare?: number;
+  totalNetProfit?: number;
+  partnerDebt?: number;
+  clientRemaining?: number;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -549,6 +567,130 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAccessToken(id: string): Promise<void> {
     await db.delete(accessTokens).where(eq(accessTokens.id, id));
+  }
+
+  async getDashboardStats(role: UserRole, partnerId?: string, clientId?: string): Promise<DashboardStats> {
+    let query = db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId));
+    
+    let results;
+    if (role === 'partner' && partnerId) {
+      results = await query.where(eq(invoices.partnerId, partnerId));
+    } else if (role === 'client' && clientId) {
+      results = await query.where(eq(invoices.clientId, clientId));
+    } else {
+      results = await query;
+    }
+    
+    const today = new Date();
+    let totalInvoices = 0;
+    let paidInvoices = 0;
+    let pendingInvoices = 0;
+    let overdueInvoices = 0;
+    let totalClientBill = 0;
+    let paidClientBill = 0;
+    let pendingClientBill = 0;
+    let totalExpenses = 0;
+    let totalPartnerCommission = 0;
+    let totalAdminShare = 0;
+    let totalNetProfit = 0;
+    let clientRemaining = 0;
+    
+    for (const r of results) {
+      const inv = r.invoice;
+      const calc = r.calculations;
+      
+      totalInvoices++;
+      const clientBill = calc ? parseFloat(calc.clientBill || "0") : 0;
+      const expenses = calc ? parseFloat(calc.executorExpensesTotal || "0") : 0;
+      
+      totalClientBill += clientBill;
+      totalExpenses += expenses;
+      
+      if (inv.status === 'paid') {
+        paidInvoices++;
+        paidClientBill += clientBill;
+      } else {
+        pendingInvoices++;
+        pendingClientBill += clientBill;
+        
+        if (inv.paymentDueDate && new Date(inv.paymentDueDate) < today) {
+          overdueInvoices++;
+        }
+      }
+      
+      if (calc) {
+        const scheme = inv.scheme;
+        
+        if (scheme === 'agency_30') {
+          totalPartnerCommission += parseFloat(calc.partnerShareFromMargin || "0");
+          totalAdminShare += parseFloat(calc.adminShareFromMargin || "0");
+          clientRemaining += parseFloat(calc.clientBaseAfterMargin || "0") - expenses;
+        } else {
+          totalPartnerCommission += parseFloat(calc.commissionAmount || "0");
+          totalAdminShare += parseFloat(calc.amountToAdmin || "0");
+          clientRemaining += parseFloat(calc.clientRemaining || "0");
+        }
+        
+        totalNetProfit += parseFloat(calc.netProfitAdmin || "0");
+      }
+    }
+    
+    let partnerDebt = 0;
+    if (role === 'partner' && partnerId) {
+      const payments = await this.getPartnerPayments(partnerId);
+      const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      
+      let debtToAdmin = 0;
+      for (const r of results) {
+        if (r.invoice.status === 'paid' && r.calculations) {
+          const scheme = r.invoice.scheme;
+          const clientBill = parseFloat(r.calculations.clientBill || "0");
+          const commission = scheme === 'agency_30' 
+            ? parseFloat(r.calculations.partnerShareFromMargin || "0")
+            : parseFloat(r.calculations.commissionAmount || "0");
+          const expenses = parseFloat(r.calculations.executorExpensesTotal || "0");
+          
+          if (scheme === 'agency_30') {
+            debtToAdmin += clientBill - commission - expenses;
+          } else {
+            debtToAdmin += clientBill - commission;
+          }
+        }
+      }
+      partnerDebt = debtToAdmin - totalPaid;
+    }
+    
+    const stats: DashboardStats = {
+      totalInvoices,
+      paidInvoices,
+      pendingInvoices,
+      overdueInvoices,
+      totalClientBill,
+      paidClientBill,
+      pendingClientBill,
+      totalExpenses,
+    };
+    
+    if (role === 'admin') {
+      stats.totalPartnerCommission = totalPartnerCommission;
+      stats.totalAdminShare = totalAdminShare;
+      stats.totalNetProfit = totalNetProfit;
+      stats.clientRemaining = clientRemaining;
+    } else if (role === 'partner') {
+      stats.totalPartnerCommission = totalPartnerCommission;
+      stats.partnerDebt = partnerDebt;
+      stats.clientRemaining = clientRemaining;
+    } else if (role === 'client') {
+      stats.clientRemaining = Math.max(0, clientRemaining);
+    }
+    
+    return stats;
   }
 }
 

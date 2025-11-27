@@ -469,6 +469,26 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/dashboard/stats", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role || "client";
+      const partnerId = req.user?.partnerId;
+      const clientId = req.user?.clientId;
+      
+      const stats = await storage.getDashboardStats(role, partnerId, clientId);
+      
+      if (role === "assistant") {
+        const { totalPartnerCommission, totalAdminShare, totalNetProfit, partnerDebt, clientRemaining, ...safeStats } = stats;
+        return res.json(safeStats);
+      }
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Get dashboard stats error:", error);
+      res.status(500).json({ error: "Failed to get dashboard stats" });
+    }
+  });
+
   app.get("/api/invoices", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";

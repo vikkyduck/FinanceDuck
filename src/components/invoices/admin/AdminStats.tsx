@@ -1,91 +1,57 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { StatsGrid, StatConfig } from "@/components/ui/stats-grid";
-import { TrendingUp, Wallet, FileText, PiggyBank } from "lucide-react";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { useAuth } from "@/hooks/useAuth";
+import { TrendingUp, Wallet, FileText, PiggyBank, AlertCircle } from "lucide-react";
+import { useDashboardStats } from "@/hooks/useDashboardStats";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const AdminStats = () => {
-  const { accessTokenId } = useAuth();
-  const [stats, setStats] = useState({
-    totalRevenue: 0,
-    adminShare: 0,
-    catShare: 0,
-    totalInvoices: 0,
-  });
+  const { data: stats, isLoading, error } = useDashboardStats();
 
-  const fetchStats = async () => {
-    if (!accessTokenId) return;
-    
-    try {
-      const { data, error } = await supabase.rpc('get_admin_stats', {
-        _token_id: accessTokenId
-      });
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton key={i} className="h-24" />
+        ))}
+      </div>
+    );
+  }
 
-      if (error) throw error;
-      
-      if (data && data.length > 0) {
-        const stats = data[0];
-        setStats({
-          totalRevenue: Number(stats.current_month_revenue || 0),
-          adminShare: Number(stats.current_month_admin_share || 0),
-          catShare: Number(stats.current_month_cat_share || 0),
-          totalInvoices: Number(stats.current_month_invoices_count || 0),
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchStats();
-  }, [accessTokenId]);
-
-  // Realtime subscriptions for automatic updates
-  useRealtimeSubscription({
-    channelName: 'admin_stats_invoices',
-    table: 'invoices',
-    event: '*',
-    onUpdate: fetchStats,
-    enabled: true,
-  });
-
-  useRealtimeSubscription({
-    channelName: 'admin_stats_calculations',
-    table: 'invoice_calculations',
-    event: '*',
-    onUpdate: fetchStats,
-    enabled: true,
-  });
+  if (error || !stats) {
+    return (
+      <div className="flex items-center gap-2 text-destructive">
+        <AlertCircle className="h-4 w-4" />
+        <span>Ошибка загрузки статистики</span>
+      </div>
+    );
+  }
 
   const statsConfig: StatConfig[] = [
     {
       icon: FileText,
       title: "Всего выставлено",
-      value: formatCurrency(stats.totalRevenue),
+      value: formatCurrency(stats.totalClientBill),
       description: `${stats.totalInvoices} счетов`,
     },
     {
       icon: Wallet,
       title: "Доля админа",
-      value: formatCurrency(stats.adminShare),
+      value: formatCurrency(stats.totalAdminShare || 0),
       valueClassName: "text-primary",
-      description: `${stats.totalRevenue > 0 ? ((stats.adminShare / stats.totalRevenue) * 100).toFixed(0) : 0}% от общей суммы`,
+      description: `${stats.totalClientBill > 0 ? (((stats.totalAdminShare || 0) / stats.totalClientBill) * 100).toFixed(0) : 0}% от общей суммы`,
     },
     {
       icon: PiggyBank,
-      title: "Доля Кота",
-      value: formatCurrency(stats.catShare),
+      title: "Чистая прибыль",
+      value: formatCurrency(stats.totalNetProfit || 0),
       valueClassName: "text-primary",
-      description: "от чистой прибыли",
+      description: "после всех расходов",
     },
     {
       icon: TrendingUp,
-      title: "Чистая прибыль",
-      value: formatCurrency(stats.adminShare + stats.catShare),
-      description: "админ + кот",
+      title: "Расходы исполнителей",
+      value: formatCurrency(stats.totalExpenses),
+      description: `${stats.paidInvoices} оплачено, ${stats.pendingInvoices} ожидают`,
     },
   ];
 

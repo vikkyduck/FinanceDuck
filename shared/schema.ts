@@ -26,6 +26,16 @@ export const clients = pgTable("clients", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const clientPartners = pgTable("client_partners", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: 'cascade' }).notNull(),
+  partnerId: uuid("partner_id").references(() => partners.id, { onDelete: 'cascade' }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_client_partners_client").on(table.clientId),
+  index("idx_client_partners_partner").on(table.partnerId),
+]);
+
 export const accessTokens = pgTable("access_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   code: text("code").notNull().unique(),
@@ -118,6 +128,8 @@ export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = typeof partners.$inferInsert;
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
+export type ClientPartner = typeof clientPartners.$inferSelect;
+export type InsertClientPartner = typeof clientPartners.$inferInsert;
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = typeof invoices.$inferInsert;
 export type InvoiceCalculation = typeof invoiceCalculations.$inferSelect;

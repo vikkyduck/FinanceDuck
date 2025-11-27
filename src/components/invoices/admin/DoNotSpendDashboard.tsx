@@ -29,11 +29,13 @@ interface DoNotSpendInvoice {
 interface DoNotSpendDashboardProps {
   showTitle?: boolean;
   className?: string;
+  partnerId?: string;
 }
 
 export const DoNotSpendDashboard = ({
   showTitle = true,
   className,
+  partnerId,
 }: DoNotSpendDashboardProps) => {
   const [invoices, setInvoices] = useState<DoNotSpendInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ export const DoNotSpendDashboard = ({
     try {
       await ensureSessionContext();
 
-      const { data: invoicesData, error: invoicesError } = await supabase
+      let query = supabase
         .from("invoices")
         .select(`
           id,
@@ -60,6 +62,12 @@ export const DoNotSpendDashboard = ({
         `)
         .eq("scheme", "agency_30")
         .in("status", ["paid", "sent"]);
+
+      if (partnerId) {
+        query = query.eq("partner_id", partnerId);
+      }
+
+      const { data: invoicesData, error: invoicesError } = await query;
 
       if (invoicesError) {
         console.error("Error fetching invoices:", invoicesError);
@@ -97,7 +105,7 @@ export const DoNotSpendDashboard = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [partnerId]);
 
   useEffect(() => {
     fetchData();

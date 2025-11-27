@@ -17,6 +17,7 @@ import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { showSuccess } from "@/lib/errorHandler";
 import { PartnerDebtTrafficLight } from "./partner/PartnerDebtTrafficLight";
 import { PartnerDocumentRiskLight } from "./partner/PartnerDocumentRiskLight";
+import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 
 export const PartnerDashboard = () => {
   const navigate = useNavigate();
@@ -60,6 +61,8 @@ export const PartnerDashboard = () => {
         </Card>
 
         <PartnerAgency30Report />
+
+        {partnerId && <DoNotSpendDashboard partnerId={partnerId} />}
 
         <PartnerCommissionReport />
 

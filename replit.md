@@ -48,7 +48,7 @@ The system supports four user roles (admin, assistant, partner, client) with dis
    - Tracks client remaining funds (70% - expenses) for Agency 30% projects
    - Real-time updates via invoice_expenses subscription
    - Shows per-invoice breakdown with expenses and remaining amounts
-   - Only visible to admin role
+   - Visible to admin (all invoices) and partners (only their invoices)
 
 ## Key Technical Decisions
 

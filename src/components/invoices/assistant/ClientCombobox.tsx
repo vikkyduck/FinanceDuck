@@ -16,6 +16,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useDebounce } from "use-debounce";
@@ -51,6 +52,8 @@ export const ClientCombobox = ({
   const fetchClients = async () => {
     setLoading(true);
     try {
+      await ensureSessionContext();
+      
       let query = supabase
         .from("clients")
         .select(

@@ -4,7 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatCurrency, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
 import { Loader2, User, Wallet, ShieldAlert, CreditCard } from "lucide-react";
 
 interface ClientStatsData {
@@ -39,8 +39,14 @@ export const PartnerClientStats = () => {
         'invoices',
         `
           *,
-          invoice_calculations(*),
-          executor_expenses(amount, is_admin_expense),
+          invoice_calculations(
+            client_bill,
+            commission_amount,
+            partner_share_from_margin,
+            client_remaining,
+            client_base_after_margin,
+            executor_expenses_total
+          ),
           clients(id, name)
         `,
         (query) => query
@@ -69,8 +75,7 @@ export const PartnerClientStats = () => {
         client_name: string;
         partner_commission: number;
         client_remaining: number;
-        admin_commission: number;
-        admin_expenses: number;
+        total_debt_to_admin: number;
         invoice_ids: string[];
       }>();
 
@@ -84,8 +89,7 @@ export const PartnerClientStats = () => {
             client_name: clientName,
             partner_commission: 0,
             client_remaining: 0,
-            admin_commission: 0,
-            admin_expenses: 0,
+            total_debt_to_admin: 0,
             invoice_ids: [],
           });
         }
@@ -96,48 +100,45 @@ export const PartnerClientStats = () => {
         const calcSource = invoice.invoice_calculations;
         const calc = Array.isArray(calcSource) ? calcSource[0] : calcSource;
         if (calc) {
-          // Partner commission
-          if (invoice.scheme === 'agency_30') {
-            clientData.partner_commission += calc.partner_share_from_margin || 0;
-            clientData.admin_commission += calc.admin_share_from_margin || 0;
-          } else if (invoice.scheme === 'commission_based') {
-            clientData.partner_commission += calc.commission_amount || 0;
-            clientData.admin_commission += (calc.client_bill || 0) - (calc.commission_amount || 0);
+          const scheme = invoice.scheme as InvoiceScheme;
+          const clientBill = Number(calc.client_bill) || 0;
+          const executorExpenses = Number(calc.executor_expenses_total) || 0;
+          
+          let commission = 0;
+          if (scheme === 'agency_30') {
+            commission = Number(calc.partner_share_from_margin) || 0;
+            const clientBase = Number(calc.client_base_after_margin) || clientBill * 0.70;
+            clientData.client_remaining += Math.max(0, clientBase - executorExpenses);
+          } else {
+            commission = Number(calc.commission_amount) || 0;
+            clientData.client_remaining += Number(calc.client_remaining) || 0;
           }
-
-          // Client remaining budget
-          clientData.client_remaining += calc.client_remaining || 0;
-        }
-
-        // Admin expenses
-        if (invoice.executor_expenses) {
-          invoice.executor_expenses.forEach((expense: any) => {
-            if (expense.is_admin_expense) {
-              clientData.admin_expenses += expense.amount || 0;
-            }
-          });
+          
+          clientData.partner_commission += commission;
+          
+          // Use centralized debt calculation
+          const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, commission, executorExpenses);
+          clientData.total_debt_to_admin += debtToAdmin;
         }
       });
 
       // Calculate debt for each client
       const statsArray: ClientStatsData[] = Array.from(clientMap.values()).map(client => {
-        const totalToAdmin = client.admin_commission + client.admin_expenses;
-        
         // Calculate payments for this client's invoices
         const paymentsForClient = payments
           ?.filter((p: any) => client.invoice_ids.includes(p.invoice_id))
           .reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
         
-        const remainingDebt = totalToAdmin - paymentsForClient;
+        const remainingDebt = client.total_debt_to_admin - paymentsForClient;
 
         return {
           client_id: client.client_id,
           client_name: client.client_name,
           partner_commission: client.partner_commission,
           client_remaining: client.client_remaining,
-          admin_commission: client.admin_commission,
-          admin_expenses: client.admin_expenses,
-          total_to_admin: totalToAdmin,
+          admin_commission: 0,
+          admin_expenses: 0,
+          total_to_admin: client.total_debt_to_admin,
           payments_to_admin: paymentsForClient,
           remaining_debt: remainingDebt,
         };
@@ -267,26 +268,12 @@ export const PartnerClientStats = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2 mb-2">
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
-                <h4 className="font-semibold">Детализация долга перед админом</h4>
+                <h4 className="font-semibold">Долг перед админом</h4>
               </div>
 
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Комиссия админа:</span>
-                  <span className="font-medium">{formatCurrency(client.admin_commission)}</span>
-                </div>
-
-                {client.admin_expenses > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Расходы админа:</span>
-                    <span className="font-medium">{formatCurrency(client.admin_expenses)}</span>
-                  </div>
-                )}
-
-                <Separator />
-
                 <div className="flex justify-between items-center font-semibold">
-                  <span>Итого к переводу:</span>
+                  <span>К переводу админу:</span>
                   <span>{formatCurrency(client.total_to_admin)}</span>
                 </div>
 

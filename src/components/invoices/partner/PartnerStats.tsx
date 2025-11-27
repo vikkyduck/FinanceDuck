@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Wallet, ShieldAlert } from "lucide-react";
-import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatCurrency, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
+import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { StatsGrid, StatConfig } from "@/components/ui/stats-grid";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
@@ -43,41 +44,93 @@ export const PartnerStats = () => {
     console.log('[PartnerStats] Fetching stats for partnerId:', partnerId);
     setLoading(true);
     try {
-      // Use database function for stable calculations
-      const { data: debtData, error: debtError } = await supabase
-        .rpc('get_partner_debt_to_admin', { _partner_id: partnerId });
+      // Fetch all paid invoices for this partner with calculations
+      const invoices = await querySupabaseWithFilter<any>(
+        'invoices',
+        `
+          id,
+          scheme,
+          invoice_calculations(
+            client_bill,
+            commission_amount,
+            partner_share_from_margin,
+            client_remaining,
+            client_base_after_margin,
+            executor_expenses_total
+          )
+        `,
+        (query) => query
+          .eq('partner_id', partnerId)
+          .eq('status', 'paid')
+          .not('actual_payment_date', 'is', null),
+        { operation: 'fetch_partner_stats_invoices' }
+      );
 
-      if (debtError) {
-        console.error('[PartnerStats] RPC error:', debtError);
-        throw debtError;
-      }
+      // Fetch partner payments
+      const payments = await querySupabaseWithFilter<any>(
+        'partner_payments',
+        'amount',
+        (query) => query.eq('partner_id', partnerId),
+        { operation: 'fetch_partner_stats_payments' }
+      );
 
-      console.log('[PartnerStats] RPC result:', debtData);
+      let totalInflow = 0;
+      let partnerCommission = 0;
+      let clientRemaining = 0;
+      let totalDebtToAdmin = 0;
 
-      const debt = debtData?.[0];
-      if (!debt) {
-        setStats({
-          total_inflow: 0,
-          partner_commission: 0,
-          partner_expenses: 0,
-          admin_expenses: 0,
-          debt_to_admin: 0,
-          client_remaining: 0,
-          total_paid_to_admin: 0,
-          remaining_debt: 0,
-        });
-        return;
-      }
+      (invoices || []).forEach((invoice: any) => {
+        const calcSource = invoice.invoice_calculations;
+        const calc = Array.isArray(calcSource) ? calcSource[0] : calcSource;
+        if (!calc) return;
+
+        const scheme = invoice.scheme as InvoiceScheme;
+        const clientBill = Number(calc.client_bill) || 0;
+        const executorExpenses = Number(calc.executor_expenses_total) || 0;
+        
+        totalInflow += clientBill;
+
+        let commission = 0;
+        if (scheme === 'agency_30') {
+          commission = Number(calc.partner_share_from_margin) || 0;
+          const clientBase = Number(calc.client_base_after_margin) || clientBill * 0.70;
+          clientRemaining += Math.max(0, clientBase - executorExpenses);
+        } else {
+          commission = Number(calc.commission_amount) || 0;
+          clientRemaining += Number(calc.client_remaining) || 0;
+        }
+        
+        partnerCommission += commission;
+        
+        // Use centralized debt calculation
+        const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, commission, executorExpenses);
+        totalDebtToAdmin += debtToAdmin;
+      });
+
+      const totalPaidToAdmin = (payments || []).reduce(
+        (sum, p: any) => sum + Number(p.amount), 0
+      );
+
+      const remainingDebt = totalDebtToAdmin - totalPaidToAdmin;
+
+      console.log('[PartnerStats] Calculated stats:', {
+        totalInflow,
+        partnerCommission,
+        totalDebtToAdmin,
+        totalPaidToAdmin,
+        remainingDebt,
+        clientRemaining
+      });
 
       setStats({
-        total_inflow: debt.total_inflow || 0,
-        partner_commission: debt.partner_commission || 0,
-        partner_expenses: debt.partner_expenses || 0,
-        admin_expenses: debt.admin_expenses || 0,
-        debt_to_admin: debt.debt_to_admin || 0,
-        client_remaining: debt.client_remaining_total || 0,
-        total_paid_to_admin: debt.total_paid_to_admin || 0,
-        remaining_debt: debt.remaining_debt || 0,
+        total_inflow: totalInflow,
+        partner_commission: partnerCommission,
+        partner_expenses: 0,
+        admin_expenses: 0,
+        debt_to_admin: totalDebtToAdmin,
+        client_remaining: clientRemaining,
+        total_paid_to_admin: totalPaidToAdmin,
+        remaining_debt: remainingDebt,
       });
     } catch (error) {
       console.error('Error fetching partner stats:', error);
@@ -108,6 +161,13 @@ export const PartnerStats = () => {
     channelName: 'partner_stats_invoices',
     table: 'invoices',
     filter: partnerId ? `partner_id=eq.${partnerId}` : undefined,
+    onUpdate: fetchStats,
+    enabled: !!partnerId,
+  });
+
+  useRealtimeSubscription({
+    channelName: 'partner_stats_expenses',
+    table: 'invoice_expenses',
     onUpdate: fetchStats,
     enabled: !!partnerId,
   });

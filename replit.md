@@ -58,7 +58,8 @@ The system supports four user roles (admin, assistant, partner, client) with dis
     - Structure: 100% client money = 70% project budget + 30% agency margin
     - 30% margin split 50/50: 15% partner keeps + 15% partner owes to admin
     - "Do Not Spend" = 70% project budget - executor expenses
-- **Centralized calculation**: `calculatePartnerDebt()` function in `invoiceCalculations.ts` prevents formula drift across components
+- **Centralized calculation**: `calculatePartnerDebt()` and `calculateInvoice()` functions in `invoiceCalculations.ts` prevent formula drift across components
+- **Commission fallback**: Always derive commissionAmount from calculateInvoice result when invoice.commission_amount is null
 - **Partner-facing components updated**: PartnerCommissionReport, PartnerAgency30Report, PartnerVirtualStatement all use centralized calculation
 - **Real-time expense updates**: All debt components subscribe to invoice_expenses for instant recalculation
 - **Terminology**: Use "приход" (not "платёж/выплату") for partner payments to admin

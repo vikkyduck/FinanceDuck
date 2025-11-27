@@ -44,9 +44,18 @@ The system supports four user roles (admin, assistant, partner, client) with dis
 1. **Payment Timeline (PaymentTimeline.tsx)** - Removed from admin dashboard
 2. **Reconciliation Dashboard (ReconciliationDashboard.tsx)** - Removed from admin dashboard
 
+7. **Do Not Spend Dashboard** (`DoNotSpendDashboard.tsx`)
+   - Tracks client remaining funds (70% - expenses) for Agency 30% projects
+   - Real-time updates via invoice_expenses subscription
+   - Shows per-invoice breakdown with expenses and remaining amounts
+   - Only visible to admin role
+
 ## Key Technical Decisions
 
-- **Partner debt formula**: `debt = client_bill - partner_commission` (unified across schemes)
+- **Partner debt formulas** (scheme-specific):
+  - Partner Agreement (commission_based): `debt = clientBill - partnerCommission - executorExpenses`
+  - Agency 30%: `debt = partnerCommission (15% only)` - client funds tracked separately in "Do Not Spend" dashboard
+- **Centralized calculation**: `calculatePartnerDebt()` function in `invoiceCalculations.ts` prevents formula drift across components
 - **Terminology**: Use "приход" (not "платёж/выплату") for partner payments to admin
 - **Design**: Apple HIG principles - simplicity, clarity, minimal text, intuitive icons
 - **Assistant visibility**: Assistant role cannot see commission percentages, partner/admin shares, or profit analytics

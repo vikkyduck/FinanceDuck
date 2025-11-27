@@ -504,6 +504,7 @@ export class DatabaseStorage implements IStorage {
     
     await db.insert(invoiceCalculations).values({
       invoiceId: created.id,
+      clientBill: computed.clientBill || "0",
       ...computed,
     });
     
@@ -558,6 +559,7 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db.insert(invoiceCalculations)
         .values({
           invoiceId,
+          clientBill: computed.clientBill || "0",
           ...computed,
         })
         .returning();

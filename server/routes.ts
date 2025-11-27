@@ -542,7 +542,9 @@ export function registerRoutes(app: Express): void {
         { ...invoiceData, createdBy: req.user!.token.id },
         calculations || {}
       );
-      const filtered = stripSensitiveFieldsForRole(invoice, role);
+      // Reload full invoice with calculations, partner, client
+      const fullInvoice = await storage.getInvoice(invoice.id);
+      const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
       res.status(201).json(filtered);
     } catch (error) {
       console.error("Create invoice error:", error);
@@ -565,7 +567,9 @@ export function registerRoutes(app: Express): void {
         await storage.updateInvoiceCalculations(id, calculations);
       }
       
-      const filtered = stripSensitiveFieldsForRole(invoice, role);
+      // Reload full invoice with recalculated values
+      const fullInvoice = await storage.getInvoice(id);
+      const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
       res.json(filtered);
     } catch (error) {
       console.error("Update invoice error:", error);

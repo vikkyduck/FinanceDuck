@@ -7,8 +7,9 @@ export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'pai
 export const partners = pgTable("partners", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  email: text("email"),
   phone: text("phone"),
+  telegram: text("telegram"),
   commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -19,6 +20,7 @@ export const clients = pgTable("clients", {
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  telegram: text("telegram"),
   partnerId: uuid("partner_id").references(() => partners.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

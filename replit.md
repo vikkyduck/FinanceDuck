@@ -4,6 +4,17 @@ This project is an invoice management system migrating from Supabase to Replit w
 
 ## Migration Status
 
+**Data import completed (2025-11-27):**
+- 4 partners with full contact info (telegram handles, phones)
+- 5 clients with full contact info (telegram handles)
+- 23 invoices with complete calculation data
+- 47 expenses imported
+
+**Schema updates:**
+- Added telegram field to partners and clients tables
+- Made email optional (nullable) for partners and clients
+- Partners can now be added via UI without email
+
 **Completed migrations (Supabase → invoiceService API):**
 - InvoiceDetailsDialog - full invoice view with expenses and documents
 - CreateInvoiceDialog - invoice creation with local calculations pre-submit

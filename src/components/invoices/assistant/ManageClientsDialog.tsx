@@ -204,14 +204,14 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                       Партнёр
                     </Label>
                     <Select
-                      value={form.partnerId}
-                      onValueChange={(value) => setForm({ ...form, partnerId: value })}
+                      value={form.partnerId || "__none__"}
+                      onValueChange={(value) => setForm({ ...form, partnerId: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger data-testid="select-client-partner">
                         <SelectValue placeholder="Выберите партнёра" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Без партнёра</SelectItem>
+                        <SelectItem value="__none__">Без партнёра</SelectItem>
                         {partners.map((partner) => (
                           <SelectItem key={partner.id} value={partner.id}>
                             {partner.name}
@@ -303,14 +303,14 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                             <TableCell>
                               {editingId === client.id ? (
                                 <Select
-                                  value={editForm.partnerId}
-                                  onValueChange={(value) => setEditForm({ ...editForm, partnerId: value })}
+                                  value={editForm.partnerId || "__none__"}
+                                  onValueChange={(value) => setEditForm({ ...editForm, partnerId: value === "__none__" ? "" : value })}
                                 >
                                   <SelectTrigger className="h-8">
                                     <SelectValue placeholder="Партнёр" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">Без партнёра</SelectItem>
+                                    <SelectItem value="__none__">Без партнёра</SelectItem>
                                     {partners.map((partner) => (
                                       <SelectItem key={partner.id} value={partner.id}>
                                         {partner.name}

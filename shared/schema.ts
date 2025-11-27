@@ -1,0 +1,130 @@
+import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index } from "drizzle-orm/pg-core";
+
+export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client']);
+export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'vika_ie_7', 'commission_based']);
+export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'cancelled']);
+
+export const partners = pgTable("partners", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  phone: text("phone"),
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const clients = pgTable("clients", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  partnerId: uuid("partner_id").references(() => partners.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const accessTokens = pgTable("access_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  code: text("code").notNull().unique(),
+  role: userRoleEnum("role").notNull(),
+  partnerId: uuid("partner_id").references(() => partners.id, { onDelete: 'cascade' }),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: 'cascade' }),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+});
+
+export const userSessions = pgTable("user_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  accessTokenId: uuid("access_token_id").notNull().references(() => accessTokens.id, { onDelete: 'cascade' }),
+  csrfToken: text("csrf_token").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastActivity: timestamp("last_activity", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revoked: boolean("revoked").default(false),
+}, (table) => [
+  index("idx_user_sessions_session_id").on(table.sessionId),
+  index("idx_user_sessions_token_id").on(table.accessTokenId),
+]);
+
+export const invoices = pgTable("invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceNumber: text("invoice_number").notNull().unique(),
+  clientId: uuid("client_id").references(() => clients.id).notNull(),
+  partnerId: uuid("partner_id").references(() => partners.id).notNull(),
+  scheme: invoiceSchemeEnum("scheme").notNull(),
+  status: invoiceStatusEnum("status").default('draft').notNull(),
+  clientBill: numeric("client_bill", { precision: 15, scale: 2 }),
+  commissionAmount: numeric("commission_amount", { precision: 15, scale: 2 }),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  paymentDate: date("payment_date"),
+  notes: text("notes"),
+});
+
+export const invoiceCalculations = pgTable("invoice_calculations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  clientBill: numeric("client_bill", { precision: 15, scale: 2 }).notNull(),
+  commissionRate: numeric("commission_rate", { precision: 5, scale: 2 }),
+  commissionAmount: numeric("commission_amount", { precision: 15, scale: 2 }),
+  amountToAdmin: numeric("amount_to_admin", { precision: 15, scale: 2 }),
+  agencyMargin: numeric("agency_margin", { precision: 15, scale: 2 }),
+  partnerShareFromMargin: numeric("partner_share_from_margin", { precision: 15, scale: 2 }),
+  adminShareFromMargin: numeric("admin_share_from_margin", { precision: 15, scale: 2 }),
+  clientBaseAfterMargin: numeric("client_base_after_margin", { precision: 15, scale: 2 }),
+  clientSpent: numeric("client_spent", { precision: 15, scale: 2 }).default("0"),
+  clientRemaining: numeric("client_remaining", { precision: 15, scale: 2 }),
+  executorExpensesTotal: numeric("executor_expenses_total", { precision: 15, scale: 2 }).default("0"),
+  netProfitAdmin: numeric("net_profit_admin", { precision: 15, scale: 2 }),
+  adminShare50: numeric("admin_share_50", { precision: 15, scale: 2 }),
+  catShare50: numeric("cat_share_50", { precision: 15, scale: 2 }),
+  assistantBonusActs: numeric("assistant_bonus_acts", { precision: 15, scale: 2 }).default("0"),
+  assistantBonusPaid: boolean("assistant_bonus_paid").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const invoiceExpenses = pgTable("invoice_expenses", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  description: text("description").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  date: date("date").defaultNow().notNull(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const partnerPayments = pgTable("partner_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  partnerId: uuid("partner_id").references(() => partners.id).notNull(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  paymentDate: date("payment_date").notNull(),
+  notes: text("notes"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type Partner = typeof partners.$inferSelect;
+export type InsertPartner = typeof partners.$inferInsert;
+export type Client = typeof clients.$inferSelect;
+export type InsertClient = typeof clients.$inferInsert;
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = typeof invoices.$inferInsert;
+export type InvoiceCalculation = typeof invoiceCalculations.$inferSelect;
+export type InvoiceExpense = typeof invoiceExpenses.$inferSelect;
+export type InsertInvoiceExpense = typeof invoiceExpenses.$inferInsert;
+export type PartnerPayment = typeof partnerPayments.$inferSelect;
+export type InsertPartnerPayment = typeof partnerPayments.$inferInsert;
+export type AccessToken = typeof accessTokens.$inferSelect;
+export type UserSession = typeof userSessions.$inferSelect;
+export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
+export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'vika_ie_7' | 'commission_based';
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';

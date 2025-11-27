@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Check, FileText } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,7 +57,8 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
           invoice_calculations(
             client_bill,
             partner_share_from_margin,
-            commission_amount
+            commission_amount,
+            executor_expenses_total
           )
         `)
         .eq("partner_id", partnerId)
@@ -87,16 +88,19 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
 
       const formattedInvoices: PartnerInvoice[] = (invoicesData || []).map((inv: any) => {
         const calc = inv.invoice_calculations?.[0];
+        const scheme = inv.scheme as InvoiceScheme;
         const clientBill = Number(calc?.client_bill) || 0;
+        const executorExpenses = Number(calc?.executor_expenses_total) || 0;
         let partnerCommission = 0;
 
-        if (inv.scheme === 'agency_30') {
+        if (scheme === 'agency_30') {
           partnerCommission = Number(calc?.partner_share_from_margin) || 0;
-        } else if (inv.scheme === 'commission_based') {
+        } else if (scheme === 'commission_based') {
           partnerCommission = Number(calc?.commission_amount) || 0;
         }
 
-        const debtToAdmin = clientBill - partnerCommission;
+        // Use centralized debt calculation function
+        const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
         const paidAmount = paymentsByInvoice.get(inv.id) || 0;
         const remaining = Math.max(0, debtToAdmin - paidAmount);
 

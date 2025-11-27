@@ -7,7 +7,7 @@ import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatCurrency, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
 
 interface PartnerDebtSummary {
@@ -46,7 +46,8 @@ export const PartnerDebtDashboard = ({
           invoice_calculations(
             client_bill,
             partner_share_from_margin,
-            commission_amount
+            commission_amount,
+            executor_expenses_total
           )
         `)
         .eq("status", "paid");
@@ -73,11 +74,12 @@ export const PartnerDebtDashboard = ({
         const partnerId = invoice.partner_id;
         const partnerName = invoice.partners?.name || "Unknown";
         const calc = invoice.invoice_calculations?.[0];
-        const scheme = invoice.scheme;
+        const scheme = invoice.scheme as InvoiceScheme;
 
         if (!calc) return;
 
         const clientBill = Number(calc.client_bill) || 0;
+        const executorExpenses = Number(calc.executor_expenses_total) || 0;
         let partnerCommission = 0;
         
         if (scheme === 'agency_30') {
@@ -86,7 +88,8 @@ export const PartnerDebtDashboard = ({
           partnerCommission = Number(calc.commission_amount) || 0;
         }
         
-        const debtToAdmin = clientBill - partnerCommission;
+        // Use centralized debt calculation function
+        const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
 
         if (!partnerMap.has(partnerId)) {
           partnerMap.set(partnerId, {
@@ -141,6 +144,13 @@ export const PartnerDebtDashboard = ({
   useRealtimeSubscription({
     channelName: 'partner_debt_dashboard_invoices',
     table: 'invoices',
+    onUpdate: fetchData,
+    enabled: true,
+  });
+
+  useRealtimeSubscription({
+    channelName: 'partner_debt_dashboard_expenses',
+    table: 'invoice_expenses',
     onUpdate: fetchData,
     enabled: true,
   });

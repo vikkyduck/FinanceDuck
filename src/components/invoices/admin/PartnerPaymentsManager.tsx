@@ -4,7 +4,7 @@ import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Wallet, Plus, ChevronDown, ChevronUp } from "lucide-react";
-import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatCurrency, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
 import { RecordPaymentDialog } from "./RecordPaymentDialog";
 import { PartnerInvoicesDetail } from "./PartnerInvoicesDetail";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
@@ -77,14 +77,12 @@ export const PartnerPaymentsManager = () => {
       const partnerId = invoice.partner_id;
       const partnerName = invoice.partners?.name || "Unknown";
       const calc = invoice.invoice_calculations?.[0];
-      const scheme = invoice.scheme;
+      const scheme = invoice.scheme as InvoiceScheme;
 
       if (!calc) return;
 
-      // Используем ту же формулу что и RPC get_partner_debt_to_admin:
-      // debt = client_bill - partner_commission
-      // Это гарантирует одинаковые данные у админа и партнёра
       const clientBill = Number(calc.client_bill) || 0;
+      const executorExpenses = Number(calc.executor_expenses_total) || 0;
       let partnerCommission = 0;
       
       if (scheme === 'agency_30') {
@@ -93,7 +91,8 @@ export const PartnerPaymentsManager = () => {
         partnerCommission = Number(calc.commission_amount) || 0;
       }
       
-      const debtToAdmin = clientBill - partnerCommission;
+      // Use centralized debt calculation function
+      const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
 
       if (!partnerMap.has(partnerId)) {
         partnerMap.set(partnerId, {

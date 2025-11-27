@@ -22,6 +22,7 @@ import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { AdminTransactionsList } from "./admin/AdminTransactionsList";
 import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
+import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
@@ -177,6 +178,8 @@ export const AdminDashboard = () => {
               </CollapsibleSection>
 
               <PartnerDebtDashboard />
+
+              <DoNotSpendDashboard />
 
               <AdminTransactionsList limit={10} />
             </motion.div>

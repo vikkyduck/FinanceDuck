@@ -93,6 +93,45 @@ export function calculateInvoice(
   return calculations;
 }
 
+/**
+ * Calculates partner debt to admin based on scheme
+ * 
+ * Partner Agreement (commission_based):
+ *   debt = clientBill - partnerCommission - executorExpenses
+ *   (Partner pays expenses from client money)
+ * 
+ * Agency 30%:
+ *   debt = partner_share_from_margin (15% of client bill)
+ *   (Partner owes only their 15% commission, remaining 70% is separate)
+ */
+export function calculatePartnerDebt(
+  scheme: InvoiceScheme,
+  clientBill: number,
+  partnerCommission: number,
+  executorExpenses: number = 0
+): { debtToAdmin: number; doNotSpendAmount: number } {
+  if (scheme === 'agency_30') {
+    // Agency 30%: Partner owes only their 15% commission
+    // The remaining 70% minus expenses is "DO NOT SPEND" money
+    const clientBase = clientBill * 0.70;
+    const doNotSpendAmount = Math.max(0, clientBase - executorExpenses);
+    
+    return {
+      debtToAdmin: partnerCommission, // Just the 15% commission
+      doNotSpendAmount,
+    };
+  }
+  
+  // Partner Agreement (commission_based):
+  // Partner owes clientBill - their commission - expenses they paid
+  const debtToAdmin = Math.max(0, clientBill - partnerCommission - executorExpenses);
+  
+  return {
+    debtToAdmin,
+    doNotSpendAmount: 0, // No "do not spend" pool for commission-based scheme
+  };
+}
+
 export function formatCurrency(amount: number): string {
   // Форматирование числа с пробелами в качестве разделителей тысяч
   const formatted = new Intl.NumberFormat('ru-RU', {

@@ -418,6 +418,57 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/clients/:id/partners", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const role = req.user?.role || "client";
+      
+      if (role === "assistant") {
+        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      }
+      
+      const partners = await storage.getClientPartners(id);
+      res.json(partners);
+    } catch (error) {
+      console.error("Get client partners error:", error);
+      res.status(500).json({ error: "Failed to get client partners" });
+    }
+  });
+
+  app.put("/api/clients/:id/partners", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { partnerIds } = req.body;
+      
+      if (!Array.isArray(partnerIds)) {
+        return res.status(400).json({ error: "partnerIds must be an array" });
+      }
+      
+      await storage.setClientPartners(id, partnerIds);
+      const updatedPartners = await storage.getClientPartners(id);
+      res.json(updatedPartners);
+    } catch (error) {
+      console.error("Set client partners error:", error);
+      res.status(500).json({ error: "Failed to set client partners" });
+    }
+  });
+
+  app.get("/api/clients-with-partners", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role || "client";
+      
+      if (role === "assistant") {
+        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      }
+      
+      const clients = await storage.getClientsWithPartners();
+      res.json(clients);
+    } catch (error) {
+      console.error("Get clients with partners error:", error);
+      res.status(500).json({ error: "Failed to get clients" });
+    }
+  });
+
   app.get("/api/invoices", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";

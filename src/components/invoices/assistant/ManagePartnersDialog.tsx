@@ -33,11 +33,14 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
 
   const fetchPartners = async () => {
     setFetchingData(true);
+    console.log("[ManagePartnersDialog] Starting to fetch partners...");
     try {
       const data = await invoiceService.fetchPartners();
+      console.log("[ManagePartnersDialog] Partners loaded:", data);
       setPartners(data);
     } catch (error: any) {
-      console.error("Error fetching partners:", error);
+      console.error("[ManagePartnersDialog] Error fetching partners:", error);
+      console.error("[ManagePartnersDialog] Error message:", error?.message);
       toast.error("Не удалось загрузить партнёров");
     } finally {
       setFetchingData(false);

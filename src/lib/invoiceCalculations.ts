@@ -1,7 +1,7 @@
 // Utility functions for invoice calculations
 
 // All scheme types from database
-export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'vika_ie_7' | 'commission_based';
+export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'commission_based';
 
 export interface InvoiceCalculations {
   client_bill: number;
@@ -118,30 +118,6 @@ export function calculateInvoice(
       break;
     }
 
-    case 'vika_ie_7': {
-      // Схема 4: ИП Вики, 7% налоги
-      // Клиент платит: X
-      // Налоги (7%): X × 0.07
-      // После налогов: X × 0.93
-      // Расходы на исполнителей: Y
-      // Чистая прибыль админа: (X × 0.93) - Y
-      
-      const taxRate = 7;
-      const taxAmount = clientBill * 0.07;
-      const amountAfterTax = clientBill * 0.93;
-      const netProfitAdmin = amountAfterTax - executorExpenses;
-      
-      calculations = {
-        ...calculations,
-        tax_amount: taxAmount,
-        amount_after_tax: amountAfterTax,
-        net_profit_admin: netProfitAdmin,
-        admin_share_50: netProfitAdmin / 2,
-        cat_share_50: netProfitAdmin / 2,
-      };
-      break;
-    }
-
     case 'commission_based': {
       // Универсальная схема с произвольной комиссией
       // Используется когда партнер имеет нестандартный процент
@@ -212,10 +188,6 @@ export function calculateInvoice(
  *   debt = admin_share_from_margin (15% of client bill)
  *   doNotSpendAmount = 70% of client bill - executor expenses
  * 
- * ИП Вики (vika_ie_7):
- *   No partner involved, all income goes to admin after 7% tax
- *   debt = 0 (no partner to owe money)
- * 
  * @param expensesPaidByPartner - expenses paid from client money (by partner)
  * @param expensesPaidByAdmin - expenses paid by admin from own funds
  */
@@ -241,17 +213,6 @@ export function calculatePartnerDebt(
       debtToAdmin: adminShare, // Partner owes admin their 15% share (fixed)
       doNotSpendAmount,
       adminNetAfterOwnExpenses: adminShare - expensesPaidByAdmin,
-    };
-  }
-  
-  if (scheme === 'vika_ie_7') {
-    // ИП Вики: No partner involvement
-    // All money goes to admin (minus 7% tax)
-    const afterTax = clientBill * 0.93;
-    return {
-      debtToAdmin: 0,
-      doNotSpendAmount: 0,
-      adminNetAfterOwnExpenses: afterTax - totalExpenses,
     };
   }
   
@@ -318,8 +279,6 @@ export function getSchemeLabel(
       return 'Партнер 10%';
     case 'partner_15':
       return 'Партнер 15%';
-    case 'vika_ie_7':
-      return 'ИП Вики (7%)';
     case 'commission_based':
       if (commissionRate) {
         return `Партнер ${commissionRate}%`;

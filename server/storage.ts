@@ -67,17 +67,6 @@ function calculateInvoiceServer(
       result.catShare50 = (netProfitAdmin / 2).toString();
       break;
     }
-    case 'vika_ie_7': {
-      const taxAmount = clientBill * 0.07;
-      const amountAfterTax = clientBill * 0.93;
-      const netProfitAdmin = amountAfterTax - executorExpenses;
-      
-      result.amountToAdmin = amountAfterTax.toString();
-      result.netProfitAdmin = netProfitAdmin.toString();
-      result.adminShare50 = (netProfitAdmin / 2).toString();
-      result.catShare50 = (netProfitAdmin / 2).toString();
-      break;
-    }
     case 'commission_based':
     default: {
       const commissionRate = partnerCommissionRate || 10;
@@ -807,12 +796,6 @@ export class DatabaseStorage implements IStorage {
           totalPartnerCommission += parseFloat(calc.partnerShareFromMargin || "0");
           totalAdminShare += parseFloat(calc.adminShareFromMargin || "0");
           clientRemaining += parseFloat(calc.clientBaseAfterMargin || "0") - expenses;
-        } else if (scheme === 'vika_ie_7') {
-          // ИП Вики: No partner, all goes to admin after 7% tax
-          // amountAfterTax = clientBill * 0.93
-          const amountAfterTax = clientBill * 0.93;
-          totalAdminShare += amountAfterTax;
-          // No partner commission for this scheme
         } else {
           // partner_10, partner_15, commission_based
           totalPartnerCommission += parseFloat(calc.commissionAmount || "0");
@@ -838,9 +821,6 @@ export class DatabaseStorage implements IStorage {
           if (scheme === 'agency_30') {
             // Agency 30%: Partner owes admin their 15% share (adminShareFromMargin)
             debtToAdmin += parseFloat(r.calculations.adminShareFromMargin || "0");
-          } else if (scheme === 'vika_ie_7') {
-            // ИП Вики: No partner involvement, debt = 0
-            // Skip
           } else {
             // partner_10, partner_15, commission_based:
             // Partner owes admin: clientBill - commission (amountToAdmin)
@@ -940,9 +920,6 @@ export class DatabaseStorage implements IStorage {
         // Agency 30%: Partner owes admin 15% (admin's share), fixed regardless of expenses
         // 70% stays with partner for client's external services
         debt = cBill * 0.15; // Admin's share from margin
-      } else if (scheme === 'vika_ie_7') {
-        // ИП Вики: No partner involved
-        debt = 0;
       } else {
         // Partner schemes (partner_10, partner_15, commission_based):
         // Partner debt = clientBill - partnerCommission - expensesPaidByPartner
@@ -1155,9 +1132,6 @@ export class DatabaseStorage implements IStorage {
       let cashToAdmin: number;
       if (scheme === 'agency_30') {
         cashToAdmin = parseFloat(row.calculations.adminShareFromMargin || "0");
-      } else if (scheme === 'vika_ie_7') {
-        // ИП Вики - all goes to admin
-        cashToAdmin = parseFloat(row.calculations.clientBill || "0");
       } else {
         cashToAdmin = parseFloat(row.calculations.amountToAdmin || "0");
       }
@@ -1180,7 +1154,7 @@ export class DatabaseStorage implements IStorage {
         }
         
         // Leverage calculation - all paid invoices
-        if (isVika || scheme === 'vika_ie_7') {
+        if (isVika) {
           vikaProfit += netProfit;
         } else {
           othersProfit += netProfit;
@@ -1291,8 +1265,6 @@ export class DatabaseStorage implements IStorage {
       let profit: number;
       if (scheme === 'agency_30') {
         profit = parseFloat(row.calculations.adminShareFromMargin || "0");
-      } else if (scheme === 'vika_ie_7') {
-        profit = parseFloat(row.calculations.clientBill || "0");
       } else {
         profit = parseFloat(row.calculations.amountToAdmin || "0");
       }
@@ -1360,8 +1332,6 @@ export class DatabaseStorage implements IStorage {
       let profit: number;
       if (scheme === 'agency_30') {
         profit = parseFloat(row.calculations.adminShareFromMargin || "0");
-      } else if (scheme === 'vika_ie_7') {
-        profit = parseFloat(row.calculations.clientBill || "0");
       } else {
         profit = parseFloat(row.calculations.amountToAdmin || "0");
       }
@@ -1514,9 +1484,6 @@ export class DatabaseStorage implements IStorage {
       if (scheme === 'agency_30') {
         partnerCommission = cBill * 0.15; // Partner gets 15%
         debt = cBill * 0.15; // Admin also gets 15%
-      } else if (scheme === 'vika_ie_7') {
-        partnerCommission = 0;
-        debt = 0;
       } else {
         // Partner schemes
         let commissionRate: number;

@@ -479,6 +479,17 @@ export const invoiceService = {
   }): Promise<any> {
     return apiPost("/partner-payments", payment);
   },
+
+  async getPartnerDebtSummaries(): Promise<{
+    partnerId: string;
+    partnerName: string;
+    totalToTransfer: number;
+    totalPaid: number;
+    remaining: number;
+    invoiceCount: number;
+  }[]> {
+    return apiGet("/partner-debt");
+  },
 };
 
 export default invoiceService;

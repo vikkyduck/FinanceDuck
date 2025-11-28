@@ -104,10 +104,6 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
           dbScheme = 'commission_based';
           commissionRate = 15;
           break;
-        case 'vika_ie_7':
-          dbScheme = 'commission_based';
-          commissionRate = 7;
-          break;
         case 'custom':
           dbScheme = 'commission_based';
           const customRate = parseFloat(partnerCommissionRate);
@@ -278,21 +274,12 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                               rate="15%"
                             />
                             <SchemeCard
-                              value="vika_ie_7"
-                              selected={scheme === "vika_ie_7"}
-                              onSelect={() => setScheme("vika_ie_7")}
-                              icon="user"
-                              title="Партнерское 7% (Vika IE)"
-                              description="Специальная схема для ИП"
-                              rate="7%"
-                            />
-                            <SchemeCard
                               value="custom"
                               selected={scheme === "custom"}
                               onSelect={() => setScheme("custom")}
                               icon="settings"
                               title="Индивидуальная ставка"
-                              description="Установите свой процент"
+                              description="Установите свой процент комиссии"
                             />
                           </>
                         )}

@@ -49,7 +49,7 @@ export const RecordPaymentDialog = ({
         const invoices = await invoiceService.fetchInvoices(partnerId);
         
         const options = invoices.map((inv: InvoiceListItem) => {
-          const isMarginScheme = ['agency_30', 'partner_10', 'partner_15', 'vika_ie_7'].includes(inv.scheme);
+          const isMarginScheme = ['agency_30', 'partner_10', 'partner_15'].includes(inv.scheme);
           const toTransfer = isMarginScheme
             ? (Number(inv.admin_share_from_margin) || 0)
             : (Number(inv.commission_amount) || 0);

@@ -932,13 +932,40 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // Include ALL partners, not just those with debt
+    const allPartners = await db.select().from(partners);
+    
+    for (const partner of allPartners) {
+      if (!partnerMap.has(partner.id)) {
+        partnerMap.set(partner.id, {
+          partnerId: partner.id,
+          partnerName: partner.name,
+          totalToTransfer: 0,
+          totalPaid: 0,
+          remaining: 0,
+          invoiceCount: 0,
+        });
+      }
+    }
+    
+    // Add payments even for partners without invoices
+    for (const payment of allPayments) {
+      if (partnerMap.has(payment.partnerId)) {
+        const summary = partnerMap.get(payment.partnerId)!;
+        // Already added above, but ensure we capture all payments
+      }
+    }
+
     return Array.from(partnerMap.values())
       .map(s => ({
         ...s,
         remaining: Math.max(0, s.totalToTransfer - s.totalPaid),
       }))
-      .filter(s => s.totalToTransfer > 0)
-      .sort((a, b) => b.remaining - a.remaining);
+      .sort((a, b) => {
+        // Sort by remaining debt descending, then by name
+        if (b.remaining !== a.remaining) return b.remaining - a.remaining;
+        return a.partnerName.localeCompare(b.partnerName);
+      });
   }
 
   async getDoNotSpendData(): Promise<{
@@ -1007,6 +1034,161 @@ export class DatabaseStorage implements IStorage {
       }))
       .filter(s => s.totalBudget > 0)
       .sort((a, b) => b.remaining - a.remaining);
+  }
+  
+  async getPartnerDebtDetails(partnerId: string): Promise<{
+    summary: {
+      totalDebt: number;
+      totalPaid: number;
+      remainingDebt: number;
+      invoiceCount: number;
+    };
+    invoices: Array<{
+      id: string;
+      invoiceNumber: string;
+      scheme: string;
+      clientBill: number;
+      partnerCommission: number;
+      amountToAdmin: number;
+      expensesByPartner: number;
+      expensesByAdmin: number;
+    }>;
+    payments: Array<{
+      id: string;
+      amount: string;
+      paymentDate: string;
+      notes: string | null;
+      invoiceNumber: string | null;
+    }>;
+  }> {
+    // Get partner's paid invoices
+    const partnerInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.status, 'paid')
+      ));
+    
+    // Get all expenses for these invoices
+    const allExpenses = await db.select().from(invoiceExpenses);
+    const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
+    
+    for (const exp of allExpenses) {
+      if (!expensesByInvoice.has(exp.invoiceId)) {
+        expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
+      }
+      const amounts = expensesByInvoice.get(exp.invoiceId)!;
+      const amount = parseFloat(exp.amount);
+      if (exp.paidByAdmin) {
+        amounts.byAdmin += amount;
+      } else {
+        amounts.byPartner += amount;
+      }
+    }
+    
+    // Get partner payments
+    const partnerPaymentsList = await db
+      .select()
+      .from(partnerPayments)
+      .where(eq(partnerPayments.partnerId, partnerId))
+      .orderBy(partnerPayments.paymentDate);
+    
+    // Calculate totals and prepare invoice details
+    let totalDebt = 0;
+    const invoiceDetails: Array<{
+      id: string;
+      invoiceNumber: string;
+      scheme: string;
+      clientBill: number;
+      partnerCommission: number;
+      amountToAdmin: number;
+      expensesByPartner: number;
+      expensesByAdmin: number;
+    }> = [];
+    
+    for (const row of partnerInvoices) {
+      if (!row.calculations) continue;
+      
+      const scheme = row.invoice.scheme;
+      const cBill = parseFloat(row.calculations.clientBill || "0");
+      const expenses = expensesByInvoice.get(row.invoice.id) || { byPartner: 0, byAdmin: 0 };
+      let partnerCommission = 0;
+      let debt = 0;
+      
+      if (scheme === 'agency_30') {
+        partnerCommission = cBill * 0.15; // Partner gets 15%
+        debt = cBill * 0.15; // Admin also gets 15%
+      } else if (scheme === 'vika_ie_7') {
+        partnerCommission = 0;
+        debt = 0;
+      } else {
+        // Partner schemes
+        let commissionRate: number;
+        if (scheme === 'partner_10') {
+          commissionRate = 0.10;
+        } else if (scheme === 'partner_15') {
+          commissionRate = 0.15;
+        } else {
+          const comm = parseFloat(row.calculations.commissionAmount || "0");
+          commissionRate = cBill > 0 ? comm / cBill : 0.10;
+        }
+        partnerCommission = cBill * commissionRate;
+        debt = cBill - partnerCommission - expenses.byPartner;
+      }
+      
+      totalDebt += debt;
+      
+      invoiceDetails.push({
+        id: row.invoice.id,
+        invoiceNumber: row.invoice.invoiceNumber,
+        scheme: scheme,
+        clientBill: cBill,
+        partnerCommission,
+        amountToAdmin: debt,
+        expensesByPartner: expenses.byPartner,
+        expensesByAdmin: expenses.byAdmin,
+      });
+    }
+    
+    // Calculate total paid
+    const totalPaid = partnerPaymentsList.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    
+    // Map payments with invoice numbers
+    const paymentDetails = await Promise.all(
+      partnerPaymentsList.map(async (p) => {
+        let invoiceNumber: string | null = null;
+        if (p.invoiceId) {
+          const inv = await db.select({ invoiceNumber: invoices.invoiceNumber })
+            .from(invoices)
+            .where(eq(invoices.id, p.invoiceId))
+            .limit(1);
+          invoiceNumber = inv[0]?.invoiceNumber || null;
+        }
+        return {
+          id: p.id,
+          amount: p.amount,
+          paymentDate: p.paymentDate,
+          notes: p.notes,
+          invoiceNumber,
+        };
+      })
+    );
+    
+    return {
+      summary: {
+        totalDebt,
+        totalPaid,
+        remainingDebt: Math.max(0, totalDebt - totalPaid),
+        invoiceCount: invoiceDetails.length,
+      },
+      invoices: invoiceDetails,
+      payments: paymentDetails,
+    };
   }
 }
 

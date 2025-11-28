@@ -699,13 +699,40 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/partner-debt", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/partner-debt", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const role = req.user?.role;
+      
       const summaries = await storage.getPartnerDebtSummaries();
+      
+      // If partner, filter to only their own data
+      if (role === "partner") {
+        const partnerId = req.user?.partnerId;
+        const filtered = summaries.filter(s => s.partnerId === partnerId);
+        return res.json(filtered);
+      }
+      
+      // Admin sees all
       res.json(summaries);
     } catch (error) {
       console.error("Get partner debt error:", error);
       res.status(500).json({ error: "Failed to get partner debt data" });
+    }
+  });
+  
+  // Get partner's own debt details (for partner dashboard)
+  app.get("/api/my-debt", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(400).json({ error: "Partner ID not found in session" });
+      }
+      
+      const debtDetails = await storage.getPartnerDebtDetails(partnerId);
+      res.json(debtDetails);
+    } catch (error) {
+      console.error("Get my debt error:", error);
+      res.status(500).json({ error: "Failed to get debt details" });
     }
   });
 

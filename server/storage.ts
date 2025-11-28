@@ -167,6 +167,13 @@ export interface IStorage {
   createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment>;
   getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number }>;
   markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
+  
+  // Signed acts methods
+  createSignedAct(act: InsertSignedAct): Promise<SignedAct>;
+  getSignedActsByInvoice(invoiceId: string, actType?: ActType): Promise<SignedAct[]>;
+  getSignedAct(id: string): Promise<SignedAct | null>;
+  deleteSignedAct(id: string): Promise<void>;
+  getActsStatistics(excludeHidden?: boolean): Promise<{ executorActs: number; companyActs: number; totalPaidInvoices: number }>;
 }
 
 export interface MonthlyData {

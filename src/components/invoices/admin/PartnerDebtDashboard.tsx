@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { PartnerDebtCard } from "./PartnerDebtCard";
 import { PartnerInvoicesDetail } from "./PartnerInvoicesDetail";
+import { PartnerPaymentHistory } from "../partner/PartnerPaymentHistory";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Users, FileText, History } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
@@ -191,11 +193,32 @@ export const PartnerDebtDashboard = ({
               onExpand={() => handleExpand(summary.partnerId)}
               isExpanded={expandedPartnerId === summary.partnerId}
             >
-              <PartnerInvoicesDetail
-                partnerId={summary.partnerId}
-                partnerName={summary.partnerName}
-                onPaymentRecorded={fetchData}
-              />
+              <Tabs defaultValue="payments" className="mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="payments" className="flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    История платежей
+                  </TabsTrigger>
+                  <TabsTrigger value="invoices" className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Счета
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="payments" className="mt-4">
+                  <PartnerPaymentHistory 
+                    partnerId={summary.partnerId} 
+                    showTitle={false}
+                    compact={true}
+                  />
+                </TabsContent>
+                <TabsContent value="invoices" className="mt-4">
+                  <PartnerInvoicesDetail
+                    partnerId={summary.partnerId}
+                    partnerName={summary.partnerName}
+                    onPaymentRecorded={fetchData}
+                  />
+                </TabsContent>
+              </Tabs>
             </PartnerDebtCard>
           ))}
         </div>

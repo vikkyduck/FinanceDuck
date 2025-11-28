@@ -822,6 +822,42 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Get partner payment history with running balance
+  // Accessible by admin (for any partner) and partner (for own history)
+  app.get("/api/partners/:id/payment-history", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.params.id;
+      const role = req.user?.role;
+      
+      // Partner can only view their own history
+      if (role === "partner" && req.user?.partnerId !== partnerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const history = await storage.getPartnerPaymentHistory(partnerId);
+      res.json(history);
+    } catch (error) {
+      console.error("Get partner payment history error:", error);
+      res.status(500).json({ error: "Failed to get payment history" });
+    }
+  });
+
+  // Get my own payment history (for partner dashboard)
+  app.get("/api/my-payment-history", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(400).json({ error: "Partner ID not found in session" });
+      }
+      
+      const history = await storage.getPartnerPaymentHistory(partnerId);
+      res.json(history);
+    } catch (error) {
+      console.error("Get my payment history error:", error);
+      res.status(500).json({ error: "Failed to get payment history" });
+    }
+  });
+
   app.get("/api/do-not-spend", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const data = await storage.getDoNotSpendData();

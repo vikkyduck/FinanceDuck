@@ -6,7 +6,6 @@ import { PartnerInvoicesList } from "./partner/PartnerInvoicesList";
 import { PartnerStats } from "./partner/PartnerStats";
 import { PartnerTerms } from "./partner/PartnerTerms";
 import { OverduePaymentsAlert } from "./shared/OverduePaymentsAlert";
-import { PartnerPaymentsList } from "./partner/PartnerPaymentsList";
 import { PartnerAgency30Report } from "./partner/PartnerAgency30Report";
 import { PartnerCommissionReport } from "./partner/PartnerCommissionReport";
 import { PartnerClientStats } from "./partner/PartnerClientStats";
@@ -18,6 +17,7 @@ import { showSuccess } from "@/lib/errorHandler";
 import { PartnerDebtTrafficLight } from "./partner/PartnerDebtTrafficLight";
 import { PartnerDocumentRiskLight } from "./partner/PartnerDocumentRiskLight";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
+import { PartnerPaymentHistory } from "./partner/PartnerPaymentHistory";
 
 export const PartnerDashboard = () => {
   const navigate = useNavigate();
@@ -62,7 +62,7 @@ export const PartnerDashboard = () => {
 
         <PartnerAgency30Report />
 
-        {partnerId && <DoNotSpendDashboard partnerId={partnerId} />}
+        <DoNotSpendDashboard />
 
         <PartnerCommissionReport />
 
@@ -70,14 +70,7 @@ export const PartnerDashboard = () => {
 
         <PartnerVirtualStatement />
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-2xl">Платежи админу</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PartnerPaymentsList />
-          </CardContent>
-        </Card>
+        <PartnerPaymentHistory showTitle={true} />
 
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4">

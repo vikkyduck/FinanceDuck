@@ -141,6 +141,7 @@ export interface IStorage {
   
   getPartnerPayments(partnerId?: string): Promise<PartnerPayment[]>;
   createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment>;
+  getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]>;
   
   getAccessTokens(): Promise<AccessToken[]>;
   createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string): Promise<AccessToken>;
@@ -186,6 +187,14 @@ export interface OverdueInvoice {
   partnerName: string;
   amount: number;
   daysOverdue: number;
+}
+
+export interface PaymentHistoryEntry {
+  id: string;
+  paymentDate: string;
+  amount: number;
+  notes: string | null;
+  runningBalance: number;
 }
 
 export interface PlanFactData {
@@ -724,6 +733,101 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]> {
+    // Get all partner's paid invoices to calculate total debt
+    const paidInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.status, 'paid')
+      ));
+
+    // Get expenses by invoice
+    const allExpenses = await db.select().from(invoiceExpenses);
+    const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
+    for (const exp of allExpenses) {
+      if (!expensesByInvoice.has(exp.invoiceId)) {
+        expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
+      }
+      const amounts = expensesByInvoice.get(exp.invoiceId)!;
+      const amount = parseFloat(exp.amount);
+      if (exp.paidByAdmin) {
+        amounts.byAdmin += amount;
+      } else {
+        amounts.byPartner += amount;
+      }
+    }
+
+    // Calculate total debt - use same logic as getPartnerDebtSummaries
+    let totalDebt = 0;
+    for (const r of paidInvoices) {
+      const scheme = r.invoice.scheme;
+      // Use clientBill from calculations if available, otherwise from invoice
+      const clientBill = r.calculations 
+        ? parseFloat(r.calculations.clientBill || "0")
+        : 0;
+      
+      if (clientBill === 0) continue; // Skip invoices without amount
+      
+      const expenses = expensesByInvoice.get(r.invoice.id) || { byPartner: 0, byAdmin: 0 };
+
+      if (scheme === 'agency_30') {
+        // Agency 30%: Partner owes admin 15% (fixed)
+        totalDebt += clientBill * 0.15;
+      } else {
+        // partner_10, partner_15, commission_based
+        // Use scheme-defined rates, not calculated from commissionAmount
+        let commissionRate: number;
+        if (scheme === 'partner_10') {
+          commissionRate = 0.10;
+        } else if (scheme === 'partner_15') {
+          commissionRate = 0.15;
+        } else if (r.calculations?.commissionRate) {
+          // commission_based: use stored commission rate
+          commissionRate = parseFloat(r.calculations.commissionRate) / 100;
+        } else if (r.calculations?.commissionAmount && clientBill > 0) {
+          // Fallback: derive rate from stored commission amount
+          const comm = parseFloat(r.calculations.commissionAmount);
+          commissionRate = comm / clientBill;
+        } else {
+          // Last resort: use partner's default rate or 15%
+          commissionRate = 0.15;
+        }
+        const partnerCommission = clientBill * commissionRate;
+        totalDebt += clientBill - partnerCommission - expenses.byPartner;
+      }
+    }
+
+    // Get all payments sorted by date ascending
+    const payments = await db.select().from(partnerPayments)
+      .where(eq(partnerPayments.partnerId, partnerId))
+      .orderBy(partnerPayments.paymentDate);
+
+    // Calculate running balance (allow negative for overpayments)
+    let runningBalance = totalDebt;
+    const history: PaymentHistoryEntry[] = [];
+    
+    for (const payment of payments) {
+      const amount = parseFloat(payment.amount);
+      runningBalance -= amount;
+      history.push({
+        id: payment.id,
+        paymentDate: payment.paymentDate,
+        amount,
+        notes: payment.notes,
+        runningBalance, // Allow negative to show overpayments
+      });
+    }
+
+    // Return in reverse chronological order (newest first)
+    return history.reverse();
+  }
+
   async getAccessTokens(): Promise<(AccessToken & { partnerName?: string; clientName?: string })[]> {
     const results = await db
       .select({
@@ -836,19 +940,49 @@ export class DatabaseStorage implements IStorage {
       const payments = await this.getPartnerPayments(partnerId);
       const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
       
+      // Get expenses by invoice to calculate partner-paid expenses
+      const allExpenses = await db.select().from(invoiceExpenses);
+      const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
+      for (const exp of allExpenses) {
+        if (!expensesByInvoice.has(exp.invoiceId)) {
+          expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
+        }
+        const amounts = expensesByInvoice.get(exp.invoiceId)!;
+        const amount = parseFloat(exp.amount);
+        if (exp.paidByAdmin) {
+          amounts.byAdmin += amount;
+        } else {
+          amounts.byPartner += amount;
+        }
+      }
+      
       let debtToAdmin = 0;
       for (const r of results) {
         if (r.invoice.status === 'paid' && r.calculations) {
           const scheme = r.invoice.scheme;
           const clientBill = parseFloat(r.calculations.clientBill || "0");
+          const expenses = expensesByInvoice.get(r.invoice.id) || { byPartner: 0, byAdmin: 0 };
           
           if (scheme === 'agency_30') {
-            // Agency 30%: Partner owes admin their 15% share (adminShareFromMargin)
-            debtToAdmin += parseFloat(r.calculations.adminShareFromMargin || "0");
+            // Agency 30%: Partner owes admin their 15% share (fixed)
+            // Expenses come from client's 70% budget, don't affect partner's debt
+            debtToAdmin += clientBill * 0.15;
           } else {
             // partner_10, partner_15, commission_based:
-            // Partner owes admin: clientBill - commission (amountToAdmin)
-            debtToAdmin += parseFloat(r.calculations.amountToAdmin || "0");
+            // Partner debt = clientBill - commission - expensesPaidByPartner
+            // Expenses paid by admin do NOT reduce partner's debt
+            let commissionRate: number;
+            if (scheme === 'partner_10') {
+              commissionRate = 0.10;
+            } else if (scheme === 'partner_15') {
+              commissionRate = 0.15;
+            } else {
+              // commission_based - calculate from stored commission
+              const comm = parseFloat(r.calculations.commissionAmount || "0");
+              commissionRate = clientBill > 0 ? comm / clientBill : 0.10;
+            }
+            const partnerCommission = clientBill * commissionRate;
+            debtToAdmin += clientBill - partnerCommission - expenses.byPartner;
           }
         }
       }

@@ -34,7 +34,7 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!roleLoading && role === 'admin') {
+    if (!roleLoading && (role === 'admin' || role === 'assistant')) {
       navigate('/invoices', { replace: true });
       return;
     }

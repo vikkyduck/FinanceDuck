@@ -104,6 +104,16 @@ This project is an invoice management system migrating from Supabase to Replit w
 - Unlimited links (no storage limit), files up to 10MB each
 - JSON body limit increased to 20MB for base64 file uploads
 
+**Real-Time Sync System (2025-11-28):**
+- 30-second polling for acts, bonus stats, and payment history
+- Visibility-based refresh: data refreshes instantly when tab regains focus
+- Symmetric cache invalidation: actions by any role update all related queries
+- Components affected:
+  - SignedActsSection: Acts visible to admin/partner within 30s of assistant upload
+  - AssistantBonusCard: Stats and payment history with polling + visibility refresh
+  - AssistantBonusManager: Admin bonus view syncs with assistant actions
+- Visual indicators: spinning RefreshCw icon during background data fetch
+
 **Partner Debt Calculation Fix (2025-11-28):**
 - Debt = clientBill - commission - expensesPaidByPartner (NOT expensesPaidByAdmin)
 - For agency_30: debt = 15% of clientBill (fixed admin share)

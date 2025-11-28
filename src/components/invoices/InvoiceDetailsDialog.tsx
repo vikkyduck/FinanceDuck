@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
@@ -23,6 +24,7 @@ import { SignedActsSection } from "./SignedActsSection";
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, getDocumentTypeLabel, formatFileSize, UserRole } from "@/lib/invoicePermissions";
 import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
 import { InvoiceWaterfallChart } from "./InvoiceWaterfallChart";
 import { CatShareBadge } from "./CatShareBadge";
 import {
@@ -85,6 +87,10 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   const [clientBillEdit, setClientBillEdit] = useState<number | ''>('');
   const [updatingClientBill, setUpdatingClientBill] = useState(false);
 
+  // Состояние для скрытия от ассистента (только для админа)
+  const [hideFromAssistant, setHideFromAssistant] = useState(false);
+  const [updatingHideFromAssistant, setUpdatingHideFromAssistant] = useState(false);
+
   useEffect(() => {
     if (open && invoiceId) {
       fetchInvoiceDetails();
@@ -123,6 +129,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
       const bill = calc?.client_bill ?? invoice.client_bill ?? 0;
       setClientBillEdit(bill);
+      setHideFromAssistant(invoice.hidden_from_assistant || false);
     }
   }, [invoice]);
 
@@ -507,6 +514,36 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     }
   };
 
+  const handleToggleHideFromAssistant = async (newValue: boolean) => {
+    if (!invoiceId) return;
+    
+    setUpdatingHideFromAssistant(true);
+    
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { hideFromAssistant: newValue });
+      setHideFromAssistant(newValue);
+      
+      // Invalidate invoices cache so lists update immediately
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+      
+      toast({
+        title: "Успешно",
+        description: newValue 
+          ? "Счёт скрыт от ассистента" 
+          : "Счёт виден ассистенту",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Ошибка",
+        description: error.message ?? "Не удалось обновить настройку",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingHideFromAssistant(false);
+    }
+  };
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: "Черновик",
@@ -598,6 +635,29 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                   <p className="text-sm text-muted-foreground">Статус</p>
                   <p className="font-medium">{getStatusLabel(invoice.status)}</p>
                 </div>
+
+                {/* Скрыть от ассистента - только для админа */}
+                {userRole === 'admin' && (
+                  <div className="col-span-2 pt-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="hide-from-assistant" className="text-sm font-medium">
+                          Скрыть от ассистента
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Ассистент не увидит этот счёт в списке
+                        </p>
+                      </div>
+                      <Switch
+                        id="hide-from-assistant"
+                        checked={hideFromAssistant}
+                        onCheckedChange={handleToggleHideFromAssistant}
+                        disabled={updatingHideFromAssistant}
+                        data-testid="switch-hide-from-assistant"
+                      />
+                    </div>
+                  </div>
+                )}
                 
                 {/* Условия сотрудничества - только для партнёра и админа */}
                 {(userRole === 'partner' || userRole === 'admin') && (

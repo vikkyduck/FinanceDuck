@@ -6,7 +6,7 @@ import {
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType
 } from "../shared/schema";
-import { eq, and, desc, isNull, gte, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, isNull, gte, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 /**
@@ -519,8 +519,13 @@ export class DatabaseStorage implements IStorage {
     } else if (role === 'client' && clientId) {
       results = await baseQuery.where(eq(invoices.clientId, clientId));
     } else if (role === 'assistant') {
-      // Filter out invoices hidden from assistant
-      results = await baseQuery.where(eq(invoices.hideFromAssistant, false));
+      // Filter out invoices hidden from assistant (allow NULL or false)
+      results = await baseQuery.where(
+        or(
+          isNull(invoices.hideFromAssistant),
+          eq(invoices.hideFromAssistant, false)
+        )
+      );
     } else {
       results = await baseQuery;
     }
@@ -1908,7 +1913,10 @@ export class DatabaseStorage implements IStorage {
     const visibleCondition = excludeHidden
       ? and(
           eq(invoices.status, 'paid'),
-          sql`(${invoices.hiddenFromAssistant} IS NULL OR ${invoices.hiddenFromAssistant} = false)`
+          or(
+            isNull(invoices.hideFromAssistant),
+            eq(invoices.hideFromAssistant, false)
+          )
         )
       : eq(invoices.status, 'paid');
     

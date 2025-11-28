@@ -110,13 +110,7 @@ export const UnifiedInvoicesList = ({
 
       console.log('[UnifiedInvoicesList] API returned data:', data.length, 'invoices');
       
-      let processed = data;
-
-      if (role === 'assistant') {
-        processed = processed.filter((inv: any) => !inv.hidden_from_assistant);
-      }
-
-      const mappedInvoices = processed.map((inv: any) => ({
+      const mappedInvoices = data.map((inv: any) => ({
         id: inv.id,
         invoice_number: inv.invoiceNumber,
         client_id: inv.clientId,

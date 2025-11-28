@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2, FileText } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AdminInvoicesList } from "./admin/AdminInvoicesList";
@@ -28,18 +28,17 @@ import { useViewMode } from "@/hooks/useViewMode";
 import { useCollapsibleSections } from "@/hooks/useCollapsibleSections";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
-import { showSuccess } from "@/lib/errorHandler";
 import { getTimeBasedGreeting } from "@/lib/greetingUtils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useQueryClient } from "@tanstack/react-query";
+import { useInvalidateAllDashboards, useAdminDashboardRefresh } from "@/hooks/useAdminDashboardRefresh";
 
 export const AdminDashboard = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const queryClient = useQueryClient();
+  const invalidateAllDashboards = useInvalidateAllDashboards();
+  useAdminDashboardRefresh();
   const { viewMode, setViewMode } = useViewMode();
   const [searchParams] = useSearchParams();
   const showAlerts = searchParams.get('alerts') === 'true';
@@ -300,8 +299,7 @@ export const AdminDashboard = () => {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['invoices'] });
-          queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+          invalidateAllDashboards();
         }}
       />
       <ManagePartnersDialog 

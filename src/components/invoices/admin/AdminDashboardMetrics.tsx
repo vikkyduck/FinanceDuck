@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiGet } from "@/lib/api";
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -47,7 +48,9 @@ const formatCurrency = (amount: number) => {
 export const AdminDashboardMetrics = () => {
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard-stats"],
+    queryFn: () => apiGet<DashboardStats>("/admin/dashboard-stats"),
     refetchInterval: 30000,
+    staleTime: 10000,
   });
 
   if (isLoading) {

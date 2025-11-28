@@ -94,6 +94,16 @@ This project is an invoice management system migrating from Supabase to Replit w
 - AssistantBonusCard: Updated to show payment history to assistant
 - Bonus rates: Executor acts = 1000 RUB, Company acts = 2000 RUB
 
+**Signed Acts with Link Support (2025-11-28):**
+- Schema: signedActs table updated with `isLink` (boolean) and `url` (text) fields
+- fileData and mimeType now nullable to support link-only acts
+- API: POST /api/invoices/:id/acts accepts both file uploads and link-based acts
+- UI: SignedActsSection shows distinct icons for files vs links
+- Links open in new tab, files download as before
+- Both file and link acts count towards assistant bonuses
+- Unlimited links (no storage limit), files up to 10MB each
+- JSON body limit increased to 20MB for base64 file uploads
+
 **Partner Debt Calculation Fix (2025-11-28):**
 - Debt = clientBill - commission - expensesPaidByPartner (NOT expensesPaidByAdmin)
 - For agency_30: debt = 15% of clientBill (fixed admin share)

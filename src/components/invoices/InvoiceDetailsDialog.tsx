@@ -24,7 +24,7 @@ import { SignedActsSection } from "./SignedActsSection";
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, getDocumentTypeLabel, formatFileSize, UserRole } from "@/lib/invoicePermissions";
 import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
-import { queryClient } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 import { InvoiceWaterfallChart } from "./InvoiceWaterfallChart";
 import { CatShareBadge } from "./CatShareBadge";
 import {
@@ -48,6 +48,7 @@ interface InvoiceDetailsDialogProps {
 
 export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = false, userRole = 'client' }: InvoiceDetailsDialogProps) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [invoice, setInvoice] = useState<any>(null);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);

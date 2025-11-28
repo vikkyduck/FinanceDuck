@@ -40,10 +40,12 @@ function calculateInvoiceServer(
       break;
     }
     case 'partner_10': {
+      // Расходы оплачиваются партнером из денег клиента
+      // netProfitAdmin = amountToAdmin (ФИКСИРОВАННАЯ, расходы - проблема партнера)
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      const netProfitAdmin = amountToAdmin; // НЕ вычитаем расходы
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -54,10 +56,12 @@ function calculateInvoiceServer(
       break;
     }
     case 'partner_15': {
+      // Расходы оплачиваются партнером из денег клиента
+      // netProfitAdmin = amountToAdmin (ФИКСИРОВАННАЯ, расходы - проблема партнера)
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      const netProfitAdmin = amountToAdmin; // НЕ вычитаем расходы
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -69,10 +73,12 @@ function calculateInvoiceServer(
     }
     case 'commission_based':
     default: {
+      // Расходы оплачиваются партнером из денег клиента
+      // netProfitAdmin = amountToAdmin (ФИКСИРОВАННАЯ)
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      const netProfitAdmin = amountToAdmin; // НЕ вычитаем расходы
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();

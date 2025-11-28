@@ -73,13 +73,14 @@ export function calculateInvoice(
       // Клиент платит: X
       // Комиссия партнера: X × 0.10
       // Партнер переводит админу: X × 0.90
-      // Расходы на исполнителей: Y
-      // Чистая прибыль админа: (X × 0.90) - Y
+      // ВАЖНО: Расходы оплачиваются партнером из денег клиента
+      // Чистая прибыль админа: X × 0.90 (ФИКСИРОВАННАЯ, расходы - проблема партнера)
       
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      // netProfitAdmin = amountToAdmin (расходы не вычитаются - они оплачиваются партнером)
+      const netProfitAdmin = amountToAdmin;
       
       calculations = {
         ...calculations,
@@ -98,13 +99,14 @@ export function calculateInvoice(
       // Клиент платит: X
       // Комиссия партнера: X × 0.15
       // Партнер переводит админу: X × 0.85
-      // Расходы на исполнителей: Y
-      // Чистая прибыль админа: (X × 0.85) - Y
+      // ВАЖНО: Расходы оплачиваются партнером из денег клиента
+      // Чистая прибыль админа: X × 0.85 (ФИКСИРОВАННАЯ, расходы - проблема партнера)
       
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      // netProfitAdmin = amountToAdmin (расходы не вычитаются - они оплачиваются партнером)
+      const netProfitAdmin = amountToAdmin;
       
       calculations = {
         ...calculations,
@@ -124,13 +126,14 @@ export function calculateInvoice(
       // Клиент платит: X
       // Комиссия партнера: X × (rate / 100)
       // Партнер переводит админу: X × (1 - rate / 100)
-      // Расходы на исполнителей: Y
-      // Чистая прибыль админа: (X × (1 - rate / 100)) - Y
+      // ВАЖНО: Расходы оплачиваются партнером из денег клиента
+      // Чистая прибыль админа: X × (1 - rate / 100) (ФИКСИРОВАННАЯ)
       
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      // netProfitAdmin = amountToAdmin (расходы не вычитаются - они оплачиваются партнером)
+      const netProfitAdmin = amountToAdmin;
       
       calculations = {
         ...calculations,
@@ -149,7 +152,7 @@ export function calculateInvoice(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin - executorExpenses;
+      const netProfitAdmin = amountToAdmin;
       
       calculations = {
         ...calculations,

@@ -1,10 +1,10 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans,
-  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan,
-  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan,
-  AccessToken, UserSession, UserRole, InvoiceScheme
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs,
+  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct,
+  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct,
+  AccessToken, UserSession, UserRole, InvoiceScheme, ActType
 } from "../shared/schema";
 import { eq, and, desc, isNull, gte, sql, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
@@ -518,6 +518,9 @@ export class DatabaseStorage implements IStorage {
       results = await baseQuery.where(eq(invoices.partnerId, partnerId));
     } else if (role === 'client' && clientId) {
       results = await baseQuery.where(eq(invoices.clientId, clientId));
+    } else if (role === 'assistant') {
+      // Filter out invoices hidden from assistant
+      results = await baseQuery.where(eq(invoices.hideFromAssistant, false));
     } else {
       results = await baseQuery;
     }
@@ -1866,6 +1869,104 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { updated, errors };
+  }
+
+  // Signed Acts methods
+  async createSignedAct(act: InsertSignedAct): Promise<SignedAct> {
+    const [created] = await db.insert(signedActs).values(act).returning();
+    return created;
+  }
+
+  async getSignedActsByInvoice(invoiceId: string, actType?: ActType): Promise<SignedAct[]> {
+    if (actType) {
+      return await db.select().from(signedActs)
+        .where(and(
+          eq(signedActs.invoiceId, invoiceId),
+          eq(signedActs.actType, actType)
+        ))
+        .orderBy(desc(signedActs.createdAt));
+    }
+    return await db.select().from(signedActs)
+      .where(eq(signedActs.invoiceId, invoiceId))
+      .orderBy(desc(signedActs.createdAt));
+  }
+
+  async getSignedAct(id: string): Promise<SignedAct | null> {
+    const [act] = await db.select().from(signedActs).where(eq(signedActs.id, id)).limit(1);
+    return act || null;
+  }
+
+  async deleteSignedAct(id: string): Promise<void> {
+    await db.delete(signedActs).where(eq(signedActs.id, id));
+  }
+
+  async getActsStatistics(excludeHidden: boolean = false): Promise<{
+    executorActs: number;
+    companyActs: number;
+    totalPaidInvoices: number;
+  }> {
+    const visibleCondition = excludeHidden
+      ? and(
+          eq(invoices.status, 'paid'),
+          sql`(${invoices.hiddenFromAssistant} IS NULL OR ${invoices.hiddenFromAssistant} = false)`
+        )
+      : eq(invoices.status, 'paid');
+    
+    const paidInvoicesCount = await db.select({ count: sql<number>`count(*)` })
+      .from(invoices)
+      .where(visibleCondition);
+    
+    const visibleInvoices = await db.select({ id: invoices.id })
+      .from(invoices)
+      .where(visibleCondition);
+    const visibleInvoiceIds = visibleInvoices.map(inv => inv.id.toString());
+    
+    let executorActsCount = 0;
+    let companyActsCount = 0;
+    
+    if (visibleInvoiceIds.length > 0) {
+      const executorResult = await db.select({ count: sql<number>`count(*)` })
+        .from(signedActs)
+        .where(and(
+          eq(signedActs.actType, 'executor'),
+          inArray(signedActs.invoiceId, visibleInvoiceIds)
+        ));
+      executorActsCount = Number(executorResult[0]?.count || 0);
+      
+      const companyResult = await db.select({ count: sql<number>`count(*)` })
+        .from(signedActs)
+        .where(and(
+          eq(signedActs.actType, 'company'),
+          inArray(signedActs.invoiceId, visibleInvoiceIds)
+        ));
+      companyActsCount = Number(companyResult[0]?.count || 0);
+    }
+    
+    return {
+      executorActs: executorActsCount,
+      companyActs: companyActsCount,
+      totalPaidInvoices: Number(paidInvoicesCount[0]?.count || 0),
+    };
+  }
+
+  async getAssistantStats(): Promise<{
+    paidInvoicesCount: number;
+    executorActsCount: number;
+    companyActsCount: number;
+    totalPaidInvoices: number;
+    assistantBonus: number;
+  }> {
+    const stats = await this.getActsStatistics(true);
+    
+    const assistantBonus = (stats.executorActs * 1000) + (stats.companyActs * 2000);
+    
+    return {
+      paidInvoicesCount: stats.totalPaidInvoices,
+      executorActsCount: stats.executorActs,
+      companyActsCount: stats.companyActs,
+      totalPaidInvoices: stats.totalPaidInvoices,
+      assistantBonus,
+    };
   }
 }
 

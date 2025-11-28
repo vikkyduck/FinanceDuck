@@ -3,6 +3,7 @@ import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index }
 export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client']);
 export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'commission_based']);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'cancelled']);
+export const actTypeEnum = pgEnum('act_type', ['executor', 'company']);
 
 export const partners = pgTable("partners", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -78,6 +79,7 @@ export const invoices = pgTable("invoices", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   paymentDate: date("payment_date"),
   notes: text("notes"),
+  hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
 });
 
 export const invoiceCalculations = pgTable("invoice_calculations", {
@@ -125,6 +127,20 @@ export const partnerPayments = pgTable("partner_payments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const signedActs = pgTable("signed_acts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  actType: actTypeEnum("act_type").notNull(),
+  fileName: text("file_name").notNull(),
+  fileData: text("file_data").notNull(),
+  mimeType: text("mime_type").notNull(),
+  uploadedBy: uuid("uploaded_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_signed_acts_invoice").on(table.invoiceId),
+  index("idx_signed_acts_type").on(table.actType),
+]);
+
 export const monthlyFinancialPlans = pgTable("monthly_financial_plans", {
   id: uuid("id").defaultRandom().primaryKey(),
   year: numeric("year", { precision: 4, scale: 0 }).notNull(),
@@ -153,8 +169,11 @@ export type PartnerPayment = typeof partnerPayments.$inferSelect;
 export type InsertPartnerPayment = typeof partnerPayments.$inferInsert;
 export type MonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferSelect;
 export type InsertMonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferInsert;
+export type SignedAct = typeof signedActs.$inferSelect;
+export type InsertSignedAct = typeof signedActs.$inferInsert;
 export type AccessToken = typeof accessTokens.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
 export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'commission_based';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
+export type ActType = 'executor' | 'company';

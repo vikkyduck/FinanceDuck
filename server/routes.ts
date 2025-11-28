@@ -618,6 +618,11 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Invoice not found" });
       }
       
+      // Assistant cannot see invoices hidden from them
+      if (role === "assistant" && invoice.hideFromAssistant) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
       if (role === "partner" && invoice.partnerId !== req.user?.partnerId) {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -908,6 +913,137 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Delete token error:", error);
       res.status(500).json({ error: "Failed to delete token" });
+    }
+  });
+
+  // Signed Acts API
+  app.get("/api/invoices/:id/acts", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const role = req.user?.role || "client";
+      const actType = req.query.type as string | undefined;
+      
+      // Get invoice to check access
+      const invoice = await storage.getInvoice(id);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      
+      // Check access
+      if (role === "assistant" && invoice.hideFromAssistant) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      if (role === "partner" && invoice.partnerId !== req.user?.partnerId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      if (role === "client" && invoice.clientId !== req.user?.clientId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      let acts = await storage.getSignedActsByInvoice(id, actType as any);
+      
+      // Partner and client can only see company acts, not executor acts
+      if (role === "partner" || role === "client") {
+        acts = acts.filter(a => a.actType === 'company');
+      }
+      
+      // Don't send file data in list response
+      const actsWithoutData = acts.map(({ fileData, ...rest }) => rest);
+      res.json(actsWithoutData);
+    } catch (error) {
+      console.error("Get acts error:", error);
+      res.status(500).json({ error: "Failed to get acts" });
+    }
+  });
+
+  app.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { actType, fileName, fileData, mimeType } = req.body;
+      
+      // Validate invoice exists
+      const invoice = await storage.getInvoice(id);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      
+      const act = await storage.createSignedAct({
+        invoiceId: id,
+        actType,
+        fileName,
+        fileData,
+        mimeType,
+        uploadedBy: req.user!.token.id,
+      });
+      
+      // Return without file data
+      const { fileData: _, ...actWithoutData } = act;
+      res.status(201).json(actWithoutData);
+    } catch (error) {
+      console.error("Create act error:", error);
+      res.status(500).json({ error: "Failed to upload act" });
+    }
+  });
+
+  app.get("/api/acts/:id/download", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const role = req.user?.role || "client";
+      
+      const act = await storage.getSignedAct(id);
+      if (!act) {
+        return res.status(404).json({ error: "Act not found" });
+      }
+      
+      // Check access - partner/client can only download company acts
+      if ((role === "partner" || role === "client") && act.actType === 'executor') {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      // Get invoice to check access
+      const invoice = await storage.getInvoice(act.invoiceId);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      
+      if (role === "partner" && invoice.partnerId !== req.user?.partnerId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      if (role === "client" && invoice.clientId !== req.user?.clientId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      // Return file data
+      res.json({
+        fileName: act.fileName,
+        fileData: act.fileData,
+        mimeType: act.mimeType,
+      });
+    } catch (error) {
+      console.error("Download act error:", error);
+      res.status(500).json({ error: "Failed to download act" });
+    }
+  });
+
+  app.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSignedAct(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete act error:", error);
+      res.status(500).json({ error: "Failed to delete act" });
+    }
+  });
+
+  // Assistant dashboard stats
+  app.get("/api/assistant/stats", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const stats = await storage.getAssistantStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Get assistant stats error:", error);
+      res.status(500).json({ error: "Failed to get assistant stats" });
     }
   });
 }

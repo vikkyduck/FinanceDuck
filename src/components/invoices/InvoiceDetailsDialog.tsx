@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { AddExpenseDialog } from "./assistant/AddExpenseDialog";
 import { EditExpenseDialog } from "./assistant/EditExpenseDialog";
 import { UploadDocumentDialog } from "./UploadDocumentDialog";
+import { SignedActsSection } from "./SignedActsSection";
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, getDocumentTypeLabel, formatFileSize, UserRole } from "@/lib/invoicePermissions";
 import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
@@ -1182,6 +1183,13 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                 )}
               </CardContent>
             </Card>
+
+            {/* Signed Acts Section */}
+            <SignedActsSection
+              invoiceId={invoiceId || ""}
+              userRole={userRole}
+              canEdit={canEdit}
+            />
           </div>
         </DialogContent>
       </Dialog>

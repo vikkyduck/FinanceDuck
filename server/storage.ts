@@ -1996,26 +1996,54 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[] }> {
-    const result = await db.select({
+  async getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number }> {
+    const unpaidInvoices = await db.select({
       invoiceId: invoiceCalculations.invoiceId,
-      bonusAmount: invoiceCalculations.assistantBonusActs,
-      bonusPaid: invoiceCalculations.assistantBonusPaid,
     })
     .from(invoiceCalculations)
+    .innerJoin(invoices, eq(invoices.id, invoiceCalculations.invoiceId))
     .where(
       and(
         eq(invoiceCalculations.assistantBonusPaid, false),
-        sql`COALESCE(${invoiceCalculations.assistantBonusActs}, 0) > 0`
+        eq(invoices.status, 'paid')
       )
     );
 
-    const total = result.reduce((sum, row) => 
-      sum + parseFloat(row.bonusAmount || '0'), 0
-    );
-    const invoiceIds = result.map(row => row.invoiceId);
+    const invoiceIds = unpaidInvoices.map(row => row.invoiceId);
+    
+    if (invoiceIds.length === 0) {
+      return { total: 0, invoiceCount: 0, invoiceIds: [], executorActs: 0, companyActs: 0 };
+    }
 
-    return { total, invoiceCount: result.length, invoiceIds };
+    const executorResult = await db.select({ count: sql<number>`count(*)` })
+      .from(signedActs)
+      .where(and(
+        eq(signedActs.actType, 'executor'),
+        inArray(signedActs.invoiceId, invoiceIds)
+      ));
+    const executorActs = Number(executorResult[0]?.count || 0);
+
+    const companyResult = await db.select({ count: sql<number>`count(*)` })
+      .from(signedActs)
+      .where(and(
+        eq(signedActs.actType, 'company'),
+        inArray(signedActs.invoiceId, invoiceIds)
+      ));
+    const companyActs = Number(companyResult[0]?.count || 0);
+
+    const total = (executorActs * 1000) + (companyActs * 2000);
+    
+    const invoicesWithActs = await db.selectDistinct({ invoiceId: signedActs.invoiceId })
+      .from(signedActs)
+      .where(inArray(signedActs.invoiceId, invoiceIds));
+
+    return { 
+      total, 
+      invoiceCount: invoicesWithActs.length, 
+      invoiceIds: invoicesWithActs.map(r => r.invoiceId),
+      executorActs,
+      companyActs
+    };
   }
 
   async markBonusesAsPaid(invoiceIds: string[]): Promise<void> {

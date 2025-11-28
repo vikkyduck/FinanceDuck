@@ -81,6 +81,19 @@ This project is an invoice management system migrating from Supabase to Replit w
 - Overpayments (negative balances) shown as "Переплата" in green
 - PartnerPaymentHistory component used in both partner dashboard and admin's debt cards
 
+**Assistant Bonus Payout System (2025-11-28):**
+- Database: `assistant_bonus_payments` table for tracking bonus payment history
+- API Endpoints:
+  - GET /api/admin/unpaid-bonus - get unpaid bonus total and invoice IDs
+  - GET /api/admin/bonus-payments - bonus payment history (admin only)
+  - POST /api/admin/bonus-payout - record bonus payout (admin only)
+  - GET /api/my-bonus-payments - assistant can view their payment history
+  - GET /api/acts-statistics - get executor/company acts counts
+- Storage layer methods: getAssistantBonusPayments, createAssistantBonusPayment, getUnpaidBonusTotal, markBonusesAsPaid
+- AssistantBonusManager: Admin UI for viewing/paying bonuses with history dialog
+- AssistantBonusCard: Updated to show payment history to assistant
+- Bonus rates: Executor acts = 1000 RUB, Company acts = 2000 RUB
+
 **Partner Debt Calculation Fix (2025-11-28):**
 - Debt = clientBill - commission - expensesPaidByPartner (NOT expensesPaidByAdmin)
 - For agency_30: debt = 15% of clientBill (fixed admin share)

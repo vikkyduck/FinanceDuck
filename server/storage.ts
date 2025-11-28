@@ -845,6 +845,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoices.status, 'paid'));
 
     const allPayments = await db.select().from(partnerPayments);
+    
+    // Get all expenses to calculate paidByAdmin vs paidByPartner
+    const allExpenses = await db.select().from(invoiceExpenses);
+    const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
+    
+    for (const exp of allExpenses) {
+      if (!expensesByInvoice.has(exp.invoiceId)) {
+        expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
+      }
+      const amounts = expensesByInvoice.get(exp.invoiceId)!;
+      const amount = parseFloat(exp.amount);
+      if (exp.paidByAdmin) {
+        amounts.byAdmin += amount;
+      } else {
+        amounts.byPartner += amount;
+      }
+    }
 
     const partnerMap = new Map<string, {
       partnerId: string;
@@ -863,15 +880,33 @@ export class DatabaseStorage implements IStorage {
       const scheme = row.invoice.scheme;
       
       const cBill = parseFloat(row.calculations.clientBill || "0");
+      const expenses = expensesByInvoice.get(row.invoice.id) || { byPartner: 0, byAdmin: 0 };
       let debt = 0;
 
       if (scheme === 'agency_30') {
-        debt = parseFloat(row.calculations.partnerShareFromMargin || "0");
-      } else if (scheme === 'commission_based') {
-        const comm = parseFloat(row.calculations.commissionAmount || "0");
-        debt = cBill - comm;
+        // Agency 30%: Partner owes admin 15% (admin's share), fixed regardless of expenses
+        // 70% stays with partner for client's external services
+        debt = cBill * 0.15; // Admin's share from margin
+      } else if (scheme === 'vika_ie_7') {
+        // ИП Вики: No partner involved
+        debt = 0;
       } else {
-        debt = parseFloat(row.calculations.amountToAdmin || "0");
+        // Partner schemes (partner_10, partner_15, commission_based):
+        // Partner debt = clientBill - partnerCommission - expensesPaidByPartner
+        // If admin paid expenses, they don't reduce partner's debt
+        let commissionRate: number;
+        if (scheme === 'partner_10') {
+          commissionRate = 0.10;
+        } else if (scheme === 'partner_15') {
+          commissionRate = 0.15;
+        } else {
+          // commission_based - calculate from stored commission
+          const comm = parseFloat(row.calculations.commissionAmount || "0");
+          commissionRate = cBill > 0 ? comm / cBill : 0.10;
+        }
+        
+        const partnerCommission = cBill * commissionRate;
+        debt = cBill - partnerCommission - expenses.byPartner;
       }
 
       if (!partnerMap.has(pid)) {

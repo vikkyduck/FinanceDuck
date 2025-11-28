@@ -1030,7 +1030,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const { actType, fileName, fileData, mimeType } = req.body;
+      const { actType, fileName, fileData, mimeType, isLink, url } = req.body;
       
       // Validate invoice exists
       const invoice = await storage.getInvoice(id);
@@ -1038,12 +1038,25 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Invoice not found" });
       }
       
+      // Validate: either file data or URL must be provided
+      if (isLink) {
+        if (!url) {
+          return res.status(400).json({ error: "URL is required for link-type acts" });
+        }
+      } else {
+        if (!fileData || !mimeType) {
+          return res.status(400).json({ error: "File data and mime type are required for file uploads" });
+        }
+      }
+      
       const act = await storage.createSignedAct({
         invoiceId: id,
         actType,
         fileName,
-        fileData,
-        mimeType,
+        fileData: isLink ? null : fileData,
+        mimeType: isLink ? null : mimeType,
+        isLink: isLink || false,
+        url: isLink ? url : null,
         uploadedBy: req.user!.token.id,
       });
       

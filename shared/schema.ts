@@ -144,8 +144,10 @@ export const signedActs = pgTable("signed_acts", {
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
   actType: actTypeEnum("act_type").notNull(),
   fileName: text("file_name").notNull(),
-  fileData: text("file_data").notNull(),
-  mimeType: text("mime_type").notNull(),
+  fileData: text("file_data"),
+  mimeType: text("mime_type"),
+  isLink: boolean("is_link").default(false).notNull(),
+  url: text("url"),
   uploadedBy: uuid("uploaded_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

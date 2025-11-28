@@ -20,7 +20,6 @@ import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
-import { AdminTransactionsList } from "./admin/AdminTransactionsList";
 import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
@@ -180,8 +179,6 @@ export const AdminDashboard = () => {
               <PartnerDebtDashboard />
 
               <DoNotSpendDashboard />
-
-              <AdminTransactionsList limit={10} />
             </motion.div>
           </TabsContent>
 

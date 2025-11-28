@@ -1036,6 +1036,155 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => b.remaining - a.remaining);
   }
   
+  async getAdminDashboardStats(): Promise<{
+    yearlySummary: {
+      totalProfit: number;
+      totalWithdrawn: number;
+      remaining: number;
+    };
+    monthlyCashFlow: {
+      received: number;
+      expected: number;
+    };
+    monthlySales: {
+      draftsCount: number;
+      draftsTotal: number;
+    };
+    withdrawnThisMonth: number;
+    leverage: {
+      othersProfit: number;
+      vikaProfit: number;
+      ratio: number;
+    };
+  }> {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const monthStart = new Date(currentYear, currentMonth, 1);
+    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+    const yearStart = new Date(currentYear, 0, 1);
+    
+    // Get all invoices with calculations
+    const allInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        partnerName: partners.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id));
+    
+    // Get all partner payments
+    const allPayments = await db.select().from(partnerPayments);
+    
+    // Calculate yearly profit and cash flow
+    let yearlyProfit = 0;
+    let monthlyReceived = 0;
+    let monthlyExpected = 0;
+    let vikaProfit = 0;
+    let othersProfit = 0;
+    
+    for (const row of allInvoices) {
+      if (!row.calculations) continue;
+      
+      const scheme = row.invoice.scheme;
+      const status = row.invoice.status;
+      // Use paymentDate for paid invoices, fallback to createdAt
+      const paymentDate = row.invoice.paymentDate 
+        ? new Date(row.invoice.paymentDate) 
+        : (row.invoice.createdAt ? new Date(row.invoice.createdAt) : null);
+      const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
+      
+      // Use appropriate cash field based on scheme
+      // agency_30: admin receives adminShareFromMargin (15% of clientBill)
+      // other schemes: admin receives amountToAdmin
+      let cashToAdmin: number;
+      if (scheme === 'agency_30') {
+        cashToAdmin = parseFloat(row.calculations.adminShareFromMargin || "0");
+      } else if (scheme === 'vika_ie_7') {
+        // ИП Вики - all goes to admin
+        cashToAdmin = parseFloat(row.calculations.clientBill || "0");
+      } else {
+        cashToAdmin = parseFloat(row.calculations.amountToAdmin || "0");
+      }
+      // Use netProfitAdmin for profit metrics
+      const netProfit = parseFloat(row.calculations.netProfitAdmin || "0");
+      
+      const isVika = row.partnerName?.toLowerCase().includes("вика уткина") || 
+                     row.partnerName?.toLowerCase().includes("vika utkina");
+      
+      // Only count paid invoices for cash flow and profit
+      if (status === 'paid') {
+        // Yearly profit - based on payment date
+        if (paymentDate && paymentDate >= yearStart) {
+          yearlyProfit += netProfit;
+        }
+        
+        // Monthly cash flow - based on payment date, use cashToAdmin (actual cash)
+        if (paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
+          monthlyReceived += cashToAdmin;
+        }
+        
+        // Leverage calculation - all paid invoices
+        if (isVika || scheme === 'vika_ie_7') {
+          vikaProfit += netProfit;
+        } else {
+          othersProfit += netProfit;
+        }
+      }
+      
+      // Expected this month - sent invoices (use cashToAdmin for expected cash)
+      if (status === 'sent' && createdAt && createdAt >= monthStart && createdAt <= monthEnd) {
+        monthlyExpected += cashToAdmin;
+      }
+    }
+    
+    // Drafts (sales pipeline) - count invoices with status 'draft' (sent/paid are not drafts)
+    const drafts = allInvoices.filter(row => 
+      row.invoice.status !== 'paid' && row.invoice.status !== 'sent' && row.invoice.status !== 'cancelled'
+    );
+    const draftsCount = drafts.length;
+    const draftsTotal = drafts.reduce((sum, row) => {
+      return sum + parseFloat(row.calculations?.clientBill || "0");
+    }, 0);
+    
+    // Partner payments this month (withdrawn)
+    const monthlyPayments = allPayments.filter(p => {
+      const paymentDate = new Date(p.paymentDate);
+      return paymentDate >= monthStart && paymentDate <= monthEnd;
+    });
+    const withdrawnThisMonth = monthlyPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    
+    // Total withdrawn (all time)
+    const totalWithdrawn = allPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    
+    // Leverage ratio
+    const leverageRatio = vikaProfit > 0 ? othersProfit / vikaProfit : 0;
+    
+    return {
+      yearlySummary: {
+        totalProfit: yearlyProfit,
+        totalWithdrawn: totalWithdrawn,
+        remaining: yearlyProfit - totalWithdrawn,
+      },
+      monthlyCashFlow: {
+        received: monthlyReceived,
+        expected: monthlyExpected,
+      },
+      monthlySales: {
+        draftsCount,
+        draftsTotal,
+      },
+      withdrawnThisMonth,
+      leverage: {
+        othersProfit,
+        vikaProfit,
+        ratio: leverageRatio,
+      },
+    };
+  }
+  
   async getPartnerDebtDetails(partnerId: string): Promise<{
     summary: {
       totalDebt: number;

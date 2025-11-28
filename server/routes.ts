@@ -745,6 +745,17 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to get do-not-spend data" });
     }
   });
+  
+  // Admin dashboard stats (Cash Flow, Sales, Yearly Summary, Leverage)
+  app.get("/api/admin/dashboard-stats", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const stats = await storage.getAdminDashboardStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Get admin dashboard stats error:", error);
+      res.status(500).json({ error: "Failed to get dashboard stats" });
+    }
+  });
 
   app.get("/api/access-tokens", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {

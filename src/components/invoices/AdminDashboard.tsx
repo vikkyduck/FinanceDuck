@@ -22,6 +22,7 @@ import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
+import { AdminDashboardMetrics } from "./admin/AdminDashboardMetrics";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
@@ -85,10 +86,8 @@ export const AdminDashboard = () => {
         onManageAccessCodes={() => setAccessCodesDialogOpen(true)}
       />
 
-      {/* Hero Metrics - Always Visible */}
-      <div className="mb-6">
-        <AdminHeroMetrics period="month" />
-      </div>
+      {/* Dashboard Metrics - Cash Flow, Sales, Yearly Summary, Leverage */}
+      <AdminDashboardMetrics />
 
       {/* Critical Alerts Section */}
       <div className="mb-6">

@@ -1,9 +1,9 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs,
-  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct,
-  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct,
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments,
+  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment,
+  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType
 } from "../shared/schema";
 import { eq, and, desc, isNull, gte, sql, inArray, or } from "drizzle-orm";
@@ -161,6 +161,12 @@ export interface IStorage {
   
   // Recalculate all invoices with correct expensesPaidByAdmin
   recalculateAllInvoices(): Promise<{ updated: number; errors: number }>;
+  
+  // Assistant bonus payments
+  getAssistantBonusPayments(): Promise<AssistantBonusPayment[]>;
+  createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment>;
+  getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[] }>;
+  markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
 }
 
 export interface MonthlyData {
@@ -1975,6 +1981,49 @@ export class DatabaseStorage implements IStorage {
       totalPaidInvoices: stats.totalPaidInvoices,
       assistantBonus,
     };
+  }
+
+  async getAssistantBonusPayments(): Promise<AssistantBonusPayment[]> {
+    return db.select()
+      .from(assistantBonusPayments)
+      .orderBy(desc(assistantBonusPayments.paymentDate));
+  }
+
+  async createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment> {
+    const [created] = await db.insert(assistantBonusPayments)
+      .values(payment)
+      .returning();
+    return created;
+  }
+
+  async getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[] }> {
+    const result = await db.select({
+      invoiceId: invoiceCalculations.invoiceId,
+      bonusAmount: invoiceCalculations.assistantBonusActs,
+      bonusPaid: invoiceCalculations.assistantBonusPaid,
+    })
+    .from(invoiceCalculations)
+    .where(
+      and(
+        eq(invoiceCalculations.assistantBonusPaid, false),
+        sql`COALESCE(${invoiceCalculations.assistantBonusActs}, 0) > 0`
+      )
+    );
+
+    const total = result.reduce((sum, row) => 
+      sum + parseFloat(row.bonusAmount || '0'), 0
+    );
+    const invoiceIds = result.map(row => row.invoiceId);
+
+    return { total, invoiceCount: result.length, invoiceIds };
+  }
+
+  async markBonusesAsPaid(invoiceIds: string[]): Promise<void> {
+    if (invoiceIds.length === 0) return;
+    
+    await db.update(invoiceCalculations)
+      .set({ assistantBonusPaid: true, updatedAt: new Date() })
+      .where(inArray(invoiceCalculations.invoiceId, invoiceIds));
   }
 }
 

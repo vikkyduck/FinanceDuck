@@ -884,6 +884,64 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Assistant Bonus Payments
+  app.get("/api/admin/bonus-payments", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const payments = await storage.getAssistantBonusPayments();
+      res.json(payments);
+    } catch (error) {
+      console.error("Get bonus payments error:", error);
+      res.status(500).json({ error: "Failed to get bonus payments" });
+    }
+  });
+
+  app.get("/api/admin/unpaid-bonus", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const result = await storage.getUnpaidBonusTotal();
+      res.json(result);
+    } catch (error) {
+      console.error("Get unpaid bonus error:", error);
+      res.status(500).json({ error: "Failed to get unpaid bonus" });
+    }
+  });
+
+  app.post("/api/admin/bonus-payout", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { amount, notes, invoiceIds } = req.body;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+      
+      const payment = await storage.createAssistantBonusPayment({
+        amount: amount.toString(),
+        paymentDate: new Date().toISOString().split('T')[0],
+        notes: notes || null,
+        paidBy: req.user!.token.id,
+      });
+      
+      if (invoiceIds && invoiceIds.length > 0) {
+        await storage.markBonusesAsPaid(invoiceIds);
+      }
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Create bonus payout error:", error);
+      res.status(500).json({ error: "Failed to create bonus payout" });
+    }
+  });
+
+  // Assistant can view their bonus payment history
+  app.get("/api/my-bonus-payments", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const payments = await storage.getAssistantBonusPayments();
+      res.json(payments);
+    } catch (error) {
+      console.error("Get my bonus payments error:", error);
+      res.status(500).json({ error: "Failed to get bonus payments" });
+    }
+  });
+
   app.get("/api/access-tokens", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const tokens = await storage.getAccessTokens();

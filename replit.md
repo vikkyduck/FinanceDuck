@@ -74,6 +74,19 @@ This project is an invoice management system migrating from Supabase to Replit w
 - Uses predicate-based matching with ADMIN_PREFIXES list for robust query key coverage
 - Automatically refreshes all admin-related queries when tab becomes visible
 
+**Partner Payment History (2025-11-28):**
+- GET /api/partners/:id/payment-history - admin can view any, partner only own
+- GET /api/my-payment-history - partner's own history
+- Returns payments with running balance after each payment
+- Overpayments (negative balances) shown as "Переплата" in green
+- PartnerPaymentHistory component used in both partner dashboard and admin's debt cards
+
+**Partner Debt Calculation Fix (2025-11-28):**
+- Debt = clientBill - commission - expensesPaidByPartner (NOT expensesPaidByAdmin)
+- For agency_30: debt = 15% of clientBill (fixed admin share)
+- Uses scheme-defined rates (10%, 15%) for partner_10/partner_15
+- commission_based uses stored commissionRate or derives from commissionAmount
+
 **Privacy Rules Enforced (Server-Side):**
 - Assistants cannot access partner-client relationships via ANY endpoint:
   - GET /api/partners/:id/clients - returns 403

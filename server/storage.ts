@@ -9,12 +9,21 @@ import {
 import { eq, and, desc, isNull, gte, sql, inArray } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
-// Server-side invoice calculations
+/**
+ * Server-side invoice calculations
+ * 
+ * CRITICAL BUSINESS RULE:
+ * - Expenses paid by PARTNER (from client money): NOT deducted from admin profit
+ * - Expenses paid by ADMIN: DEDUCTED from admin profit (netProfitAdmin)
+ * 
+ * @param expensesPaidByAdmin - Sum of expenses where paidByAdmin=true
+ */
 function calculateInvoiceServer(
   scheme: InvoiceScheme,
   clientBill: number,
   partnerCommissionRate?: number,
-  executorExpenses: number = 0
+  executorExpenses: number = 0,
+  expensesPaidByAdmin: number = 0
 ): Partial<InvoiceCalculation> {
   const result: Partial<InvoiceCalculation> = {
     clientBill: clientBill.toString(),
@@ -23,29 +32,30 @@ function calculateInvoiceServer(
 
   switch (scheme) {
     case 'agency_30': {
+      // Agency 30%: расходы идут из клиентского бюджета (70%), не из доли админа
       const agencyMargin = clientBill * 0.30;
       const partnerShare = clientBill * 0.15;
       const adminShare = clientBill * 0.15;
       const clientBase = clientBill * 0.70;
       const clientRemaining = clientBase - executorExpenses;
+      const netProfitAdmin = adminShare; // Фиксированная 15%
       
       result.agencyMargin = agencyMargin.toString();
       result.partnerShareFromMargin = partnerShare.toString();
       result.adminShareFromMargin = adminShare.toString();
       result.clientBaseAfterMargin = clientBase.toString();
       result.clientRemaining = clientRemaining.toString();
-      result.netProfitAdmin = adminShare.toString();
-      result.adminShare50 = (adminShare / 2).toString();
-      result.catShare50 = (adminShare / 2).toString();
+      result.netProfitAdmin = netProfitAdmin.toString();
+      result.adminShare50 = (netProfitAdmin / 2).toString();
+      result.catShare50 = (netProfitAdmin / 2).toString();
       break;
     }
     case 'partner_10': {
-      // Расходы оплачиваются партнером из денег клиента
-      // netProfitAdmin = amountToAdmin (ФИКСИРОВАННАЯ, расходы - проблема партнера)
+      // Partner 10%: расходы оплаченные АДМИНОМ вычитаются из его прибыли
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90;
-      const netProfitAdmin = amountToAdmin; // НЕ вычитаем расходы
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -56,12 +66,11 @@ function calculateInvoiceServer(
       break;
     }
     case 'partner_15': {
-      // Расходы оплачиваются партнером из денег клиента
-      // netProfitAdmin = amountToAdmin (ФИКСИРОВАННАЯ, расходы - проблема партнера)
+      // Partner 15%: расходы оплаченные АДМИНОМ вычитаются из его прибыли
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85;
-      const netProfitAdmin = amountToAdmin; // НЕ вычитаем расходы
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -73,12 +82,11 @@ function calculateInvoiceServer(
     }
     case 'commission_based':
     default: {
-      // Расходы оплачиваются партнером из денег клиента
-      // netProfitAdmin = amountToAdmin (ФИКСИРОВАННАЯ)
+      // Commission-based: расходы оплаченные АДМИНОМ вычитаются из его прибыли
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin; // НЕ вычитаем расходы
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -149,6 +157,9 @@ export interface IStorage {
   getMonthlyPlans(year: number): Promise<MonthlyFinancialPlan[]>;
   getMonthlyPlan(year: number, month: number): Promise<MonthlyFinancialPlan | null>;
   upsertMonthlyPlan(input: MonthlyPlanInput): Promise<MonthlyFinancialPlan>;
+  
+  // Recalculate all invoices with correct expensesPaidByAdmin
+  recalculateAllInvoices(): Promise<{ updated: number; errors: number }>;
 }
 
 export interface MonthlyData {
@@ -589,12 +600,19 @@ export class DatabaseStorage implements IStorage {
       ? parseFloat(calculations.executorExpensesTotal)
       : (existing?.executorExpensesTotal ? parseFloat(existing.executorExpensesTotal) : 0);
     
-    // Recalculate all fields
+    // Calculate expenses paid by admin (for correct netProfitAdmin calculation)
+    const expenses = await this.getInvoiceExpenses(invoiceId);
+    const expensesPaidByAdmin = expenses
+      .filter(e => e.paidByAdmin === true)
+      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    
+    // Recalculate all fields with expensesPaidByAdmin
     const computed = calculateInvoiceServer(
       invoice.scheme as InvoiceScheme,
       clientBill,
       commissionRate,
-      executorExpenses
+      executorExpenses,
+      expensesPaidByAdmin
     );
     
     if (existing) {
@@ -1267,13 +1285,8 @@ export class DatabaseStorage implements IStorage {
       const monthIndex = paymentDate.getMonth(); // 0-11
       const scheme = row.invoice.scheme;
       
-      // Calculate profit based on scheme
-      let profit: number;
-      if (scheme === 'agency_30') {
-        profit = parseFloat(row.calculations.adminShareFromMargin || "0");
-      } else {
-        profit = parseFloat(row.calculations.amountToAdmin || "0");
-      }
+      // Use netProfitAdmin for profit calculation (includes expense deduction for admin-paid expenses)
+      const profit = parseFloat(row.calculations.netProfitAdmin || "0");
       
       const clientBill = parseFloat(row.calculations.clientBill || "0");
       const invoiceExpenses = expensesByInvoice.get(row.invoice.id) || 0;
@@ -1333,14 +1346,8 @@ export class DatabaseStorage implements IStorage {
       const paymentMonth = paymentDate.getMonth();
       const paymentYear = paymentDate.getFullYear();
       
-      // Calculate profit based on scheme
-      const scheme = row.invoice.scheme;
-      let profit: number;
-      if (scheme === 'agency_30') {
-        profit = parseFloat(row.calculations.adminShareFromMargin || "0");
-      } else {
-        profit = parseFloat(row.calculations.amountToAdmin || "0");
-      }
+      // Use netProfitAdmin for profit calculation (includes expense deduction for admin-paid expenses)
+      const profit = parseFloat(row.calculations.netProfitAdmin || "0");
       
       // Find matching forecast period
       const forecastIndex = forecastData.findIndex(f => 
@@ -1673,6 +1680,58 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+  
+  async recalculateAllInvoices(): Promise<{ updated: number; errors: number }> {
+    let updated = 0;
+    let errors = 0;
+    
+    // Get all invoices
+    const allInvoices = await db.select().from(invoices);
+    
+    for (const invoice of allInvoices) {
+      try {
+        // Get existing calculations
+        const [existing] = await db
+          .select()
+          .from(invoiceCalculations)
+          .where(eq(invoiceCalculations.invoiceId, invoice.id))
+          .limit(1);
+        
+        if (!existing) continue;
+        
+        // Get expenses for this invoice
+        const expenses = await this.getInvoiceExpenses(invoice.id);
+        const totalExpenses = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+        const expensesPaidByAdmin = expenses
+          .filter(e => e.paidByAdmin === true)
+          .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+        
+        const clientBill = parseFloat(existing.clientBill || "0");
+        const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
+        
+        // Recalculate with correct expensesPaidByAdmin
+        const computed = calculateInvoiceServer(
+          invoice.scheme as InvoiceScheme,
+          clientBill,
+          commissionRate,
+          totalExpenses,
+          expensesPaidByAdmin
+        );
+        
+        // Update
+        await db.update(invoiceCalculations)
+          .set({ ...computed, updatedAt: new Date() })
+          .where(eq(invoiceCalculations.invoiceId, invoice.id));
+        
+        updated++;
+      } catch (err) {
+        console.error(`Error recalculating invoice ${invoice.id}:`, err);
+        errors++;
+      }
+    }
+    
+    return { updated, errors };
   }
 }
 

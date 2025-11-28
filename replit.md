@@ -123,7 +123,16 @@ The system supports four commission schemes with `calculateInvoice()` as a core 
 - **agency_30**: 30% agency margin - partner gets 15%, admin gets 15%, client budget is 70%
 - **commission_based**: Custom commission rate for partners with non-standard percentages
 
-**Critical Business Rule (2025-11-28):** In 90% of cases, expenses are paid by the partner from client money. Admin's profit (netProfitAdmin) equals their percentage share FIXED - expenses are NOT deducted from admin's profit. Only agency_30 handles expenses differently (from client's 70% budget).
+**Critical Business Rule (2025-11-28):**
+- Expenses paid by PARTNER (from client money): NOT deducted from admin's profit
+- Expenses paid by ADMIN (paidByAdmin=true): DEDUCTED from admin's netProfitAdmin
+- For agency_30: expenses go from client's 70% budget, admin's 15% is fixed
+
+**Net Profit Calculation:**
+- partner_10/15/commission_based: netProfitAdmin = amountToAdmin - expensesPaidByAdmin
+- agency_30: netProfitAdmin = adminShare (15%, fixed)
+
+**API endpoint:** POST /api/admin/recalculate-invoices - Recalculates all invoices with correct expensesPaidByAdmin values (admin only)
 
 Removed scheme: vika_ie_7 (deprecated 2025-11-28) - Vika Utkina now treated as regular partner.
 

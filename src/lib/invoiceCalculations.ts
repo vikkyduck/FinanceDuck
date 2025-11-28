@@ -22,11 +22,25 @@ export interface InvoiceCalculations {
   amount_after_tax?: number;
 }
 
+/**
+ * Calculate invoice financial metrics
+ * 
+ * @param scheme - Commission scheme type
+ * @param clientBill - Total amount client pays
+ * @param partnerCommissionRate - Custom commission rate (for commission_based scheme)
+ * @param executorExpenses - Total executor expenses (for reference)
+ * @param expensesPaidByAdmin - Expenses paid by admin (reduces admin's net profit)
+ * 
+ * CRITICAL BUSINESS RULE:
+ * - Expenses paid by PARTNER (from client money): NOT deducted from admin profit
+ * - Expenses paid by ADMIN: DEDUCTED from admin profit (netProfitAdmin)
+ */
 export function calculateInvoice(
   scheme: InvoiceScheme,
   clientBill: number,
   partnerCommissionRate?: number,
-  executorExpenses: number = 0
+  executorExpenses: number = 0,
+  expensesPaidByAdmin: number = 0
 ): InvoiceCalculations {
   let calculations: InvoiceCalculations = {
     client_bill: clientBill,
@@ -38,20 +52,21 @@ export function calculateInvoice(
 
   switch (scheme) {
     case 'agency_30': {
-      // Схема 3: Маржа агентства 30%
+      // Схема: Маржа агентства 30%
       // Клиент платит: X
       // Комиссия агентства (30%): X × 0.30
       //   ├─ Партнеру (15%): X × 0.15
       //   └─ Админу (15%): X × 0.15
-      // Средства клиента для трат: X × 0.70
-      // Остаток клиента: (X × 0.70) - Y
-      // Чистая прибыль админа: X × 0.15 (ФИКСИРОВАННАЯ!)
+      // Средства клиента для трат: X × 0.70 (расходы идут отсюда!)
+      // Чистая прибыль админа: X × 0.15 (ФИКСИРОВАННАЯ, расходы идут из 70% клиента)
       
       const agencyMargin = clientBill * 0.30;
       const partnerShare = clientBill * 0.15; // Партнеру 15%
       const adminShare = clientBill * 0.15;   // Админу 15%
       const clientBase = clientBill * 0.70;
       const clientRemaining = clientBase - executorExpenses;
+      // Для agency_30 расходы идут из клиентского бюджета (70%), не из доли админа
+      const netProfitAdmin = adminShare;
       
       calculations = {
         ...calculations,
@@ -61,26 +76,26 @@ export function calculateInvoice(
         client_base_after_margin: clientBase,
         client_spent: executorExpenses,
         client_remaining: clientRemaining,
-        net_profit_admin: adminShare, // Фиксированная: X × 0.15
-        admin_share_50: adminShare / 2,
-        cat_share_50: adminShare / 2,
+        net_profit_admin: netProfitAdmin,
+        admin_share_50: netProfitAdmin / 2,
+        cat_share_50: netProfitAdmin / 2,
       };
       break;
     }
 
     case 'partner_10': {
-      // Схема 1: Комиссия партнера 10%
+      // Схема: Комиссия партнера 10%
       // Клиент платит: X
       // Комиссия партнера: X × 0.10
       // Партнер переводит админу: X × 0.90
-      // ВАЖНО: Расходы оплачиваются партнером из денег клиента
-      // Чистая прибыль админа: X × 0.90 (ФИКСИРОВАННАЯ, расходы - проблема партнера)
+      // Расходы оплаченные ПАРТНЕРОМ - НЕ вычитаются (это проблема партнера)
+      // Расходы оплаченные АДМИНОМ - ВЫЧИТАЮТСЯ из чистой прибыли
       
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90;
-      // netProfitAdmin = amountToAdmin (расходы не вычитаются - они оплачиваются партнером)
-      const netProfitAdmin = amountToAdmin;
+      // netProfitAdmin = amountToAdmin - expensesPaidByAdmin
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -95,18 +110,18 @@ export function calculateInvoice(
     }
 
     case 'partner_15': {
-      // Схема 2: Комиссия партнера 15%
+      // Схема: Комиссия партнера 15%
       // Клиент платит: X
       // Комиссия партнера: X × 0.15
       // Партнер переводит админу: X × 0.85
-      // ВАЖНО: Расходы оплачиваются партнером из денег клиента
-      // Чистая прибыль админа: X × 0.85 (ФИКСИРОВАННАЯ, расходы - проблема партнера)
+      // Расходы оплаченные ПАРТНЕРОМ - НЕ вычитаются (это проблема партнера)
+      // Расходы оплаченные АДМИНОМ - ВЫЧИТАЮТСЯ из чистой прибыли
       
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85;
-      // netProfitAdmin = amountToAdmin (расходы не вычитаются - они оплачиваются партнером)
-      const netProfitAdmin = amountToAdmin;
+      // netProfitAdmin = amountToAdmin - expensesPaidByAdmin
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -122,18 +137,17 @@ export function calculateInvoice(
 
     case 'commission_based': {
       // Универсальная схема с произвольной комиссией
-      // Используется когда партнер имеет нестандартный процент
       // Клиент платит: X
       // Комиссия партнера: X × (rate / 100)
       // Партнер переводит админу: X × (1 - rate / 100)
-      // ВАЖНО: Расходы оплачиваются партнером из денег клиента
-      // Чистая прибыль админа: X × (1 - rate / 100) (ФИКСИРОВАННАЯ)
+      // Расходы оплаченные ПАРТНЕРОМ - НЕ вычитаются (это проблема партнера)
+      // Расходы оплаченные АДМИНОМ - ВЫЧИТАЮТСЯ из чистой прибыли
       
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      // netProfitAdmin = amountToAdmin (расходы не вычитаются - они оплачиваются партнером)
-      const netProfitAdmin = amountToAdmin;
+      // netProfitAdmin = amountToAdmin - expensesPaidByAdmin
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -152,7 +166,7 @@ export function calculateInvoice(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin;
+      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,

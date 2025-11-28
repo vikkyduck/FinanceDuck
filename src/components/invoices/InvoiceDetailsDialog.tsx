@@ -163,7 +163,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         actual_payment_date: invoiceData.actualPaymentDate,
         notes: invoiceData.notes,
         created_at: invoiceData.createdAt,
-        hidden_from_assistant: invoiceData.hiddenFromAssistant,
+        hidden_from_assistant: invoiceData.hideFromAssistant,
         clients: invoiceData.client ? { name: invoiceData.client.name } : null,
         partners: invoiceData.partner ? { name: invoiceData.partner.name } : null,
         client_bill: invoiceData.calculations?.clientBill || invoiceData.clientBill,

@@ -122,7 +122,7 @@ function normalizeInvoiceFromApi(data: any): InvoiceViewModel {
     actual_payment_date: data.actualPaymentDate,
     notes: data.notes,
     created_at: data.createdAt,
-    hidden_from_assistant: data.hiddenFromAssistant || false,
+    hidden_from_assistant: data.hideFromAssistant || false,
     clients: data.client ? { name: data.client.name } : null,
     partners: data.partner ? { name: data.partner.name } : null,
     client_bill: calculations?.clientBill || data.clientBill || 0,
@@ -168,7 +168,7 @@ function normalizeInvoiceListFromApi(data: any): InvoiceListItem {
     executor_expenses_total: calculations?.executorExpensesTotal || "0",
     net_profit_admin: calculations?.netProfitAdmin || null,
     client_remaining: calculations?.clientRemaining || null,
-    hidden_from_assistant: data.hiddenFromAssistant || false,
+    hidden_from_assistant: data.hideFromAssistant || false,
   };
 }
 
@@ -259,7 +259,7 @@ export const invoiceService = {
     status?: string;
     notes?: string;
     paymentDate?: string;
-    hiddenFromAssistant?: boolean;
+    hideFromAssistant?: boolean;
     clientBill: number;
     calculations: Record<string, any>;
   }): Promise<any> {
@@ -272,7 +272,7 @@ export const invoiceService = {
       status: invoice.status || "draft",
       notes: invoice.notes,
       paymentDate: invoice.paymentDate,
-      hiddenFromAssistant: invoice.hiddenFromAssistant,
+      hideFromAssistant: invoice.hideFromAssistant,
       calculations: {
         clientBill: invoice.clientBill.toString(),
         ...invoice.calculations,

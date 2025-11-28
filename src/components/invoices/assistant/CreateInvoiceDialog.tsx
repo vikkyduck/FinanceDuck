@@ -44,7 +44,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(undefined);
-  const [hiddenFromAssistant, setHiddenFromAssistant] = useState(false);
+  const [hideFromAssistant, setHideFromAssistant] = useState(false);
 
   const wizardSteps = [
     { number: 1, label: "Клиент и партнер" },
@@ -145,7 +145,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         status: 'draft',
         notes: validated.notes || undefined,
         paymentDate: formattedPaymentDate,
-        hiddenFromAssistant: effectiveRole === 'admin' ? hiddenFromAssistant : false,
+        hideFromAssistant: effectiveRole === 'admin' ? hideFromAssistant : false,
         clientBill: validated.clientBill,
         calculations: calculations,
       });
@@ -178,7 +178,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     setInvoiceNumber("");
     setNotes("");
     setPaymentDate(undefined);
-    setHiddenFromAssistant(false);
+    setHideFromAssistant(false);
   };
 
   return (
@@ -359,8 +359,8 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           <Checkbox
                             id="hidden"
                             data-testid="checkbox-hidden-from-assistant"
-                            checked={hiddenFromAssistant}
-                            onCheckedChange={(checked) => setHiddenFromAssistant(checked as boolean)}
+                            checked={hideFromAssistant}
+                            onCheckedChange={(checked) => setHideFromAssistant(checked as boolean)}
                           />
                           <Label htmlFor="hidden" className="cursor-pointer">
                             <div className="flex items-center gap-2">

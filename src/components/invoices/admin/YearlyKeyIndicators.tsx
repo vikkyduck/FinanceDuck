@@ -1,108 +1,74 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { StatsGrid, StatConfig } from "@/components/ui/stats-grid";
 import { TrendingUp, Wallet, Trophy, DollarSign } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+
+interface MonthlyData {
+  monthNumber: number;
+  totalSales: number;
+  totalProfit: number;
+  invoiceCount: number;
+  expenses: number;
+}
 
 interface YearlyKeyIndicatorsProps {
   year: number;
 }
 
 export const YearlyKeyIndicators = ({ year }: YearlyKeyIndicatorsProps) => {
-  const [stats, setStats] = useState({
-    totalSales: 0,
-    totalProfit: 0,
-    bestMonth: "",
-    bestMonthProfit: 0,
-    totalReceived: 0,
+  const { data, isLoading } = useQuery<MonthlyData[]>({
+    queryKey: ['/api/admin/monthly-data', year],
   });
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchYearlyStats();
-  }, [year]);
+  const monthNames = [
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+  ];
 
-  const { accessTokenId } = useAuth();
+  let totalSales = 0;
+  let totalProfit = 0;
+  let bestMonthIndex = 0;
+  let bestMonthProfit = 0;
 
-  const fetchYearlyStats = async () => {
-    if (!accessTokenId) return;
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('get_admin_monthly_data', {
-        _token_id: accessTokenId,
-        _year: year
-      });
+  (data || []).forEach((row) => {
+    totalSales += row.totalSales;
+    totalProfit += row.totalProfit;
 
-      if (error) throw error;
-
-      let totalSales = 0;
-      let totalProfit = 0;
-      let bestMonthIndex = 0;
-      let bestMonthProfit = 0;
-
-      const monthNames = [
-        "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-        "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-      ];
-
-      (data || []).forEach((row: any) => {
-        const sales = Number(row.total_sales || 0);
-        const profit = Number(row.total_profit || 0);
-        
-        totalSales += sales;
-        totalProfit += profit;
-
-        if (profit > bestMonthProfit) {
-          bestMonthProfit = profit;
-          bestMonthIndex = row.month_number - 1;
-        }
-      });
-
-      setStats({
-        totalSales,
-        totalProfit,
-        bestMonth: monthNames[bestMonthIndex],
-        bestMonthProfit,
-        totalReceived: totalSales, // В RPC total_sales это уже фактические поступления
-      });
-    } catch (error) {
-      console.error("Error fetching yearly stats:", error);
-    } finally {
-      setLoading(false);
+    if (row.totalProfit > bestMonthProfit) {
+      bestMonthProfit = row.totalProfit;
+      bestMonthIndex = row.monthNumber - 1;
     }
-  };
+  });
 
   const statsConfig: StatConfig[] = [
     {
       icon: DollarSign,
       title: "Продано за год",
-      value: formatCurrency(stats.totalSales),
+      value: formatCurrency(totalSales),
       description: "Общая сумма контрактов",
       valueClassName: "text-primary",
     },
     {
       icon: Wallet,
       title: "Чистая прибыль за год",
-      value: formatCurrency(stats.totalProfit),
+      value: formatCurrency(totalProfit),
       description: "Итоговая прибыль",
       valueClassName: "text-chart-2",
     },
     {
       icon: Trophy,
       title: "Лучший месяц",
-      value: stats.bestMonth || "—",
-      description: stats.bestMonthProfit > 0 ? formatCurrency(stats.bestMonthProfit) : "Нет данных",
+      value: bestMonthProfit > 0 ? monthNames[bestMonthIndex] : "—",
+      description: bestMonthProfit > 0 ? formatCurrency(bestMonthProfit) : "Нет данных",
       valueClassName: "text-chart-3",
     },
     {
       icon: TrendingUp,
       title: "Поступило за год",
-      value: formatCurrency(stats.totalReceived),
+      value: formatCurrency(totalSales),
       description: "Фактические поступления",
     },
   ];
 
-  return <StatsGrid stats={statsConfig} loading={loading} columns={4} />;
+  return <StatsGrid stats={statsConfig} loading={isLoading} columns={4} />;
 };

@@ -1,17 +1,15 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth } from "@/hooks/useAuth";
 
-interface MonthlyForecast {
-  month: string;
+interface ForecastData {
   monthIndex: number;
-  year: number;
-  expected: number;
-  received: number;
+  monthName: string;
+  yearNum: number;
+  expectedAmount: number;
+  receivedAmount: number;
 }
 
 interface RevenueForecastChartProps {
@@ -19,55 +17,23 @@ interface RevenueForecastChartProps {
 }
 
 export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartProps) => {
-  const { accessTokenId } = useAuth();
-  const [data, setData] = useState<MonthlyForecast[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchForecastData();
-  }, [monthsAhead, accessTokenId]);
-
-  const fetchForecastData = async () => {
-    if (!accessTokenId) return;
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('get_admin_forecast', {
-        _token_id: accessTokenId,
-        _months_ahead: monthsAhead
-      });
-
-      if (error) throw error;
-
-      const chartData: MonthlyForecast[] = (data || []).map((row: any) => ({
-        month: row.month_name,
-        monthIndex: Number(row.month_index),
-        year: Number(row.year_num),
-        expected: Number(row.expected_amount || 0),
-        received: Number(row.received_amount || 0),
-      }));
-
-      setData(chartData);
-    } catch (error) {
-      console.error("Error fetching forecast data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isLoading } = useQuery<ForecastData[]>({
+    queryKey: ['/api/admin/forecast', monthsAhead],
+  });
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
-          <p className="font-semibold mb-2">{payload[0].payload.month}</p>
+          <p className="font-semibold mb-2">{payload[0].payload.monthName}</p>
           <p className="text-sm text-chart-1">
-            Ожидается: {formatCurrency(payload[0].value)}
+            Ожидается: {formatCurrency(payload[0]?.value || 0)}
           </p>
           <p className="text-sm text-chart-2">
-            Получено: {formatCurrency(payload[1].value)}
+            Получено: {formatCurrency(payload[1]?.value || 0)}
           </p>
           <p className="text-sm font-semibold text-primary mt-1">
-            Итого: {formatCurrency(payload[0].value + payload[1].value)}
+            Итого: {formatCurrency((payload[0]?.value || 0) + (payload[1]?.value || 0))}
           </p>
         </div>
       );
@@ -75,7 +41,7 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
     return null;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -95,6 +61,12 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
     );
   }
 
+  const chartData = (data || []).map(item => ({
+    month: item.monthName,
+    expected: item.expectedAmount,
+    received: item.receivedAmount,
+  }));
+
   return (
     <Card>
       <CardHeader>
@@ -105,7 +77,7 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={data}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey="month" className="text-xs" />
             <YAxis 

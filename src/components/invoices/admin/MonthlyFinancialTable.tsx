@@ -1,18 +1,15 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 
-interface MonthlyFinancialData {
-  month: string;
-  totalSold: number;
-  totalReceived: number;
+interface MonthlyData {
+  monthNumber: number;
+  totalSales: number;
+  totalProfit: number;
+  invoiceCount: number;
   expenses: number;
-  netProfit: number;
-  growthPercent: number | null;
 }
 
 interface MonthlyFinancialTableProps {
@@ -20,63 +17,14 @@ interface MonthlyFinancialTableProps {
 }
 
 export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
-  const { accessTokenId } = useAuth();
-  const [data, setData] = useState<MonthlyFinancialData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading } = useQuery<MonthlyData[]>({
+    queryKey: ['/api/admin/monthly-data', year],
+  });
 
-  useEffect(() => {
-    fetchMonthlyFinancialData();
-  }, [year, accessTokenId]);
-
-  const fetchMonthlyFinancialData = async () => {
-    if (!accessTokenId) return;
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('get_admin_monthly_data', {
-        _token_id: accessTokenId,
-        _year: year
-      });
-
-      if (error) throw error;
-
-      const monthNames = [
-        "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-        "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-      ];
-
-      const tableData: MonthlyFinancialData[] = [];
-      let previousProfit = 0;
-
-      (data || []).forEach((row: any, index: number) => {
-        const netProfit = Number(row.total_profit || 0);
-        
-        let growthPercent: number | null = null;
-        if (previousProfit > 0 && netProfit > 0) {
-          growthPercent = ((netProfit - previousProfit) / previousProfit) * 100;
-        }
-
-        tableData.push({
-          month: monthNames[index],
-          totalSold: Number(row.total_sales || 0),
-          totalReceived: Number(row.total_sales || 0),
-          expenses: Number(row.expenses || 0),
-          netProfit,
-          growthPercent,
-        });
-
-        if (netProfit > 0) {
-          previousProfit = netProfit;
-        }
-      });
-
-      setData(tableData);
-    } catch (error) {
-      console.error("Error fetching monthly financial data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const monthNames = [
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+  ];
 
   const GrowthIndicator = ({ value }: { value: number | null }) => {
     if (value === null) return <Minus className="h-4 w-4 text-muted-foreground" />;
@@ -95,7 +43,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
     return <span className="text-muted-foreground">0%</span>;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -107,6 +55,26 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
       </Card>
     );
   }
+
+  let previousProfit = 0;
+  const tableData = (data || []).map((row, index) => {
+    let growthPercent: number | null = null;
+    if (previousProfit > 0 && row.totalProfit > 0) {
+      growthPercent = ((row.totalProfit - previousProfit) / previousProfit) * 100;
+    }
+    if (row.totalProfit > 0) {
+      previousProfit = row.totalProfit;
+    }
+
+    return {
+      month: monthNames[row.monthNumber - 1],
+      totalSold: row.totalSales,
+      totalReceived: row.totalSales,
+      expenses: row.expenses,
+      netProfit: row.totalProfit,
+      growthPercent,
+    };
+  });
 
   return (
     <Card>
@@ -130,7 +98,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((row, index) => (
+              {tableData.map((row, index) => (
                 <TableRow key={index}>
                   <TableCell className="font-medium">{row.month}</TableCell>
                   <TableCell className="text-right">{formatCurrency(row.totalSold)}</TableCell>

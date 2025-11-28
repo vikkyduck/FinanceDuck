@@ -144,6 +144,37 @@ export interface IStorage {
   deleteAccessToken(id: string): Promise<void>;
   
   getDashboardStats(role: UserRole, partnerId?: string, clientId?: string): Promise<DashboardStats>;
+  
+  // Analytics methods
+  getAdminMonthlyData(year: number): Promise<MonthlyData[]>;
+  getAdminForecast(monthsAhead: number): Promise<ForecastData[]>;
+  getOverdueInvoices(): Promise<OverdueInvoice[]>;
+}
+
+export interface MonthlyData {
+  monthNumber: number;
+  totalSales: number;
+  totalProfit: number;
+  invoiceCount: number;
+  expenses: number;
+}
+
+export interface ForecastData {
+  monthIndex: number;
+  monthName: string;
+  yearNum: number;
+  expectedAmount: number;
+  receivedAmount: number;
+}
+
+export interface OverdueInvoice {
+  id: string;
+  invoiceNumber: string;
+  paymentDate: string;
+  clientName: string;
+  partnerName: string;
+  amount: number;
+  daysOverdue: number;
 }
 
 export interface DashboardStats {
@@ -1183,6 +1214,195 @@ export class DatabaseStorage implements IStorage {
         ratio: leverageRatio,
       },
     };
+  }
+  
+  async getAdminMonthlyData(year: number): Promise<MonthlyData[]> {
+    const monthNames = [
+      "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+      "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    ];
+    
+    // Initialize all 12 months with zeros
+    const monthlyData: MonthlyData[] = monthNames.map((_, i) => ({
+      monthNumber: i + 1,
+      totalSales: 0,
+      totalProfit: 0,
+      invoiceCount: 0,
+      expenses: 0,
+    }));
+    
+    // Get all paid invoices for the year
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+    
+    const allInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(eq(invoices.status, 'paid'));
+    
+    // Get all expenses
+    const allExpenses = await db.select().from(invoiceExpenses);
+    const expensesByInvoice = new Map<string, number>();
+    for (const exp of allExpenses) {
+      const current = expensesByInvoice.get(exp.invoiceId) || 0;
+      expensesByInvoice.set(exp.invoiceId, current + parseFloat(exp.amount));
+    }
+    
+    for (const row of allInvoices) {
+      if (!row.calculations) continue;
+      
+      // Use paymentDate for grouping
+      const paymentDate = row.invoice.paymentDate 
+        ? new Date(row.invoice.paymentDate) 
+        : null;
+      
+      if (!paymentDate || paymentDate < yearStart || paymentDate > yearEnd) continue;
+      
+      const monthIndex = paymentDate.getMonth(); // 0-11
+      const scheme = row.invoice.scheme;
+      
+      // Calculate profit based on scheme
+      let profit: number;
+      if (scheme === 'agency_30') {
+        profit = parseFloat(row.calculations.adminShareFromMargin || "0");
+      } else if (scheme === 'vika_ie_7') {
+        profit = parseFloat(row.calculations.clientBill || "0");
+      } else {
+        profit = parseFloat(row.calculations.amountToAdmin || "0");
+      }
+      
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const invoiceExpenses = expensesByInvoice.get(row.invoice.id) || 0;
+      
+      monthlyData[monthIndex].totalSales += clientBill;
+      monthlyData[monthIndex].totalProfit += profit;
+      monthlyData[monthIndex].invoiceCount += 1;
+      monthlyData[monthIndex].expenses += invoiceExpenses;
+    }
+    
+    return monthlyData;
+  }
+  
+  async getAdminForecast(monthsAhead: number): Promise<ForecastData[]> {
+    const monthNames = [
+      "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+      "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    ];
+    
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    // Create forecast periods
+    const forecastData: ForecastData[] = [];
+    for (let i = 0; i < monthsAhead; i++) {
+      const targetMonth = (currentMonth + i) % 12;
+      const targetYear = currentYear + Math.floor((currentMonth + i) / 12);
+      
+      forecastData.push({
+        monthIndex: targetMonth + 1,
+        monthName: monthNames[targetMonth],
+        yearNum: targetYear,
+        expectedAmount: 0,
+        receivedAmount: 0,
+      });
+    }
+    
+    // Get all invoices with calculations
+    const allInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId));
+    
+    for (const row of allInvoices) {
+      if (!row.calculations) continue;
+      
+      const paymentDate = row.invoice.paymentDate 
+        ? new Date(row.invoice.paymentDate) 
+        : null;
+      
+      if (!paymentDate) continue;
+      
+      const paymentMonth = paymentDate.getMonth();
+      const paymentYear = paymentDate.getFullYear();
+      
+      // Calculate profit based on scheme
+      const scheme = row.invoice.scheme;
+      let profit: number;
+      if (scheme === 'agency_30') {
+        profit = parseFloat(row.calculations.adminShareFromMargin || "0");
+      } else if (scheme === 'vika_ie_7') {
+        profit = parseFloat(row.calculations.clientBill || "0");
+      } else {
+        profit = parseFloat(row.calculations.amountToAdmin || "0");
+      }
+      
+      // Find matching forecast period
+      const forecastIndex = forecastData.findIndex(f => 
+        f.monthIndex === paymentMonth + 1 && f.yearNum === paymentYear
+      );
+      
+      if (forecastIndex === -1) continue;
+      
+      if (row.invoice.status === 'paid') {
+        forecastData[forecastIndex].receivedAmount += profit;
+      } else if (row.invoice.status === 'sent') {
+        forecastData[forecastIndex].expectedAmount += profit;
+      }
+    }
+    
+    return forecastData;
+  }
+  
+  async getOverdueInvoices(): Promise<OverdueInvoice[]> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const overdueResults = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+        partnerName: partners.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id))
+      .where(eq(invoices.status, 'sent'));
+    
+    const overdueInvoices: OverdueInvoice[] = [];
+    
+    for (const row of overdueResults) {
+      if (!row.invoice.paymentDate) continue;
+      
+      const paymentDate = new Date(row.invoice.paymentDate);
+      paymentDate.setHours(0, 0, 0, 0);
+      
+      if (paymentDate >= today) continue;
+      
+      const daysOverdue = Math.floor((today.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      overdueInvoices.push({
+        id: row.invoice.id,
+        invoiceNumber: row.invoice.invoiceNumber,
+        paymentDate: row.invoice.paymentDate,
+        clientName: row.clientName || 'Неизвестно',
+        partnerName: row.partnerName || 'Неизвестно',
+        amount: parseFloat(row.calculations?.clientBill || "0"),
+        daysOverdue,
+      });
+    }
+    
+    // Sort by days overdue (most overdue first)
+    return overdueInvoices.sort((a, b) => b.daysOverdue - a.daysOverdue);
   }
   
   async getPartnerDebtDetails(partnerId: string): Promise<{

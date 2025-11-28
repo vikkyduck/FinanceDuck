@@ -1,87 +1,64 @@
-import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Clock, CheckCircle, Bell } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { AlertCircle, CheckCircle, Bell } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
+import { apiRequest } from "@/lib/queryClient";
 
 interface OverdueInvoice {
   id: string;
-  invoice_number: string;
-  payment_date: string;
-  client_name: string;
-  partner_name: string;
+  invoiceNumber: string;
+  paymentDate: string;
+  clientName: string;
+  partnerName: string;
   amount: number;
-  days_overdue: number;
+  daysOverdue: number;
 }
 
 export const OverduePaymentsAlert = () => {
-  const [overdueInvoices, setOverdueInvoices] = useState<OverdueInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchOverdueInvoices();
-  }, []);
+  const { data: overdueInvoices, isLoading } = useQuery<OverdueInvoice[]>({
+    queryKey: ['/api/invoices/overdue'],
+  });
 
-  const fetchOverdueInvoices = async () => {
-    setLoading(true);
-    try {
-      await ensureSessionContext();
-      const today = new Date().toISOString().split('T')[0];
+  const markAsPaidMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      return apiRequest(`/api/invoices/${invoiceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'paid', paidDate: new Date().toISOString().split('T')[0] }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices/overdue'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      toast({
+        title: "Успешно",
+        description: "Счет отмечен как оплаченный",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Ошибка",
+        description: "Не удалось обновить счет",
+        variant: "destructive",
+      });
+    },
+  });
 
-      const { data: invoices, error } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          invoice_number,
-          payment_date,
-          actual_payment_date,
-          status,
-          clients:client_id (name),
-          partners:partner_id (name),
-          invoice_calculations (
-            client_bill
-          )
-        `)
-        .eq('status', 'sent')
-        .is('actual_payment_date', null)
-        .lt('payment_date', today)
-        .not('payment_date', 'is', null)
-        .order('payment_date', { ascending: true });
-
-      if (error) throw error;
-
-      const formatted = invoices?.map((invoice: any) => {
-        const paymentDate = new Date(invoice.payment_date);
-        const now = new Date();
-        const daysOverdue = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-
-        return {
-          id: invoice.id,
-          invoice_number: invoice.invoice_number,
-          payment_date: invoice.payment_date,
-          client_name: invoice.clients?.name || 'Неизвестно',
-          partner_name: invoice.partners?.name || 'Неизвестно',
-          amount: Number(invoice.invoice_calculations?.[0]?.client_bill || 0),
-          days_overdue: daysOverdue,
-        };
-      }) || [];
-
-      setOverdueInvoices(formatted);
-    } catch (error) {
-      console.error("Error fetching overdue invoices:", error);
-    } finally {
-      setLoading(false);
-    }
+  const handleRemind = (invoiceNumber: string) => {
+    toast({
+      title: "Напоминание отправлено",
+      description: `Уведомление по счету ${invoiceNumber} отправлено`,
+    });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card className="border-destructive/50 shadow-lg">
         <CardHeader className="bg-destructive/5">
@@ -122,44 +99,12 @@ export const OverduePaymentsAlert = () => {
     );
   }
 
-  const handleMarkAsPaid = async (invoiceId: string) => {
-    try {
-      await ensureSessionContext();
-      const { error } = await supabase
-        .from("invoices")
-        .update({ actual_payment_date: new Date().toISOString().split('T')[0] })
-        .eq('id', invoiceId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Успешно",
-        description: "Счет отмечен как оплаченный",
-      });
-      
-      fetchOverdueInvoices();
-    } catch (error) {
-      toast({
-        title: "Ошибка",
-        description: "Не удалось обновить счет",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleRemind = (invoiceNumber: string) => {
-    toast({
-      title: "Напоминание отправлено",
-      description: `Уведомление по счету ${invoiceNumber} отправлено`,
-    });
-  };
-
-  if (overdueInvoices.length === 0) {
+  if (!overdueInvoices || overdueInvoices.length === 0) {
     return (
-      <Alert className="border-green-200 bg-green-50/50 animate-fade-in">
+      <Alert className="border-green-200 bg-green-50/50 dark:bg-green-950/20 animate-fade-in">
         <CheckCircle className="h-4 w-4 text-green-600" />
-        <AlertTitle className="text-green-900">Просроченных платежей нет</AlertTitle>
-        <AlertDescription className="text-green-700">
+        <AlertTitle className="text-green-900 dark:text-green-100">Просроченных платежей нет</AlertTitle>
+        <AlertDescription className="text-green-700 dark:text-green-300">
           Все счета с запланированной датой оплаты либо оплачены, либо еще не просрочены.
         </AlertDescription>
       </Alert>
@@ -167,7 +112,7 @@ export const OverduePaymentsAlert = () => {
   }
 
   const totalOverdue = overdueInvoices.reduce((sum, inv) => sum + inv.amount, 0);
-  const criticalCount = overdueInvoices.filter(inv => inv.days_overdue > 7).length;
+  const criticalCount = overdueInvoices.filter(inv => inv.daysOverdue > 7).length;
 
   return (
     <Card className="border-destructive/50 shadow-lg animate-fade-in">
@@ -204,8 +149,8 @@ export const OverduePaymentsAlert = () => {
       <CardContent className="pt-6">
         <div className="space-y-3">
           {overdueInvoices.map((invoice, index) => {
-            const isCritical = invoice.days_overdue > 7;
-            const isWarning = invoice.days_overdue > 3 && invoice.days_overdue <= 7;
+            const isCritical = invoice.daysOverdue > 7;
+            const isWarning = invoice.daysOverdue > 3 && invoice.daysOverdue <= 7;
             
             return (
               <div
@@ -214,7 +159,7 @@ export const OverduePaymentsAlert = () => {
                   isCritical
                     ? 'bg-destructive/10 border-destructive/50'
                     : isWarning
-                    ? 'bg-yellow-50 border-yellow-200'
+                    ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
                     : 'bg-muted/50 border-border'
                 }`}
                 style={{ animationDelay: `${index * 50}ms` }}
@@ -222,22 +167,22 @@ export const OverduePaymentsAlert = () => {
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-lg">{invoice.invoice_number}</span>
+                      <span className="font-semibold text-lg">{invoice.invoiceNumber}</span>
                       <Badge 
                         variant={isCritical ? 'destructive' : isWarning ? 'default' : 'secondary'}
                         className={isWarning ? 'bg-yellow-500 hover:bg-yellow-600' : ''}
                       >
-                        {invoice.days_overdue} {invoice.days_overdue === 1 ? 'день' : 'дней'}
+                        {invoice.daysOverdue} {invoice.daysOverdue === 1 ? 'день' : 'дней'}
                       </Badge>
                     </div>
                     <div className="text-sm space-y-1">
                       <div className="text-muted-foreground">
-                        <span className="font-medium text-foreground">{invoice.client_name}</span>
-                        {' • '}
-                        <span className="text-foreground">{invoice.partner_name}</span>
+                        <span className="font-medium text-foreground">{invoice.clientName}</span>
+                        {' / '}
+                        <span className="text-foreground">{invoice.partnerName}</span>
                       </div>
                       <div className="text-muted-foreground">
-                        Планировалось: {formatDate(new Date(invoice.payment_date))}
+                        Планировалось: {formatDate(new Date(invoice.paymentDate))}
                       </div>
                     </div>
                   </div>
@@ -252,7 +197,7 @@ export const OverduePaymentsAlert = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleRemind(invoice.invoice_number)}
+                    onClick={() => handleRemind(invoice.invoiceNumber)}
                     className="flex-1"
                   >
                     <Bell className="h-4 w-4 mr-2" />
@@ -261,7 +206,8 @@ export const OverduePaymentsAlert = () => {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={() => handleMarkAsPaid(invoice.id)}
+                    onClick={() => markAsPaidMutation.mutate(invoice.id)}
+                    disabled={markAsPaidMutation.isPending}
                     className="flex-1"
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />

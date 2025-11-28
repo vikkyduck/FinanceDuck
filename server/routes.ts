@@ -503,6 +503,39 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Admin analytics endpoints
+  app.get("/api/admin/monthly-data", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const data = await storage.getAdminMonthlyData(year);
+      res.json(data);
+    } catch (error) {
+      console.error("Get admin monthly data error:", error);
+      res.status(500).json({ error: "Failed to get monthly data" });
+    }
+  });
+
+  app.get("/api/admin/forecast", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const monthsAhead = parseInt(req.query.months as string) || 6;
+      const data = await storage.getAdminForecast(monthsAhead);
+      res.json(data);
+    } catch (error) {
+      console.error("Get admin forecast error:", error);
+      res.status(500).json({ error: "Failed to get forecast" });
+    }
+  });
+
+  app.get("/api/invoices/overdue", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getOverdueInvoices();
+      res.json(data);
+    } catch (error) {
+      console.error("Get overdue invoices error:", error);
+      res.status(500).json({ error: "Failed to get overdue invoices" });
+    }
+  });
+
   app.get("/api/invoices", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";

@@ -1,11 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, DollarSign, Target, PiggyBank } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { useAuth } from "@/hooks/useAuth";
+
+interface MonthlyData {
+  monthNumber: number;
+  totalSales: number;
+  totalProfit: number;
+  invoiceCount: number;
+  expenses: number;
+}
 
 interface Metric {
   label: string;
@@ -16,95 +21,15 @@ interface Metric {
 }
 
 export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number }) => {
-  const [metrics, setMetrics] = useState<Metric[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const { accessTokenId } = useAuth();
-
-  const fetchMetrics = async () => {
-    if (!accessTokenId) return;
-    
-    try {
-      // Получаем данные за текущий и прошлый год
-      const { data: currentData, error: currentError } = await supabase.rpc('get_admin_monthly_data', {
-        _token_id: accessTokenId,
-        _year: selectedYear
-      });
-
-      const { data: lastData, error: lastError } = await supabase.rpc('get_admin_monthly_data', {
-        _token_id: accessTokenId,
-        _year: selectedYear - 1
-      });
-
-      if (currentError || lastError) throw currentError || lastError;
-
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-
-      // Суммируем данные до текущего месяца включительно
-      const currentYearData = (currentData || [])
-        .filter((row: any) => row.month_number <= currentMonth)
-        .reduce((acc, row: any) => ({
-          revenue: acc.revenue + Number(row.total_sales || 0),
-          profit: acc.profit + Number(row.total_profit || 0),
-        }), { revenue: 0, profit: 0 });
-
-      const lastYearData = (lastData || [])
-        .filter((row: any) => row.month_number <= currentMonth)
-        .reduce((acc, row: any) => ({
-          revenue: acc.revenue + Number(row.total_sales || 0),
-          profit: acc.profit + Number(row.total_profit || 0),
-        }), { revenue: 0, profit: 0 });
-
-      const revenueTrend = lastYearData.revenue ? 
-        ((currentYearData.revenue - lastYearData.revenue) / lastYearData.revenue) * 100 : 0;
-      const profitTrend = lastYearData.profit ? 
-        ((currentYearData.profit - lastYearData.profit) / lastYearData.profit) * 100 : 0;
-      const marginTrend = currentYearData.revenue ? 
-        ((currentYearData.profit / currentYearData.revenue) * 100) : 0;
-
-      setMetrics([
-        {
-          label: "Выручка",
-          value: currentYearData.revenue,
-          trend: revenueTrend,
-          icon: DollarSign,
-          format: "currency",
-        },
-        {
-          label: "Чистая прибыль",
-          value: currentYearData.profit,
-          trend: profitTrend,
-          icon: PiggyBank,
-          format: "currency",
-        },
-        {
-          label: "Маржинальность",
-          value: marginTrend,
-          trend: 0,
-          icon: Target,
-          format: "percent",
-        },
-      ]);
-    } catch (error) {
-      console.error("Error fetching metrics:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMetrics();
-  }, [selectedYear, accessTokenId]);
-
-  // Realtime subscriptions for automatic updates
-  useRealtimeSubscription({
-    channelName: 'current_period_calculations',
-    table: 'invoice_calculations',
-    event: '*',
-    onUpdate: fetchMetrics,
-    enabled: true,
+  const { data: currentYearData, isLoading: loadingCurrent } = useQuery<MonthlyData[]>({
+    queryKey: ['/api/admin/monthly-data', selectedYear],
   });
+
+  const { data: lastYearData, isLoading: loadingLast } = useQuery<MonthlyData[]>({
+    queryKey: ['/api/admin/monthly-data', selectedYear - 1],
+  });
+
+  const loading = loadingCurrent || loadingLast;
 
   if (loading) {
     return (
@@ -119,6 +44,56 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
       />
     );
   }
+
+  const currentMonth = new Date().getMonth() + 1;
+
+  const currentYearTotals = (currentYearData || [])
+    .filter(row => row.monthNumber <= currentMonth)
+    .reduce((acc, row) => ({
+      revenue: acc.revenue + row.totalSales,
+      profit: acc.profit + row.totalProfit,
+    }), { revenue: 0, profit: 0 });
+
+  const lastYearTotals = (lastYearData || [])
+    .filter(row => row.monthNumber <= currentMonth)
+    .reduce((acc, row) => ({
+      revenue: acc.revenue + row.totalSales,
+      profit: acc.profit + row.totalProfit,
+    }), { revenue: 0, profit: 0 });
+
+  const revenueTrend = lastYearTotals.revenue > 0
+    ? ((currentYearTotals.revenue - lastYearTotals.revenue) / lastYearTotals.revenue) * 100
+    : 0;
+  const profitTrend = lastYearTotals.profit > 0
+    ? ((currentYearTotals.profit - lastYearTotals.profit) / lastYearTotals.profit) * 100
+    : 0;
+  const marginTrend = currentYearTotals.revenue > 0
+    ? (currentYearTotals.profit / currentYearTotals.revenue) * 100
+    : 0;
+
+  const metrics: Metric[] = [
+    {
+      label: "Выручка",
+      value: currentYearTotals.revenue,
+      trend: revenueTrend,
+      icon: DollarSign,
+      format: "currency",
+    },
+    {
+      label: "Чистая прибыль",
+      value: currentYearTotals.profit,
+      trend: profitTrend,
+      icon: PiggyBank,
+      format: "currency",
+    },
+    {
+      label: "Маржинальность",
+      value: marginTrend,
+      trend: 0,
+      icon: Target,
+      format: "percent",
+    },
+  ];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -135,7 +110,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
             transition={{ delay: index * 0.1 }}
           >
             <Card className="hover-scale">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {metric.label}
                 </CardTitle>

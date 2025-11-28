@@ -108,6 +108,7 @@ export const invoiceExpenses = pgTable("invoice_expenses", {
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
   description: text("description").notNull(),
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  paidByAdmin: boolean("paid_by_admin").default(false).notNull(),
   date: date("date").defaultNow().notNull(),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

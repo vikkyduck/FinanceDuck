@@ -194,13 +194,17 @@ export function calculateInvoice(
  * Calculates partner debt to admin based on scheme
  * 
  * Partner Agreement (partner_10, partner_15, commission_based):
- *   debt = amountToAdmin = clientBill × (1 - rate/100)
- *   (Partner collects from client, keeps commission, owes remainder to admin)
- *   Expenses are paid from admin's account
+ *   Standard case (partner pays expenses from client money):
+ *     debt = clientBill - partnerCommission - expensesPaidByPartner
+ *   
+ *   Exception (admin pays expenses):
+ *     debt = clientBill - partnerCommission
+ *     (Expenses paid by admin don't reduce partner's debt)
+ *     Admin's net profit = received from partner - expenses paid by admin
  * 
  * Agency 30%:
  *   Client pays 100%
- *   ├─ 70% = client budget for project expenses
+ *   ├─ 70% = client budget for project expenses (stays with partner)
  *   └─ 30% = agency margin, split 50/50:
  *       ├─ 15% partner share (partner keeps this)
  *       └─ 15% admin share (partner OWES this to admin)
@@ -211,41 +215,50 @@ export function calculateInvoice(
  * ИП Вики (vika_ie_7):
  *   No partner involved, all income goes to admin after 7% tax
  *   debt = 0 (no partner to owe money)
+ * 
+ * @param expensesPaidByPartner - expenses paid from client money (by partner)
+ * @param expensesPaidByAdmin - expenses paid by admin from own funds
  */
 export function calculatePartnerDebt(
   scheme: InvoiceScheme,
   clientBill: number,
   partnerCommission: number,
-  executorExpenses: number = 0
-): { debtToAdmin: number; doNotSpendAmount: number } {
+  expensesPaidByPartner: number = 0,
+  expensesPaidByAdmin: number = 0
+): { debtToAdmin: number; doNotSpendAmount: number; adminNetAfterOwnExpenses: number } {
+  const totalExpenses = expensesPaidByPartner + expensesPaidByAdmin;
+  
   if (scheme === 'agency_30') {
     // Agency 30%: 
     // - Partner keeps 15% (their share)
     // - Partner OWES admin 15% (admin's share)
-    // - 70% is client budget for expenses (tracked separately)
+    // - 70% is client budget for expenses (stays with partner for external services)
     const adminShare = clientBill * 0.15; // Admin's 15% - THIS is what partner owes
     const clientBase = clientBill * 0.70;
-    const doNotSpendAmount = Math.max(0, clientBase - executorExpenses);
+    const doNotSpendAmount = Math.max(0, clientBase - totalExpenses);
     
     return {
-      debtToAdmin: adminShare, // Partner owes admin their 15% share
+      debtToAdmin: adminShare, // Partner owes admin their 15% share (fixed)
       doNotSpendAmount,
+      adminNetAfterOwnExpenses: adminShare - expensesPaidByAdmin,
     };
   }
   
   if (scheme === 'vika_ie_7') {
     // ИП Вики: No partner involvement
     // All money goes to admin (minus 7% tax)
+    const afterTax = clientBill * 0.93;
     return {
       debtToAdmin: 0,
       doNotSpendAmount: 0,
+      adminNetAfterOwnExpenses: afterTax - totalExpenses,
     };
   }
   
   // Partner Agreement (partner_10, partner_15, commission_based):
-  // Partner collects full amount from client, keeps their commission,
-  // and transfers the remainder to admin
-  // Expenses are paid by admin, not deducted from partner's debt
+  // 1. Client pays partner
+  // 2. Partner pays expenses from client money (unless admin paid)
+  // 3. Partner transfers remainder to admin
   
   let commissionRate: number;
   if (scheme === 'partner_10') {
@@ -258,11 +271,18 @@ export function calculatePartnerDebt(
   }
   
   const commissionAmount = clientBill * (commissionRate / 100);
-  const debtToAdmin = clientBill - commissionAmount; // What partner owes admin
+  
+  // Partner's debt = client bill - partner's commission - expenses paid by partner
+  // If admin paid expenses, they are NOT deducted from partner's debt
+  const debtToAdmin = clientBill - commissionAmount - expensesPaidByPartner;
+  
+  // Admin's actual profit = what they receive - expenses they paid themselves
+  const adminNetAfterOwnExpenses = debtToAdmin - expensesPaidByAdmin;
   
   return {
     debtToAdmin,
     doNotSpendAmount: 0, // No separate "do not spend" pool for commission-based schemes
+    adminNetAfterOwnExpenses,
   };
 }
 

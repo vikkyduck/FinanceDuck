@@ -78,9 +78,21 @@ export const invoices = pgTable("invoices", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   paymentDate: date("payment_date"),
+  actualPaymentDate: date("actual_payment_date"),
   notes: text("notes"),
   hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
 });
+
+export const assistantBonusPayments = pgTable("assistant_bonus_payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  paymentDate: date("payment_date").notNull(),
+  notes: text("notes"),
+  paidBy: uuid("paid_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_bonus_payments_date").on(table.paymentDate),
+]);
 
 export const invoiceCalculations = pgTable("invoice_calculations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -171,6 +183,8 @@ export type MonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferSelect;
 export type InsertMonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferInsert;
 export type SignedAct = typeof signedActs.$inferSelect;
 export type InsertSignedAct = typeof signedActs.$inferInsert;
+export type AssistantBonusPayment = typeof assistantBonusPayments.$inferSelect;
+export type InsertAssistantBonusPayment = typeof assistantBonusPayments.$inferInsert;
 export type AccessToken = typeof accessTokens.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';

@@ -165,7 +165,7 @@ export interface IStorage {
   // Assistant bonus payments
   getAssistantBonusPayments(): Promise<AssistantBonusPayment[]>;
   createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment>;
-  getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[] }>;
+  getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number }>;
   markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
 }
 

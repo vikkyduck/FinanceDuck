@@ -19,6 +19,8 @@ interface UnpaidBonusData {
   total: number;
   invoiceCount: number;
   invoiceIds: string[];
+  executorActs: number;
+  companyActs: number;
 }
 
 interface ActStats {
@@ -196,6 +198,10 @@ export const AssistantBonusManager = () => {
               <p className="text-sm text-muted-foreground text-center mt-1">
                 Сумма к выплате
               </p>
+              <div className="flex justify-center gap-4 mt-2 text-sm text-muted-foreground">
+                <span>{unpaidBonus?.executorActs || 0} актов исполнителей</span>
+                <span>{unpaidBonus?.companyActs || 0} актов компаний</span>
+              </div>
             </div>
 
             <div className="space-y-2">

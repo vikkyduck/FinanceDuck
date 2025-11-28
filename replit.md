@@ -66,6 +66,13 @@ This project is an invoice management system migrating from Supabase to Replit w
 - OverduePaymentsAlert - overdue invoices with action buttons
 - CurrentMonthPlanFact - displays plan vs fact progress bars using REST API
 - FinancialPlanningChart - bar chart comparing planned sales vs actual receipts
+- AdminDashboardMetrics - key dashboard metrics with proper TanStack Query v5 queryFn
+
+**Dashboard Refresh System (2025-11-28):**
+- useAdminDashboardRefresh hook: Centralized polling (30s) and visibility-based cache invalidation
+- useInvalidateAllDashboards hook: Post-mutation cache invalidation for all admin queries
+- Uses predicate-based matching with ADMIN_PREFIXES list for robust query key coverage
+- Automatically refreshes all admin-related queries when tab becomes visible
 
 **Privacy Rules Enforced (Server-Side):**
 - Assistants cannot access partner-client relationships via ANY endpoint:

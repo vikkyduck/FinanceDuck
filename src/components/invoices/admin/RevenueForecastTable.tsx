@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
+import { apiGet } from "@/lib/api";
 
 interface ForecastData {
   monthIndex: number;
@@ -21,7 +22,8 @@ interface ForecastData {
 
 export const RevenueForecastTable = () => {
   const { data, isLoading } = useQuery<ForecastData[]>({
-    queryKey: ['/api/admin/forecast', 6],
+    queryKey: ['admin-forecast', 6],
+    queryFn: () => apiGet<ForecastData[]>('/admin/forecast?months=6'),
   });
 
   if (isLoading) {

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { StatsGrid, StatConfig } from "@/components/ui/stats-grid";
 import { TrendingUp, Wallet, Trophy, DollarSign } from "lucide-react";
+import { apiGet } from "@/lib/api";
 
 interface MonthlyData {
   monthNumber: number;
@@ -17,7 +18,8 @@ interface YearlyKeyIndicatorsProps {
 
 export const YearlyKeyIndicators = ({ year }: YearlyKeyIndicatorsProps) => {
   const { data, isLoading } = useQuery<MonthlyData[]>({
-    queryKey: ['/api/admin/monthly-data', year],
+    queryKey: ['admin-monthly-data', year],
+    queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
   });
 
   const monthNames = [

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { apiGet } from "@/lib/api";
 
 interface MonthlyData {
   monthNumber: number;
@@ -18,7 +19,8 @@ interface MonthlyFinancialTableProps {
 
 export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
   const { data, isLoading } = useQuery<MonthlyData[]>({
-    queryKey: ['/api/admin/monthly-data', year],
+    queryKey: ['admin-monthly-data', year],
+    queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
   });
 
   const monthNames = [

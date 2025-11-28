@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiGet } from "@/lib/api";
 
 interface ForecastData {
   monthIndex: number;
@@ -18,7 +19,8 @@ interface RevenueForecastChartProps {
 
 export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartProps) => {
   const { data, isLoading } = useQuery<ForecastData[]>({
-    queryKey: ['/api/admin/forecast', monthsAhead],
+    queryKey: ['admin-forecast', monthsAhead],
+    queryFn: () => apiGet<ForecastData[]>(`/admin/forecast?months=${monthsAhead}`),
   });
 
   const CustomTooltip = ({ active, payload }: any) => {

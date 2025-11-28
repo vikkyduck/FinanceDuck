@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, DollarSign, Target, PiggyBank } from "lucide-
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
+import { apiGet } from "@/lib/api";
 
 interface MonthlyData {
   monthNumber: number;
@@ -22,11 +23,13 @@ interface Metric {
 
 export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number }) => {
   const { data: currentYearData, isLoading: loadingCurrent } = useQuery<MonthlyData[]>({
-    queryKey: ['/api/admin/monthly-data', selectedYear],
+    queryKey: ['admin-monthly-data', selectedYear],
+    queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${selectedYear}`),
   });
 
   const { data: lastYearData, isLoading: loadingLast } = useQuery<MonthlyData[]>({
-    queryKey: ['/api/admin/monthly-data', selectedYear - 1],
+    queryKey: ['admin-monthly-data', selectedYear - 1],
+    queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${selectedYear - 1}`),
   });
 
   const loading = loadingCurrent || loadingLast;

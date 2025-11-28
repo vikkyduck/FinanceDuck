@@ -7,7 +7,7 @@ import { AlertCircle, CheckCircle, Bell } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, apiGet } from "@/lib/api";
 
 interface OverdueInvoice {
   id: string;
@@ -24,7 +24,8 @@ export const OverduePaymentsAlert = () => {
   const queryClient = useQueryClient();
 
   const { data: overdueInvoices, isLoading } = useQuery<OverdueInvoice[]>({
-    queryKey: ['/api/invoices/overdue'],
+    queryKey: ['invoices-overdue'],
+    queryFn: () => apiGet<OverdueInvoice[]>('/invoices/overdue'),
   });
 
   const markAsPaidMutation = useMutation({
@@ -35,8 +36,8 @@ export const OverduePaymentsAlert = () => {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices/overdue'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices-overdue'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast({
         title: "Успешно",
         description: "Счет отмечен как оплаченный",

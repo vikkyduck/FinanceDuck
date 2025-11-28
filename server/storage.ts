@@ -1,9 +1,9 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners,
-  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment,
-  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment,
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans,
+  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan,
+  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan,
   AccessToken, UserSession, UserRole, InvoiceScheme
 } from "../shared/schema";
 import { eq, and, desc, isNull, gte, sql, inArray } from "drizzle-orm";
@@ -149,6 +149,11 @@ export interface IStorage {
   getAdminMonthlyData(year: number): Promise<MonthlyData[]>;
   getAdminForecast(monthsAhead: number): Promise<ForecastData[]>;
   getOverdueInvoices(): Promise<OverdueInvoice[]>;
+  getAdminPlanFact(year: number): Promise<PlanFactData[]>;
+  
+  getMonthlyPlans(year: number): Promise<MonthlyFinancialPlan[]>;
+  getMonthlyPlan(year: number, month: number): Promise<MonthlyFinancialPlan | null>;
+  upsertMonthlyPlan(input: MonthlyPlanInput): Promise<MonthlyFinancialPlan>;
 }
 
 export interface MonthlyData {
@@ -175,6 +180,23 @@ export interface OverdueInvoice {
   partnerName: string;
   amount: number;
   daysOverdue: number;
+}
+
+export interface PlanFactData {
+  monthNumber: number;
+  monthName: string;
+  salesTarget: number;
+  receiptsTarget: number;
+  actualSales: number;
+  actualReceipts: number;
+}
+
+export interface MonthlyPlanInput {
+  year: number;
+  month: number;
+  salesTarget?: number;
+  profitTarget?: number;
+  receiptsTarget?: number;
 }
 
 export interface DashboardStats {
@@ -1558,6 +1580,126 @@ export class DatabaseStorage implements IStorage {
       invoices: invoiceDetails,
       payments: paymentDetails,
     };
+  }
+
+  async getAdminPlanFact(year: number): Promise<PlanFactData[]> {
+    const monthNames = [
+      "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+      "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+    ];
+    
+    // Initialize all 12 months
+    const planFactData: PlanFactData[] = monthNames.map((name, i) => ({
+      monthNumber: i + 1,
+      monthName: name,
+      salesTarget: 0,
+      receiptsTarget: 0,
+      actualSales: 0,
+      actualReceipts: 0,
+    }));
+    
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+    
+    // Get monthly plans for the year
+    const plans = await this.getMonthlyPlans(year);
+    for (const plan of plans) {
+      const monthIndex = parseInt(plan.month) - 1;
+      if (monthIndex >= 0 && monthIndex < 12) {
+        planFactData[monthIndex].salesTarget = parseFloat(plan.salesTarget || "0");
+        planFactData[monthIndex].receiptsTarget = parseFloat(plan.receiptsTarget || "0");
+      }
+    }
+    
+    // Get invoices that are not draft/cancelled for sales
+    const sentOrPaidInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(
+        sql`${invoices.status} IN ('sent', 'paid')`
+      );
+    
+    for (const row of sentOrPaidInvoices) {
+      if (!row.calculations) continue;
+      
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      
+      // Actual Sales: based on invoice creation date (when invoice was issued/sent)
+      const createdDate = row.invoice.createdAt 
+        ? new Date(row.invoice.createdAt) 
+        : null;
+      
+      if (createdDate && createdDate >= yearStart && createdDate <= yearEnd) {
+        const salesMonth = createdDate.getMonth();
+        planFactData[salesMonth].actualSales += clientBill;
+      }
+      
+      // Actual Receipts: only for paid invoices with paymentDate in year
+      if (row.invoice.status === 'paid' && row.invoice.paymentDate) {
+        const paymentDate = new Date(row.invoice.paymentDate);
+        if (paymentDate >= yearStart && paymentDate <= yearEnd) {
+          const receiptMonth = paymentDate.getMonth();
+          planFactData[receiptMonth].actualReceipts += clientBill;
+        }
+      }
+    }
+    
+    return planFactData;
+  }
+
+  async getMonthlyPlans(year: number): Promise<MonthlyFinancialPlan[]> {
+    return await db
+      .select()
+      .from(monthlyFinancialPlans)
+      .where(eq(monthlyFinancialPlans.year, year.toString()))
+      .orderBy(monthlyFinancialPlans.month);
+  }
+
+  async getMonthlyPlan(year: number, month: number): Promise<MonthlyFinancialPlan | null> {
+    const [plan] = await db
+      .select()
+      .from(monthlyFinancialPlans)
+      .where(and(
+        eq(monthlyFinancialPlans.year, year.toString()),
+        eq(monthlyFinancialPlans.month, month.toString())
+      ))
+      .limit(1);
+    
+    return plan || null;
+  }
+
+  async upsertMonthlyPlan(input: MonthlyPlanInput): Promise<MonthlyFinancialPlan> {
+    const existing = await this.getMonthlyPlan(input.year, input.month);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(monthlyFinancialPlans)
+        .set({
+          salesTarget: input.salesTarget?.toString() || existing.salesTarget,
+          profitTarget: input.profitTarget?.toString() || existing.profitTarget,
+          receiptsTarget: input.receiptsTarget?.toString() || existing.receiptsTarget,
+          updatedAt: new Date(),
+        })
+        .where(eq(monthlyFinancialPlans.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(monthlyFinancialPlans)
+        .values({
+          year: input.year.toString(),
+          month: input.month.toString(),
+          salesTarget: input.salesTarget?.toString() || "0",
+          profitTarget: input.profitTarget?.toString() || "0",
+          receiptsTarget: input.receiptsTarget?.toString() || "0",
+        })
+        .returning();
+      return created;
+    }
   }
 }
 

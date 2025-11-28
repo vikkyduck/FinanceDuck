@@ -48,6 +48,13 @@ This project is an invoice management system migrating from Supabase to Replit w
 - GET /api/admin/monthly-data?year=YYYY - monthly sales, profit, expenses breakdown (admin only)
 - GET /api/admin/forecast?months=N - N-month revenue forecast with expected vs received (admin only)
 - GET /api/invoices/overdue - overdue invoices list (admin only)
+- GET /api/admin/plan-fact?year=YYYY - plan vs fact data for comparison charts (admin only)
+- GET /api/admin/monthly-plans?year=YYYY - get all monthly financial plans for year (admin only)
+- POST /api/admin/monthly-plans - upsert monthly financial plan targets (admin only)
+
+**Database Schema Updates (2025-11-28):**
+- Added monthly_financial_plans table for storing monthly target goals (sales, profit, receipts)
+- Index on (year, month) for efficient lookup
 
 **Migrated Analytics Components (2025-11-28):**
 - CurrentPeriodMetrics - YTD revenue/profit comparison with last year
@@ -57,7 +64,8 @@ This project is an invoice management system migrating from Supabase to Replit w
 - RevenueForecastChart - stacked bar chart for forecast visualization
 - RevenueForecastTable - detailed forecast table
 - OverduePaymentsAlert - overdue invoices with action buttons
-- CurrentMonthPlanFact - placeholder (awaiting monthly_financial_plans table migration)
+- CurrentMonthPlanFact - displays plan vs fact progress bars using REST API
+- FinancialPlanningChart - bar chart comparing planned sales vs actual receipts
 
 **Privacy Rules Enforced (Server-Side):**
 - Assistants cannot access partner-client relationships via ANY endpoint:

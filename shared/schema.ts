@@ -125,6 +125,19 @@ export const partnerPayments = pgTable("partner_payments", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const monthlyFinancialPlans = pgTable("monthly_financial_plans", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  year: numeric("year", { precision: 4, scale: 0 }).notNull(),
+  month: numeric("month", { precision: 2, scale: 0 }).notNull(),
+  salesTarget: numeric("sales_target", { precision: 15, scale: 2 }).default("0"),
+  profitTarget: numeric("profit_target", { precision: 15, scale: 2 }).default("0"),
+  receiptsTarget: numeric("receipts_target", { precision: 15, scale: 2 }).default("0"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_monthly_plans_year_month").on(table.year, table.month),
+]);
+
 export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = typeof partners.$inferInsert;
 export type Client = typeof clients.$inferSelect;
@@ -138,6 +151,8 @@ export type InvoiceExpense = typeof invoiceExpenses.$inferSelect;
 export type InsertInvoiceExpense = typeof invoiceExpenses.$inferInsert;
 export type PartnerPayment = typeof partnerPayments.$inferSelect;
 export type InsertPartnerPayment = typeof partnerPayments.$inferInsert;
+export type MonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferSelect;
+export type InsertMonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferInsert;
 export type AccessToken = typeof accessTokens.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';

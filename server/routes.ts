@@ -536,6 +536,45 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/admin/plan-fact", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const data = await storage.getAdminPlanFact(year);
+      res.json(data);
+    } catch (error) {
+      console.error("Get admin plan-fact error:", error);
+      res.status(500).json({ error: "Failed to get plan-fact data" });
+    }
+  });
+
+  app.get("/api/admin/monthly-plans", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const data = await storage.getMonthlyPlans(year);
+      res.json(data);
+    } catch (error) {
+      console.error("Get monthly plans error:", error);
+      res.status(500).json({ error: "Failed to get monthly plans" });
+    }
+  });
+
+  app.post("/api/admin/monthly-plans", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { year, month, salesTarget, profitTarget, receiptsTarget } = req.body;
+      const plan = await storage.upsertMonthlyPlan({
+        year: parseInt(year),
+        month: parseInt(month),
+        salesTarget: salesTarget ? parseFloat(salesTarget) : undefined,
+        profitTarget: profitTarget ? parseFloat(profitTarget) : undefined,
+        receiptsTarget: receiptsTarget ? parseFloat(receiptsTarget) : undefined,
+      });
+      res.json(plan);
+    } catch (error) {
+      console.error("Upsert monthly plan error:", error);
+      res.status(500).json({ error: "Failed to save monthly plan" });
+    }
+  });
+
   app.get("/api/invoices", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";

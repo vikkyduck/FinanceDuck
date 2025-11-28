@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { useAuth } from "@/hooks/useAuth";
+import { apiGet } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface MonthlyData {
+  monthNumber: number;
+  totalSales: number;
+  totalProfit: number;
+  invoiceCount: number;
+  expenses: number;
+}
+
+interface ChartData {
   month: string;
   sales: number;
   count: number;
@@ -15,40 +23,16 @@ interface MonthlySalesChartProps {
   year: number;
 }
 
+const monthNames = [
+  "Янв", "Фев", "Мар", "Апр", "Май", "Июн",
+  "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"
+];
+
 export const MonthlySalesChart = ({ year }: MonthlySalesChartProps) => {
-  const { accessTokenId } = useAuth();
-  const [data, setData] = useState<MonthlyData[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchMonthlyData();
-  }, [year, accessTokenId]);
-
-  const fetchMonthlyData = async () => {
-    if (!accessTokenId) return;
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('get_admin_monthly_data', {
-        _token_id: accessTokenId,
-        _year: year
-      });
-
-      if (error) throw error;
-
-      const chartData: MonthlyData[] = (data || []).map((row: any) => ({
-        month: row.month_name,
-        sales: Number(row.total_sales || 0),
-        count: Number(row.invoice_count || 0),
-      }));
-
-      setData(chartData);
-    } catch (error) {
-      console.error("Error fetching monthly sales data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isLoading } = useQuery<MonthlyData[]>({
+    queryKey: ['admin-monthly-data', year],
+    queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
+  });
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -67,32 +51,47 @@ export const MonthlySalesChart = ({ year }: MonthlySalesChartProps) => {
     return null;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Продажи по месяцам</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-80 flex items-center justify-center text-muted-foreground">
-            Загрузка...
+          <div className="h-80 flex items-end justify-between gap-2 pt-8">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton 
+                key={i} 
+                className="flex-1" 
+                style={{ height: `${Math.random() * 60 + 20}%` }} 
+              />
+            ))}
           </div>
         </CardContent>
       </Card>
     );
   }
 
+  const chartData: ChartData[] = Array.from({ length: 12 }, (_, i) => {
+    const monthData = (data || []).find(d => d.monthNumber === i + 1);
+    return {
+      month: monthNames[i],
+      sales: monthData?.totalSales || 0,
+      count: monthData?.invoiceCount || 0,
+    };
+  });
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Продажи по месяцам</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Сумма новых счетов за {year} год (без ретроспективных)
+          Сумма новых счетов за {year} год
         </p>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={data}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis 
               dataKey="month" 

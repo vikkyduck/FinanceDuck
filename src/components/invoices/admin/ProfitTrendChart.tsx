@@ -1,11 +1,19 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { useAuth } from "@/hooks/useAuth";
+import { apiGet } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
-interface MonthlyProfit {
+interface MonthlyData {
+  monthNumber: number;
+  totalSales: number;
+  totalProfit: number;
+  invoiceCount: number;
+  expenses: number;
+}
+
+interface ChartData {
   month: string;
   profit: number;
   cumulative: number;
@@ -15,40 +23,16 @@ interface ProfitTrendChartProps {
   year: number;
 }
 
+const monthNames = [
+  "Янв", "Фев", "Мар", "Апр", "Май", "Июн",
+  "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"
+];
+
 export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
-  const { accessTokenId } = useAuth();
-  const [data, setData] = useState<MonthlyProfit[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchProfitData();
-  }, [year, accessTokenId]);
-
-  const fetchProfitData = async () => {
-    if (!accessTokenId) return;
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.rpc('get_admin_monthly_data', {
-        _token_id: accessTokenId,
-        _year: year
-      });
-
-      if (error) throw error;
-
-      const chartData: MonthlyProfit[] = (data || []).map((row: any) => ({
-        month: row.month_name,
-        profit: Number(row.total_profit || 0),
-        cumulative: Number(row.cumulative_profit || 0),
-      }));
-
-      setData(chartData);
-    } catch (error) {
-      console.error("Error fetching profit data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isLoading } = useQuery<MonthlyData[]>({
+    queryKey: ['admin-monthly-data', year],
+    queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
+  });
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -67,20 +51,30 @@ export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
     return null;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Динамика прибыли</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-80 flex items-center justify-center text-muted-foreground">
-            Загрузка...
-          </div>
+          <Skeleton className="h-80 w-full" />
         </CardContent>
       </Card>
     );
   }
+
+  let cumulativeProfit = 0;
+  const chartData: ChartData[] = Array.from({ length: 12 }, (_, i) => {
+    const monthData = (data || []).find(d => d.monthNumber === i + 1);
+    const profit = monthData?.totalProfit || 0;
+    cumulativeProfit += profit;
+    return {
+      month: monthNames[i],
+      profit,
+      cumulative: cumulativeProfit,
+    };
+  });
 
   return (
     <Card>
@@ -92,7 +86,7 @@ export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={data}>
+          <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
             <XAxis dataKey="month" className="text-xs" />
             <YAxis 

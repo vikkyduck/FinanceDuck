@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdminStats } from "@/components/invoices/admin/AdminStats";
+import { AdminDashboardMetrics } from "@/components/invoices/admin/AdminDashboardMetrics";
 import { RevenueForecastTable } from "@/components/invoices/admin/RevenueForecastTable";
 import { MonthlyFinancialTable } from "@/components/invoices/admin/MonthlyFinancialTable";
 import { YearlyKeyIndicators } from "@/components/invoices/admin/YearlyKeyIndicators";
@@ -91,9 +92,9 @@ const StatsPage = () => {
 
       <div className="space-y-10 pb-12">
 
-        {/* Key Metrics - Always visible */}
+        {/* Dashboard Metrics - Yearly Summary, Cash Flow, Sales, Efficiency */}
         <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          <KeyMetricsCards />
+          <AdminDashboardMetrics />
         </div>
 
         {/* Critical Alerts - If any */}

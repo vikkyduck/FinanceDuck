@@ -117,7 +117,15 @@ The invoice management flow involves assistants creating invoices, data sanitiza
 
 ## Financial Calculation Engine
 
-The system supports two primary commission schemes: Agency 30% Margin and Commission-Based, with `calculateInvoice()` as a core pure function for computing all financial metrics. This ensures consistent calculation of partner share, admin share, client remaining budget, and net profit, with results cached in an `invoice_calculations` view.
+The system supports four commission schemes with `calculateInvoice()` as a core pure function for computing all financial metrics:
+- **partner_10**: Partner gets 10% commission, admin receives 90% of clientBill
+- **partner_15**: Partner gets 15% commission, admin receives 85% of clientBill
+- **agency_30**: 30% agency margin - partner gets 15%, admin gets 15%, client budget is 70%
+- **commission_based**: Custom commission rate for partners with non-standard percentages
+
+**Critical Business Rule (2025-11-28):** In 90% of cases, expenses are paid by the partner from client money. Admin's profit (netProfitAdmin) equals their percentage share FIXED - expenses are NOT deducted from admin's profit. Only agency_30 handles expenses differently (from client's 70% budget).
+
+Removed scheme: vika_ie_7 (deprecated 2025-11-28) - Vika Utkina now treated as regular partner.
 
 ## Security Architecture
 

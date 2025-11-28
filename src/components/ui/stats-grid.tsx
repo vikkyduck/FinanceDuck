@@ -10,6 +10,7 @@ export interface StatConfig {
   description?: string;
   valueClassName?: string;
   progress?: number;
+  tooltip?: string;
 }
 
 interface StatsGridProps {
@@ -63,6 +64,7 @@ export const StatsGrid = ({
           description={stat.description}
           valueClassName={stat.valueClassName}
           progress={stat.progress}
+          tooltip={stat.tooltip}
         />
       ))}
     </div>

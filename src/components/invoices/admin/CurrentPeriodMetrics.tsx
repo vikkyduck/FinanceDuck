@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, Target, PiggyBank } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Target, PiggyBank, HelpCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
 import { apiGet } from "@/lib/api";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MonthlyData {
   monthNumber: number;
@@ -19,6 +20,7 @@ interface Metric {
   trend: number;
   icon: any;
   format: "currency" | "percent";
+  tooltip: string;
 }
 
 export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number }) => {
@@ -81,6 +83,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
       trend: revenueTrend,
       icon: DollarSign,
       format: "currency",
+      tooltip: "Сумма clientBill по ОПЛАЧЕННЫМ счетам с начала года. Учитываются только счета со статусом 'paid' и датой оплаты в текущем году.",
     },
     {
       label: "Чистая прибыль",
@@ -88,6 +91,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
       trend: profitTrend,
       icon: PiggyBank,
       format: "currency",
+      tooltip: "Формула: netProfitAdmin = amountToAdmin - expensesPaidByAdmin. Это доля админа минус расходы, оплаченные админом. Расходы партнёра НЕ вычитаются.",
     },
     {
       label: "Маржинальность",
@@ -95,6 +99,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
       trend: 0,
       icon: Target,
       format: "percent",
+      tooltip: "Формула: Чистая прибыль / Выручка × 100%. Показывает, какой процент от выручки остаётся как чистая прибыль.",
     },
   ];
 
@@ -114,9 +119,21 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
           >
             <Card className="hover-scale">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {metric.label}
-                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {metric.label}
+                  </CardTitle>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-sm">{metric.tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <div className="p-2 rounded-full bg-primary/10">
                   <Icon className="h-4 w-4 text-primary" />
                 </div>

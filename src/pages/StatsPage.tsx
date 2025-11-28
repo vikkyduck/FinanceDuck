@@ -10,7 +10,6 @@ import { PlanHistoryComparison } from "@/components/invoices/admin/PlanHistoryCo
 import { OverduePaymentsAlert } from "@/components/invoices/admin/OverduePaymentsAlert";
 import { CurrentMonthPlanFact } from "@/components/invoices/admin/CurrentMonthPlanFact";
 import { CurrentPeriodMetrics } from "@/components/invoices/admin/CurrentPeriodMetrics";
-import { KeyMetricsCards } from "@/components/invoices/admin/KeyMetricsCards";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -143,10 +142,29 @@ const StatsPage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
+                className="space-y-8"
               >
-                <CurrentPeriodMetrics selectedYear={selectedYear} />
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-semibold">С начала года (YTD)</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Только ОПЛАЧЕННЫЕ счета за {selectedYear} год. Сравнение с аналогичным периодом прошлого года.
+                    </p>
+                  </div>
+                  <CurrentPeriodMetrics selectedYear={selectedYear} />
+                </div>
+                
                 <CurrentMonthPlanFact />
-                <AdminStats />
+                
+                <div className="space-y-4">
+                  <div>
+                    <h2 className="text-xl font-semibold">Все счета за всё время</h2>
+                    <p className="text-sm text-muted-foreground">
+                      ВСЕ счета независимо от статуса (оплаченные + ожидающие). Накопительный итог.
+                    </p>
+                  </div>
+                  <AdminStats />
+                </div>
               </motion.div>
             </TabsContent>
           </AnimatePresence>

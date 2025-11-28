@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { DollarSign, User, Building2, History, Calendar } from "lucide-react";
+import { DollarSign, User, Building2, History, Calendar, RefreshCw } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
@@ -23,17 +23,34 @@ interface AssistantStats {
 
 export const AssistantBonusCard = () => {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
 
-  const { data: stats, isLoading } = useQuery<AssistantStats>({
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/my-bonus-payments'] });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [queryClient]);
+
+  const { data: stats, isLoading, isFetching } = useQuery<AssistantStats>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
     refetchInterval: 30000,
+    staleTime: 10000,
   });
 
   const { data: paymentHistory = [], isLoading: loadingHistory } = useQuery<AssistantBonusPayment[]>({
     queryKey: ['/api/my-bonus-payments'],
     queryFn: () => apiGet('/my-bonus-payments'),
     enabled: historyDialogOpen,
+    refetchInterval: historyDialogOpen ? 30000 : false,
   });
 
   if (isLoading) {
@@ -86,6 +103,9 @@ export const AssistantBonusCard = () => {
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="h-5 w-5 text-primary" />
             Ваши бонусы
+            {isFetching && (
+              <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin" />
+            )}
           </CardTitle>
           <Button 
             variant="ghost" 

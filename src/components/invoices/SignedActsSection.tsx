@@ -62,6 +62,8 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     queryKey: ['/api/invoices', invoiceId, 'acts'],
     queryFn: () => apiGet(`/invoices/${invoiceId}/acts`),
     enabled: !!invoiceId,
+    refetchInterval: 30000,
+    staleTime: 10000,
   });
 
   const uploadMutation = useMutation({
@@ -86,6 +88,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'acts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
       setUploadingType(null);
     },
     onError: (error: any) => {
@@ -112,6 +115,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'acts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
       setLinkDialog({ open: false, actType: null });
       setLinkUrl("");
       setLinkName("");
@@ -132,6 +136,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'acts'] });
       queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
     },
     onError: (error: any) => {
       toast({

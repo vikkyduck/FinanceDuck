@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, CheckCircle, History, FileCheck2, FileText, Calendar, CreditCard } from "lucide-react";
+import { DollarSign, CheckCircle, History, FileCheck2, FileText, Calendar, CreditCard, RefreshCw } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, apiGet, apiPost } from "@/lib/api";
 import { format } from "date-fns";
@@ -36,17 +36,37 @@ export const AssistantBonusManager = () => {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [notes, setNotes] = useState("");
 
-  const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/bonus-payments'] });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [queryClient]);
+
+  const { data: unpaidBonus, isLoading: loadingUnpaid, isFetching: fetchingUnpaid } = useQuery<UnpaidBonusData>({
     queryKey: ['/api/admin/unpaid-bonus'],
+    refetchInterval: 30000,
+    staleTime: 10000,
   });
 
   const { data: actStats, isLoading: loadingStats } = useQuery<ActStats>({
     queryKey: ['/api/acts-statistics'],
+    refetchInterval: 30000,
+    staleTime: 10000,
   });
 
   const { data: paymentHistory = [], isLoading: loadingHistory } = useQuery<AssistantBonusPayment[]>({
     queryKey: ['/api/admin/bonus-payments'],
     enabled: historyDialogOpen,
+    refetchInterval: historyDialogOpen ? 30000 : false,
   });
 
   const payoutMutation = useMutation({
@@ -64,6 +84,9 @@ export const AssistantBonusManager = () => {
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/bonus-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/my-bonus-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
       setPayoutDialogOpen(false);
       setNotes("");
     },
@@ -114,6 +137,9 @@ export const AssistantBonusManager = () => {
             <CardTitle className="flex items-center gap-2 text-lg">
               <DollarSign className="h-5 w-5 text-primary" />
               Бонусы ассистента
+              {fetchingUnpaid && (
+                <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin" />
+              )}
             </CardTitle>
             <CardDescription>
               За подписанные акты с исполнителями и клиентами

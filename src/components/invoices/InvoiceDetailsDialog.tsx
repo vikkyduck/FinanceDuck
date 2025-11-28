@@ -13,16 +13,15 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
-import { CalendarIcon, Plus, Trash2, Download, FileText, Loader2, X } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, FileText, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { AddExpenseDialog } from "./assistant/AddExpenseDialog";
 import { EditExpenseDialog } from "./assistant/EditExpenseDialog";
-import { UploadDocumentDialog } from "./UploadDocumentDialog";
 import { SignedActsSection } from "./SignedActsSection";
 import { useToast } from "@/hooks/use-toast";
-import { getVisibleFields, getDocumentTypeLabel, formatFileSize, UserRole } from "@/lib/invoicePermissions";
+import { getVisibleFields, UserRole } from "@/lib/invoicePermissions";
 import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { InvoiceWaterfallChart } from "./InvoiceWaterfallChart";
@@ -51,18 +50,13 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   const queryClient = useQueryClient();
   const [invoice, setInvoice] = useState<any>(null);
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<any[]>([]);
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editExpenseOpen, setEditExpenseOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
-  const [uploadDocOpen, setUploadDocOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
   const [deleteExpense, setDeleteExpense] = useState<{id: string, description: string} | null>(null);
   const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
-  
-  const [deleteDocument, setDeleteDocument] = useState<{id: string, name: string} | null>(null);
-  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     status: "draft" | "sent" | "paid" | "cancelled",
@@ -198,23 +192,9 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       }));
       setExpenses(mappedExpenses);
 
-      const documentsData = invoiceData.documents || [];
-      const mappedDocuments = documentsData.map((doc: any) => ({
-        id: doc.id,
-        invoice_id: doc.invoiceId,
-        file_name: doc.fileName,
-        file_size: doc.fileSize,
-        file_type: doc.fileType,
-        document_type: doc.documentType,
-        storage_path: doc.storagePath,
-        uploaded_at: doc.uploadedAt,
-      }));
-      setDocuments(mappedDocuments);
-
       console.log('[InvoiceDetailsDialog] === FETCH COMPLETE ===', {
         hasInvoice: !!mappedInvoice,
-        expensesCount: mappedExpenses.length,
-        documentsCount: mappedDocuments.length
+        expensesCount: mappedExpenses.length
       });
     } catch (error: any) {
       console.error("[InvoiceDetailsDialog] === FETCH FAILED ===", error);
@@ -555,37 +535,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     return labels[status] || status;
   };
 
-  const handleDownloadDocument = async (doc: any) => {
-    toast({
-      title: "В разработке",
-      description: "Загрузка документов временно недоступна",
-    });
-  };
-
-  const handleDeleteDocument = async () => {
-    if (!deleteDocument) return;
-
-    setDeletingDocumentId(deleteDocument.id);
-
-    try {
-      await apiDelete(`/documents/${deleteDocument.id}`);
-      toast({
-        title: "Успешно",
-        description: "Документ удалён",
-      });
-      fetchInvoiceDetails();
-    } catch (error: any) {
-      toast({
-        title: "Ошибка",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-    
-    setDeleteDocument(null);
-    setDeletingDocumentId(null);
-  };
-
   if (loading || !invoice) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -600,7 +549,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
   const isAgency30 = invoice.scheme === 'agency_30';
   const permissions = getVisibleFields(userRole, invoice.scheme);
-  const actsCount = documents.filter(d => d.document_type === 'act').length;
 
   return (
     <>
@@ -1178,73 +1126,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
               </Card>
             )}
 
-            {/* Документы и акты */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Документы и акты</CardTitle>
-                {permissions.canUploadDocuments && (
-                  <Button size="sm" onClick={() => setUploadDocOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Загрузить документ
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                {documents.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    Нет загруженных документов
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {documents.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{doc.file_name}</p>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline" className="text-xs">
-                                {getDocumentTypeLabel(doc.document_type)}
-                              </Badge>
-                              <span>{formatFileSize(doc.file_size)}</span>
-                              <span>•</span>
-                              <span>{formatDate(doc.uploaded_at)}</span>
-                            </div>
-                            {doc.notes && (
-                              <p className="text-xs text-muted-foreground mt-1">{doc.notes}</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDownloadDocument(doc)}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {permissions.canUploadDocuments && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={deletingDocumentId === doc.id}
-                              onClick={() => setDeleteDocument({ id: doc.id, name: doc.file_name })}
-                            >
-                              {deletingDocumentId === doc.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* Signed Acts Section */}
             <SignedActsSection
               invoiceId={invoiceId || ""}
@@ -1273,15 +1154,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         />
       )}
 
-      {permissions.canUploadDocuments && (
-        <UploadDocumentDialog
-          open={uploadDocOpen}
-          onOpenChange={setUploadDocOpen}
-          invoiceId={invoiceId || ""}
-          onSuccess={fetchInvoiceDetails}
-        />
-      )}
-
       <AlertDialog open={!!deleteExpense} onOpenChange={(open) => !open && setDeleteExpense(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1299,35 +1171,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
               className="bg-destructive hover:bg-destructive/90"
             >
               {deletingExpenseId ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Удаление...
-                </>
-              ) : (
-                "Удалить"
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!deleteDocument} onOpenChange={(open) => !open && setDeleteDocument(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Удалить документ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Вы действительно хотите удалить документ "{deleteDocument?.name}"? 
-              Файл будет удалён из хранилища без возможности восстановления.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Отмена</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={handleDeleteDocument}
-              disabled={!!deletingDocumentId}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              {deletingDocumentId ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Удаление...

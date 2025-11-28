@@ -167,7 +167,7 @@ export const AdminDashboard = () => {
             >
               <CollapsibleSection
                 id="stats"
-                title="Статистика"
+                title="Прибыль за всё время"
                 isExpanded={isExpanded("stats")}
                 onToggle={() => toggleSection("stats")}
               >

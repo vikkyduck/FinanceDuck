@@ -7,7 +7,7 @@ channel = "stable-25_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["bash", "-c", "bun install && bun run build"]
+build = ["bun", "run", "build"]
 publicDir = "dist"
 run = ["bash", "-c", "NODE_ENV=production bun run server/vite.ts"]
 
@@ -42,10 +42,6 @@ externalPort = 80
 [[ports]]
 localPort = 24678
 externalPort = 3002
-
-[[ports]]
-localPort = 32891
-externalPort = 3003
 
 [[ports]]
 localPort = 35563

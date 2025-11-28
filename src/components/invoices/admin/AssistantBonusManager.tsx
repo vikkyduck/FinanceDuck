@@ -1,152 +1,277 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, CheckCircle } from "lucide-react";
+import { DollarSign, CheckCircle, History, FileCheck2, FileText, Calendar, CreditCard } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, apiGet, apiPost } from "@/lib/api";
+import { format } from "date-fns";
+import { ru } from "date-fns/locale";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AssistantBonusPayment } from "@shared/schema";
+
+interface UnpaidBonusData {
+  total: number;
+  invoiceCount: number;
+  invoiceIds: string[];
+}
+
+interface ActStats {
+  executorActs: number;
+  companyActs: number;
+  totalPaidInvoices: number;
+}
 
 export const AssistantBonusManager = () => {
   const { toast } = useToast();
-  const [bonusData, setBonusData] = useState({
-    clientActs: 0,
-    executorReceipts: 0,
-    total: 0,
+  const queryClient = useQueryClient();
+  const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+
+  const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
+    queryKey: ['/api/admin/unpaid-bonus'],
   });
-  const [loading, setLoading] = useState(true);
-  const [resetting, setResetting] = useState(false);
 
-  useEffect(() => {
-    fetchBonusData();
-  }, []);
+  const { data: actStats, isLoading: loadingStats } = useQuery<ActStats>({
+    queryKey: ['/api/acts-statistics'],
+  });
 
-  const fetchBonusData = async () => {
-    const { data, error } = await supabase
-      .from("invoice_calculations")
-      .select("assistant_bonus_client_acts, assistant_bonus_executor_receipts, assistant_bonus_total");
+  const { data: paymentHistory = [], isLoading: loadingHistory } = useQuery<AssistantBonusPayment[]>({
+    queryKey: ['/api/admin/bonus-payments'],
+    enabled: historyDialogOpen,
+  });
 
-    if (!error && data) {
-      const totals = data.reduce((acc, item) => ({
-        clientActs: acc.clientActs + (item.assistant_bonus_client_acts || 0),
-        executorReceipts: acc.executorReceipts + (item.assistant_bonus_executor_receipts || 0),
-        total: acc.total + (item.assistant_bonus_total || 0),
-      }), { clientActs: 0, executorReceipts: 0, total: 0 });
-
-      setBonusData(totals);
-    }
-    setLoading(false);
-  };
-
-  const handleMarkAsPaid = async () => {
-    if (!confirm("Подтвердите выплату бонусов. Счётчики будут обнулены.")) {
-      return;
-    }
-
-    setResetting(true);
-
-    try {
-      // First, create assistant_bonuses record
-      const { error: insertError } = await supabase
-        .from("assistant_bonuses")
-        .insert({
-          client_acts_count: bonusData.clientActs,
-          executor_receipts_count: bonusData.executorReceipts,
-          total_bonus_amount: bonusData.total,
-          payment_status: "paid",
-          paid_at: new Date().toISOString(),
-        });
-
-      if (insertError) throw insertError;
-
-      // Then reset all bonus fields in invoice_calculations
-      const { error: updateError } = await supabase
-        .from("invoice_calculations")
-        .update({
-          assistant_bonus_client_acts: 0,
-          assistant_bonus_executor_receipts: 0,
-          assistant_bonus_total: 0,
-          assistant_bonus_paid: true,
-        })
-        .neq("id", "00000000-0000-0000-0000-000000000000");
-
-      if (updateError) throw updateError;
-
-      toast({
-        title: "Успешно",
-        description: "Выплата зафиксирована, бонусы обнулены",
+  const payoutMutation = useMutation({
+    mutationFn: async () => {
+      return apiPost('/admin/bonus-payout', {
+        amount: unpaidBonus?.total || 0,
+        notes: notes || null,
+        invoiceIds: unpaidBonus?.invoiceIds || [],
       });
-
-      fetchBonusData();
-    } catch (error: any) {
+    },
+    onSuccess: () => {
+      toast({
+        title: "Выплата зафиксирована",
+        description: `Сумма ${formatCurrency(unpaidBonus?.total || 0)} отмечена как выплаченная`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/bonus-payments'] });
+      setPayoutDialogOpen(false);
+      setNotes("");
+    },
+    onError: (error: Error) => {
       toast({
         title: "Ошибка",
         description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setResetting(false);
-    }
-  };
+    },
+  });
 
-  const clientActsAmount = bonusData.clientActs * 2000;
-  const executorReceiptsAmount = bonusData.executorReceipts * 1000;
+  const executorActsAmount = (actStats?.executorActs || 0) * 1000;
+  const companyActsAmount = (actStats?.companyActs || 0) * 2000;
+  const calculatedTotal = executorActsAmount + companyActsAmount;
+
+  const loading = loadingUnpaid || loadingStats;
 
   if (loading) {
     return (
       <Card>
-        <CardContent className="pt-6">
-          <div className="text-center text-muted-foreground">Загрузка...</div>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-primary" />
+            Бонусы ассистента
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-4 w-24" />
+          <div className="grid grid-cols-2 gap-4 pt-2">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
         </CardContent>
       </Card>
     );
   }
 
+  const unpaidTotal = unpaidBonus?.total || 0;
+  const hasUnpaidBonuses = unpaidTotal > 0;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <DollarSign className="h-5 w-5 text-primary" />
-          Бонусы ассистента
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <div className="text-2xl font-bold text-primary">
-            {formatCurrency(bonusData.total)}
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <DollarSign className="h-5 w-5 text-primary" />
+              Бонусы ассистента
+            </CardTitle>
+            <CardDescription>
+              За подписанные акты с исполнителями и клиентами
+            </CardDescription>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Сумма к выплате
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Акты от клиентов</p>
-            <p className="font-semibold">
-              {bonusData.clientActs} × 2000₽ = {formatCurrency(clientActsAmount)}
-            </p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Чеки от исполнителей</p>
-            <p className="font-semibold">
-              {bonusData.executorReceipts} × 1000₽ = {formatCurrency(executorReceiptsAmount)}
-            </p>
-          </div>
-        </div>
-
-        {bonusData.total > 0 && (
           <Button 
-            onClick={handleMarkAsPaid}
-            disabled={resetting}
-            className="w-full"
-            variant="default"
+            variant="ghost" 
+            size="sm"
+            onClick={() => setHistoryDialogOpen(true)}
+            data-testid="button-view-bonus-history"
           >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            {resetting ? "Обработка..." : "Отметить выплату и обнулить"}
+            <History className="h-4 w-4 mr-2" />
+            История выплат
           </Button>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-baseline gap-3">
+            <div className="text-3xl font-bold text-primary">
+              {formatCurrency(calculatedTotal)}
+            </div>
+            {hasUnpaidBonuses && (
+              <Badge variant="secondary" className="text-xs">
+                К выплате: {formatCurrency(unpaidTotal)}
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Всего начислено за {actStats?.totalPaidInvoices || 0} оплаченных счетов
+          </p>
+
+          <div className="grid grid-cols-2 gap-4 pt-3 border-t">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FileCheck2 className="h-4 w-4" />
+                Акты с исполнителями
+              </div>
+              <p className="font-semibold">
+                {actStats?.executorActs || 0} x 1000 = {formatCurrency(executorActsAmount)}
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FileText className="h-4 w-4" />
+                Акты с клиентами (компании)
+              </div>
+              <p className="font-semibold">
+                {actStats?.companyActs || 0} x 2000 = {formatCurrency(companyActsAmount)}
+              </p>
+            </div>
+          </div>
+
+          {hasUnpaidBonuses && (
+            <Button 
+              onClick={() => setPayoutDialogOpen(true)}
+              disabled={payoutMutation.isPending}
+              className="w-full mt-4"
+              variant="default"
+              data-testid="button-payout-bonus"
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              Выплатить {formatCurrency(unpaidTotal)}
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Подтвердить выплату бонуса</DialogTitle>
+            <DialogDescription>
+              После подтверждения бонусы за {unpaidBonus?.invoiceCount || 0} счетов будут отмечены как выплаченные
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-muted rounded-md">
+              <div className="text-2xl font-bold text-center">
+                {formatCurrency(unpaidTotal)}
+              </div>
+              <p className="text-sm text-muted-foreground text-center mt-1">
+                Сумма к выплате
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Комментарий (опционально)</Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Например: Перевод на карту"
+                data-testid="input-bonus-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setPayoutDialogOpen(false)}
+              data-testid="button-cancel-payout"
+            >
+              Отмена
+            </Button>
+            <Button 
+              onClick={() => payoutMutation.mutate()}
+              disabled={payoutMutation.isPending}
+              data-testid="button-confirm-payout"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {payoutMutation.isPending ? "Обработка..." : "Подтвердить выплату"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>История выплат бонусов</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {loadingHistory ? (
+              <div className="space-y-2">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : paymentHistory.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">
+                Выплат ещё не было
+              </p>
+            ) : (
+              paymentHistory.map((payment) => (
+                <Card key={payment.id} className="p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-lg">
+                        {formatCurrency(parseFloat(payment.amount))}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
+                        {format(new Date(payment.paymentDate), "d MMMM yyyy", { locale: ru })}
+                      </div>
+                    </div>
+                    <Badge variant="secondary">Выплачено</Badge>
+                  </div>
+                  {payment.notes && (
+                    <p className="text-sm text-muted-foreground mt-2 border-t pt-2">
+                      {payment.notes}
+                    </p>
+                  )}
+                </Card>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

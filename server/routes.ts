@@ -942,6 +942,19 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Acts statistics for bonus calculations
+  app.get("/api/acts-statistics", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role;
+      const excludeHidden = role === 'assistant';
+      const stats = await storage.getActsStatistics(excludeHidden);
+      res.json(stats);
+    } catch (error) {
+      console.error("Get acts statistics error:", error);
+      res.status(500).json({ error: "Failed to get acts statistics" });
+    }
+  });
+
   app.get("/api/access-tokens", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const tokens = await storage.getAccessTokens();

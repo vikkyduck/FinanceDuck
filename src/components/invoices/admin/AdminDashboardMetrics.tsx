@@ -176,17 +176,17 @@ export const AdminDashboardMetrics = () => {
           </CardContent>
         </Card>
 
-        {/* Leverage Card */}
-        <Card data-testid="card-leverage">
+        {/* Efficiency Coefficient Card */}
+        <Card data-testid="card-efficiency">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Scale className="h-4 w-4 text-purple-600" />
-              Рычаг
+              Коэффициент эффективности
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="text-center">
-              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-leverage-ratio">
+              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-efficiency-ratio">
                 {stats.leverage.ratio.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -196,11 +196,11 @@ export const AdminDashboardMetrics = () => {
             <div className="pt-2 border-t space-y-1 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Другие партнёры</span>
-                <span data-testid="text-leverage-others">{formatCurrency(stats.leverage.othersProfit)}</span>
+                <span data-testid="text-efficiency-others">{formatCurrency(stats.leverage.othersProfit)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Вика Уткина</span>
-                <span data-testid="text-leverage-vika">{formatCurrency(stats.leverage.vikaProfit)}</span>
+                <span data-testid="text-efficiency-vika">{formatCurrency(stats.leverage.vikaProfit)}</span>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">

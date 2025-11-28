@@ -6,7 +6,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AdminInvoicesList } from "./admin/AdminInvoicesList";
 import { AdminStats } from "./admin/AdminStats";
-import { AdminHeroMetrics } from "./admin/AdminHeroMetrics";
 import { WorkingCapitalManager } from "./admin/WorkingCapitalManager";
 import { ClientLTVReport } from "./admin/ClientLTVReport";
 import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";

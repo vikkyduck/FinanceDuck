@@ -36,7 +36,7 @@ export interface InvoiceExpense {
   description: string;
   amount: string;
   date: string | null;
-  notes: string | null;
+  paidByAdmin: boolean;
 }
 
 export interface InvoiceDocument {
@@ -179,7 +179,7 @@ function normalizeExpenseFromApi(data: any): InvoiceExpense {
     description: data.description,
     amount: data.amount,
     date: data.date,
-    notes: data.notes,
+    paidByAdmin: data.paidByAdmin ?? false,
   };
 }
 
@@ -233,7 +233,7 @@ export const invoiceService = {
     description: string;
     amount: string;
     date?: string;
-    notes?: string;
+    paidByAdmin?: boolean;
   }): Promise<void> {
     await apiPost(`/invoices/${invoiceId}/expenses`, expense);
   },

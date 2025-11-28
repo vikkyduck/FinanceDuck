@@ -18,7 +18,7 @@ interface EditExpenseDialogProps {
     description: string;
     amount: number;
     date: string;
-    is_admin_expense: boolean;
+    paidByAdmin: boolean;
   } | null;
   onSuccess?: () => void;
 }
@@ -36,7 +36,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
       setDescription(expense.description);
       setAmount(expense.amount.toString());
       setDate(expense.date);
-      setIsAdminExpense(expense.is_admin_expense || false);
+      setIsAdminExpense(expense.paidByAdmin || false);
     }
   }, [expense]);
 
@@ -82,7 +82,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
         description: sanitizedDescription,
         amount: sanitizedAmount.toString(),
         date: sanitizedDate,
-        notes: isAdminExpense ? "admin_expense" : null,
+        paidByAdmin: isAdminExpense,
       });
 
       toast({

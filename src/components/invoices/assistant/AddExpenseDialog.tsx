@@ -81,7 +81,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
         description: sanitizedDescription,
         amount: sanitizedAmount.toString(),
         date: sanitizedDate,
-        notes: isAdminExpense ? "admin_expense" : undefined,
+        paidByAdmin: isAdminExpense,
       });
 
       toast({

@@ -40,9 +40,24 @@ This project is an invoice management system migrating from Supabase to Replit w
 - GET/POST/PATCH /api/clients - full contact info
 - DELETE /api/clients/:id - admin only, checks for linked invoices
 - GET /api/clients/:id/with-partner - get client with legacy partner info
-- **NEW:** GET /api/clients/:id/partners - get all partners for a client
-- **NEW:** PUT /api/clients/:id/partners - set partners for a client (admin only)
-- **NEW:** GET /api/clients-with-partners - get all clients with their partners array
+- GET /api/clients/:id/partners - get all partners for a client
+- PUT /api/clients/:id/partners - set partners for a client (admin only)
+- GET /api/clients-with-partners - get all clients with their partners array
+
+**Admin Analytics API Endpoints (2025-11-28):**
+- GET /api/admin/monthly-data?year=YYYY - monthly sales, profit, expenses breakdown (admin only)
+- GET /api/admin/forecast?months=N - N-month revenue forecast with expected vs received (admin only)
+- GET /api/invoices/overdue - overdue invoices list (admin only)
+
+**Migrated Analytics Components (2025-11-28):**
+- CurrentPeriodMetrics - YTD revenue/profit comparison with last year
+- SalesStatistics - monthly and yearly sales metrics
+- YearlyKeyIndicators - annual totals and best month
+- MonthlyFinancialTable - month-by-month breakdown with growth indicators
+- RevenueForecastChart - stacked bar chart for forecast visualization
+- RevenueForecastTable - detailed forecast table
+- OverduePaymentsAlert - overdue invoices with action buttons
+- CurrentMonthPlanFact - placeholder (awaiting monthly_financial_plans table migration)
 
 **Privacy Rules Enforced (Server-Side):**
 - Assistants cannot access partner-client relationships via ANY endpoint:

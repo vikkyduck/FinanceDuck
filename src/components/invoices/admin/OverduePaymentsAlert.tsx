@@ -7,7 +7,7 @@ import { AlertCircle, CheckCircle, Bell } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/api";
 
 interface OverdueInvoice {
   id: string;

@@ -7,9 +7,9 @@ channel = "stable-25_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["bun", "run", "build"]
+build = ["bash", "-c", "bun install --frozen-lockfile && bun run build"]
 publicDir = "dist"
-run = ["bun", "run", "server/vite.ts"]
+run = ["bash", "-c", "NODE_ENV=production bun run server/vite.ts"]
 
 [workflows]
 runButton = "Project"

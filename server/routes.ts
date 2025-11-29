@@ -742,6 +742,36 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Client budget dashboard - project budgets with expenses
+  app.get("/api/client/budget", authMiddleware, requireRole("client"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const clientId = req.user?.clientId;
+      if (!clientId) {
+        return res.status(403).json({ error: "No client ID found" });
+      }
+      const data = await storage.getClientBudget(clientId);
+      res.json(data);
+    } catch (error) {
+      console.error("Get client budget error:", error);
+      res.status(500).json({ error: "Failed to get client budget" });
+    }
+  });
+
+  // Client agency 30 report
+  app.get("/api/client/agency30", authMiddleware, requireRole("client"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const clientId = req.user?.clientId;
+      if (!clientId) {
+        return res.status(403).json({ error: "No client ID found" });
+      }
+      const data = await storage.getClientAgency30Report(clientId);
+      res.json(data);
+    } catch (error) {
+      console.error("Get client agency30 report error:", error);
+      res.status(500).json({ error: "Failed to get agency30 report" });
+    }
+  });
+
   app.get("/api/admin/plan-fact", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const year = parseInt(req.query.year as string) || new Date().getFullYear();

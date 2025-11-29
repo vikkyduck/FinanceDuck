@@ -2132,6 +2132,117 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
+  async getClientBudget(clientId: string): Promise<Array<{
+    invoiceId: string;
+    invoiceNumber: string;
+    partnerName: string;
+    totalBudget: number;
+    spent: number;
+    remaining: number;
+    expenses: Array<{
+      description: string;
+      amount: number;
+      date: string;
+    }>;
+  }>> {
+    // Get invoices with calculations for this client
+    const clientInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(
+        and(
+          eq(invoices.clientId, clientId),
+          inArray(invoices.status, ['sent', 'paid'])
+        )
+      )
+      .orderBy(desc(invoices.createdAt));
+
+    // Get partner names
+    const partnerIds = [...new Set(clientInvoices.map(i => i.invoice.partnerId).filter(Boolean))];
+    const partnerData = partnerIds.length > 0
+      ? await db.select().from(partners).where(inArray(partners.id, partnerIds as string[]))
+      : [];
+    const partnerMap = new Map(partnerData.map(p => [p.id, p.name]));
+
+    // Get expenses for all invoices
+    const invoiceIds = clientInvoices.map(i => i.invoice.id);
+    const allExpenses = invoiceIds.length > 0
+      ? await db.select().from(invoiceExpenses).where(inArray(invoiceExpenses.invoiceId, invoiceIds))
+      : [];
+    const expensesByInvoice = new Map<string, Array<{ description: string; amount: number; date: string }>>();
+    for (const exp of allExpenses) {
+      if (!expensesByInvoice.has(exp.invoiceId)) {
+        expensesByInvoice.set(exp.invoiceId, []);
+      }
+      expensesByInvoice.get(exp.invoiceId)!.push({
+        description: exp.description || '',
+        amount: parseFloat(exp.amount),
+        date: exp.date || '',
+      });
+    }
+
+    return clientInvoices
+      .filter(row => row.calculations?.clientBaseAfterMargin)
+      .map(row => ({
+        invoiceId: row.invoice.id,
+        invoiceNumber: row.invoice.invoiceNumber || '',
+        partnerName: row.invoice.partnerId ? partnerMap.get(row.invoice.partnerId) || '—' : '—',
+        totalBudget: parseFloat(row.calculations?.clientBaseAfterMargin || '0'),
+        spent: parseFloat(row.calculations?.executorExpensesTotal || '0'),
+        remaining: parseFloat(row.calculations?.clientRemaining || '0'),
+        expenses: expensesByInvoice.get(row.invoice.id) || [],
+      }));
+  }
+
+  async getClientAgency30Report(clientId: string): Promise<{
+    total_paid: number;
+    agency_margin: number;
+    client_budget_70: number;
+    total_spent: number;
+    remaining_budget: number;
+  }> {
+    // Get agency_30 invoices for this client
+    const agency30Invoices = await db
+      .select({
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(
+        and(
+          eq(invoices.clientId, clientId),
+          eq(invoices.scheme, 'agency_30')
+        )
+      );
+
+    let totalPaid = 0;
+    let agencyMargin = 0;
+    let clientBudget = 0;
+    let totalSpent = 0;
+    let remainingBudget = 0;
+
+    for (const row of agency30Invoices) {
+      if (!row.calculations) continue;
+      totalPaid += parseFloat(row.calculations.clientBill || '0');
+      agencyMargin += parseFloat(row.calculations.agencyMargin || '0');
+      clientBudget += parseFloat(row.calculations.clientBaseAfterMargin || '0');
+      totalSpent += parseFloat(row.calculations.clientSpent || '0');
+      remainingBudget += parseFloat(row.calculations.clientRemaining || '0');
+    }
+
+    return {
+      total_paid: totalPaid,
+      agency_margin: agencyMargin,
+      client_budget_70: clientBudget,
+      total_spent: totalSpent,
+      remaining_budget: remainingBudget,
+    };
+  }
+
   async getAdminMonthlyData(year: number): Promise<MonthlyData[]> {
     const monthNames = [
       "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",

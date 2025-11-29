@@ -64,12 +64,14 @@ export const AssistantBonusManager = () => {
 
   const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
     queryKey: ['/api/admin/unpaid-bonus'],
+    queryFn: () => apiGet('/admin/unpaid-bonus'),
     refetchInterval: 30000,
     staleTime: 10000,
   });
 
   const { data: paymentHistory = [], isLoading: loadingHistory } = useQuery<AssistantBonusPayment[]>({
     queryKey: ['/api/admin/bonus-payments'],
+    queryFn: () => apiGet('/admin/bonus-payments'),
     enabled: historyDialogOpen,
     refetchInterval: historyDialogOpen ? 30000 : false,
   });

@@ -50,8 +50,7 @@ export const PartnerCommissionReport = () => {
         (query) => query
           .eq('partner_id', partnerId)
           .eq('scheme', 'commission_based')
-          .eq('status', 'paid')
-          .not('actual_payment_date', 'is', null),
+          .eq('status', 'paid'),
         { operation: 'fetch_commission_invoices' }
       );
 

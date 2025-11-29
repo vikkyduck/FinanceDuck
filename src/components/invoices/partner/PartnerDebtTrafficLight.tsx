@@ -54,7 +54,7 @@ export const PartnerDebtTrafficLight = () => {
       const paidInvoices = await querySupabaseWithFilter(
         "invoices",
         "actual_payment_date",
-        (query) => query.eq("partner_id", partnerId).eq("status", "paid").not("actual_payment_date", "is", null).order("actual_payment_date", { ascending: true }).limit(1)
+        (query) => query.eq("partner_id", partnerId).eq("status", "paid").order("actual_payment_date", { ascending: true }).limit(1)
       );
 
       let daysSincePayment: number | null = null;

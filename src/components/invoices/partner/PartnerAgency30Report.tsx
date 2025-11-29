@@ -67,8 +67,7 @@ export const PartnerAgency30Report = () => {
         `)
         .eq("partner_id", partnerId)
         .eq("scheme", "agency_30")
-        .eq("status", "paid")
-        .not("actual_payment_date", "is", null);
+        .eq("status", "paid");
 
       if (invoicesError) throw invoicesError;
 

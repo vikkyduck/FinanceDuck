@@ -51,20 +51,20 @@ const Index = () => {
       const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
       const today = now.toISOString().split('T')[0];
 
-      // Current month revenue
+      // Current month revenue - use status=paid since actual_payment_date may be null
       const { data: currentRevenue } = await supabase
         .from("invoices")
         .select("invoice_calculations(client_bill)")
-        .gte('actual_payment_date', currentMonthStart.toISOString().split('T')[0])
-        .not('actual_payment_date', 'is', null);
+        .eq('status', 'paid')
+        .gte('actual_payment_date', currentMonthStart.toISOString().split('T')[0]);
 
       // Previous month revenue
       const { data: previousRevenue } = await supabase
         .from("invoices")
         .select("invoice_calculations(client_bill)")
+        .eq('status', 'paid')
         .gte('actual_payment_date', previousMonthStart.toISOString().split('T')[0])
-        .lte('actual_payment_date', previousMonthEnd.toISOString().split('T')[0])
-        .not('actual_payment_date', 'is', null);
+        .lte('actual_payment_date', previousMonthEnd.toISOString().split('T')[0]);
 
       // Overdue invoices
       const { data: overdueInvoices } = await supabase

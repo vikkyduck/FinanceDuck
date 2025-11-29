@@ -52,8 +52,7 @@ export const PartnerClientStats = () => {
         `,
         (query) => query
           .eq('partner_id', partnerId)
-          .eq('status', 'paid')
-          .not('actual_payment_date', 'is', null),
+          .eq('status', 'paid'),
         { operation: 'fetch_partner_invoices_by_client' }
       );
 

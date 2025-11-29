@@ -8,6 +8,7 @@ import { storage } from "./storage";
 const isProduction = process.env.NODE_ENV === "production";
 
 const RECURRING_CHECK_INTERVAL = 60 * 60 * 1000;
+const INITIAL_DELAY = 30000;
 
 async function processRecurringInvoices() {
   try {
@@ -24,15 +25,16 @@ async function processRecurringInvoices() {
 }
 
 function startRecurringInvoiceScheduler() {
-  console.log("[Recurring] Starting recurring invoice scheduler");
+  console.log("[Recurring] Scheduler will start in 30 seconds");
   
   setTimeout(() => {
+    console.log("[Recurring] Running initial check");
     processRecurringInvoices();
-  }, 5000);
-  
-  setInterval(() => {
-    processRecurringInvoices();
-  }, RECURRING_CHECK_INTERVAL);
+    
+    setInterval(() => {
+      processRecurringInvoices();
+    }, RECURRING_CHECK_INTERVAL);
+  }, INITIAL_DELAY);
 }
 
 async function setupVite(server: Express, vite: ViteDevServer) {

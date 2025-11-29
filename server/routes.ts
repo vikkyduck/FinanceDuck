@@ -2,6 +2,16 @@ import { Express, Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
 import { AccessToken, UserRole } from "../shared/schema";
 
+export function registerHealthCheck(app: Express) {
+  app.get("/health", (_req: Request, res: Response) => {
+    res.status(200).json({ status: "ok", timestamp: Date.now() });
+  });
+  
+  app.get("/api/health", (_req: Request, res: Response) => {
+    res.status(200).json({ status: "ok", timestamp: Date.now() });
+  });
+}
+
 interface AuthenticatedRequest extends Request {
   user?: {
     token: AccessToken;

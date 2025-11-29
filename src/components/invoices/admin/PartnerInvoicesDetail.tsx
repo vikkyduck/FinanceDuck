@@ -60,8 +60,9 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
       setSelectedInvoice(null);
       refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/partner-invoices", partnerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-debt"] });
       queryClient.invalidateQueries({ queryKey: ["/api/partner/payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/partner/debt"] });
       onPaymentRecorded?.();
     },
     onError: (error) => {

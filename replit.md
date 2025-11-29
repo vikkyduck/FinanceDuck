@@ -65,8 +65,10 @@ All roles receive data from the SAME stored values in `invoice_calculations` tab
 
 **Assistant sees (RESTRICTED):**
 - Basic invoice fields: id, number, client, status, description, dates, scheme
-- Calculation fields: `clientBill`, `executorExpensesTotal` ONLY
-- Stats: invoice counts, totals (NO commission, profit, debt, remaining)
+- Calculation fields: `clientBill`, `executorExpensesTotal`
+- **Agency 30% only**: `agencyMargin` (30%), `clientBaseAfterMargin` (70%), `clientRemaining`
+- BUT does NOT see partner/admin split (15%/15%)
+- Stats: invoice counts, totals (NO commission, profit, debt)
 - NO partner-client relationships
 - NO financial analytics
 

@@ -47,22 +47,23 @@ interface AuthenticatedRequest extends Request {
 const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   admin: [
     'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
-    'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy', 'dueDate',
-    'paidDate', 'paymentDueDate', 'notes', 'hideFromAssistant',
+    'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
+    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
   ],
   partner: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description',
-    'clientBill', 'scheme', 'createdAt', 'updatedAt', 'dueDate',
-    'paidDate', 'paymentDueDate', 'notes',
+    'clientBill', 'scheme', 'createdAt', 'updatedAt',
+    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes',
   ],
   client: [
     'id', 'invoiceNumber', 'status', 'description', 'clientBill',
-    'scheme', 'createdAt', 'updatedAt', 'dueDate', 'paidDate', 'notes',
+    'scheme', 'createdAt', 'updatedAt',
+    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes',
   ],
   assistant: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description',
-    'clientBill', 'createdAt', 'updatedAt', 'createdBy', 'dueDate',
-    'paidDate', 'notes', 'scheme',
+    'clientBill', 'createdAt', 'updatedAt', 'createdBy',
+    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
   ],
 };
 

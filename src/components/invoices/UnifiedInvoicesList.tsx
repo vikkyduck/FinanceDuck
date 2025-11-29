@@ -127,6 +127,8 @@ export const UnifiedInvoicesList = ({
         scheme: inv.scheme,
         status: inv.status,
         payment_date: inv.paymentDate,
+        actual_payment_date: inv.actualPaymentDate,
+        issue_date: inv.issueDate,
         notes: inv.notes,
         created_at: inv.createdAt,
         client_name: inv.client?.name,

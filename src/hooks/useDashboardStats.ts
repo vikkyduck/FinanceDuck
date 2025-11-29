@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export interface DashboardStats {
   totalInvoices: number;
@@ -18,19 +18,15 @@ export interface DashboardStats {
   clientRemaining?: number;
 }
 
-export function useDashboardStats(refetchInterval = 30000) {
+export function useDashboardStats(interval = 120000) {
   const queryClient = useQueryClient();
+  const [isVisible, setIsVisible] = useState(document.visibilityState === "visible");
   
-  const query = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: () => apiGet<DashboardStats>("/dashboard/stats"),
-    staleTime: 10000,
-    refetchInterval,
-  });
-
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
+      const visible = document.visibilityState === "visible";
+      setIsVisible(visible);
+      if (visible) {
         queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       }
     };
@@ -40,6 +36,13 @@ export function useDashboardStats(refetchInterval = 30000) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [queryClient]);
+  
+  const query = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: () => apiGet<DashboardStats>("/dashboard/stats"),
+    staleTime: 30000,
+    refetchInterval: isVisible ? interval : false,
+  });
 
   return query;
 }

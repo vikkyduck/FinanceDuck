@@ -62,7 +62,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     queryKey: ['/api/invoices', invoiceId, 'acts'],
     queryFn: () => apiGet(`/invoices/${invoiceId}/acts`),
     enabled: !!invoiceId,
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     staleTime: 10000,
   });
 

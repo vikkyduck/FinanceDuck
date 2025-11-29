@@ -58,14 +58,14 @@ export const AssistantBonusManager = () => {
   const { data: stats, isLoading: loadingStats, isFetching: fetchingStats } = useQuery<AssistantStats>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     staleTime: 10000,
   });
 
   const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
     queryKey: ['/api/admin/unpaid-bonus'],
     queryFn: () => apiGet('/admin/unpaid-bonus'),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     staleTime: 10000,
   });
 

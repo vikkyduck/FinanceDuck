@@ -29,7 +29,7 @@ export const PartnerClientStats = () => {
 
   const { data, isLoading, error } = useQuery<ClientStatsResponse>({
     queryKey: ['/api/partner/client-stats', selectedYear],
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     refetchOnWindowFocus: true,
   });
 

@@ -11,7 +11,7 @@ interface DocumentRiskResponse {
 export const PartnerDocumentRiskLight = () => {
   const { data: riskStatus, isLoading } = useQuery<DocumentRiskResponse>({
     queryKey: ['/api/partner/document-risk'],
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     refetchOnWindowFocus: true,
   });
 

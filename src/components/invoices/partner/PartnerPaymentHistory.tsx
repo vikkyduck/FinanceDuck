@@ -41,7 +41,7 @@ export function PartnerPaymentHistory({
       return response.json();
     },
     staleTime: 30000,
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   if (isLoading) {

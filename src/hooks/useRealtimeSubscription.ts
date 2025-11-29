@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface UseRealtimeSubscriptionOptions {
   channelName: string;
@@ -18,19 +18,34 @@ export const useRealtimeSubscription = ({
   enabled = true,
   dependencies = [],
 }: UseRealtimeSubscriptionOptions) => {
+  const [isVisible, setIsVisible] = useState(document.visibilityState === 'visible');
+  
   useEffect(() => {
-    if (!enabled) return;
+    const handleVisibilityChange = () => {
+      const visible = document.visibilityState === 'visible';
+      setIsVisible(visible);
+      if (visible && enabled) onUpdate();
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [enabled, onUpdate]);
+  
+  useEffect(() => {
+    if (!enabled || !isVisible) return;
 
     if (import.meta.env.DEV) {
-      console.log(`[Realtime] Subscription to ${table} on ${channelName} disabled during migration`);
+      console.log(`[Realtime] Polling ${table} on ${channelName}`);
     }
     
     const pollInterval = setInterval(() => {
       onUpdate();
-    }, 30000);
-
+    }, 120000);
+    
     return () => {
       clearInterval(pollInterval);
     };
-  }, [enabled, channelName, table, onUpdate, ...dependencies]);
+  }, [enabled, isVisible, channelName, table, onUpdate, ...dependencies]);
 };

@@ -52,13 +52,13 @@ export function RecurringInvoicesManager() {
   const { data: recurringInvoices = [], isLoading } = useQuery<RecurringInvoice[]>({
     queryKey: ["/api/recurring-invoices"],
     queryFn: () => apiGet("/recurring-invoices"),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   const { data: dueInvoices = [] } = useQuery<RecurringInvoice[]>({
     queryKey: ["/api/recurring-invoices/due"],
     queryFn: () => apiGet("/recurring-invoices/due"),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   const toggleMutation = useMutation({

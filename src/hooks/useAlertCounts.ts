@@ -73,9 +73,22 @@ export const useAlertCounts = () => {
 
     fetchCounts();
 
-    // Refresh counts every 30 seconds
-    const interval = setInterval(fetchCounts, 30000);
-    return () => clearInterval(interval);
+    let isVisible = document.visibilityState === 'visible';
+    
+    const handleVisibilityChange = () => {
+      isVisible = document.visibilityState === 'visible';
+      if (isVisible) fetchCounts();
+    };
+
+    const interval = setInterval(() => {
+      if (isVisible) fetchCounts();
+    }, 120000);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [role]);
 
   return counts;

@@ -72,7 +72,7 @@ export const AdminDashboardMetrics = () => {
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard-stats", selectedYear, selectedMonth],
     queryFn: () => apiGet<DashboardStats>(`/admin/dashboard-stats?year=${selectedYear}&month=${selectedMonth}`),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     staleTime: 10000,
   });
 

@@ -78,7 +78,11 @@ Security is implemented through XSS protection via input sanitization and React'
 
 ## Performance Optimizations
 
-Optimizations include code splitting, TanStack Query for data caching and efficient fetching, and rendering optimizations like skeleton components and debounced inputs. Real-time data synchronization for critical components like signed acts, bonus stats, and payment history is achieved through 30-second polling and visibility-based cache invalidation, automatically refreshing data when the tab regains focus.
+Optimizations include code splitting, TanStack Query for data caching and efficient fetching, and rendering optimizations like skeleton components and debounced inputs. Real-time data synchronization uses visibility-aware polling with 120-second intervals (reduced from 30s to prevent UI "jitter"). Polling pauses when browser tab is hidden and auto-refreshes on tab focus. Key optimizations:
+- **Visibility-aware polling**: All polling hooks check `document.visibilityState` before making requests
+- **Reduced frequency**: 120-second intervals instead of 30s to reduce server load
+- **Smart refresh**: Data auto-refreshes when tab becomes visible via `visibilitychange` event
+- **Centralized hooks**: `useAdminDashboardRefresh`, `useDashboardStats`, `useRealtimeSubscription` handle polling consistently
 
 ### Unified Assistant Bonus System (2025-11-29)
 

@@ -34,7 +34,7 @@ export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
   const { data: draftsStats, isLoading: draftsLoading } = useQuery<DraftsStats>({
     queryKey: ['admin-drafts-stats'],
     queryFn: () => apiGet<DraftsStats>('/admin/drafts-stats'),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   const currentMonth = new Date().getMonth() + 1;

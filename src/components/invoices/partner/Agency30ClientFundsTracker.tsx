@@ -21,7 +21,7 @@ interface Agency30FundsResponse {
 export const Agency30ClientFundsTracker = () => {
   const { data, isLoading, error } = useQuery<Agency30FundsResponse>({
     queryKey: ['/api/partner/agency30-funds'],
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     refetchOnWindowFocus: true,
   });
 

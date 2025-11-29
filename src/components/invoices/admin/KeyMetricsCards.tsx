@@ -45,19 +45,23 @@ export const KeyMetricsCards = () => {
 
   useEffect(() => {
     fetchMetrics();
-    const interval = setInterval(fetchMetrics, 30000);
-    return () => clearInterval(interval);
-  }, [fetchMetrics]);
-
-  useEffect(() => {
+    
+    let isVisible = document.visibilityState === 'visible';
+    
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      isVisible = document.visibilityState === 'visible';
+      if (isVisible) {
         fetchMetrics();
       }
     };
     
+    const interval = setInterval(() => {
+      if (isVisible) fetchMetrics();
+    }, 120000);
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
+      clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [fetchMetrics]);

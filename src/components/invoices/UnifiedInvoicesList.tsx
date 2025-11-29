@@ -95,12 +95,21 @@ export const UnifiedInvoicesList = ({
   useEffect(() => {
     if (!enableRealtime) return;
     
+    let isVisible = document.visibilityState === 'visible';
+    
+    const handleVisibilityChange = () => {
+      isVisible = document.visibilityState === 'visible';
+      if (isVisible) fetchInvoices();
+    };
+    
     const pollInterval = setInterval(() => {
-      fetchInvoices();
-    }, 30000);
-
+      if (isVisible) fetchInvoices();
+    }, 120000);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [partnerId, clientId, enableRealtime]);
 

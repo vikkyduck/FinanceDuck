@@ -64,8 +64,23 @@ export const DoNotSpendDashboard = ({
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    
+    let isVisible = document.visibilityState === 'visible';
+    
+    const handleVisibilityChange = () => {
+      isVisible = document.visibilityState === 'visible';
+      if (isVisible) fetchData();
+    };
+    
+    const interval = setInterval(() => {
+      if (isVisible) fetchData();
+    }, 120000);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchData]);
 
   if (loading) {

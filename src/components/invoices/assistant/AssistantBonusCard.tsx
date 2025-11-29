@@ -42,7 +42,7 @@ export const AssistantBonusCard = () => {
   const { data: stats, isLoading, isFetching } = useQuery<AssistantStats>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
     staleTime: 10000,
   });
 

@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 
-const DEFAULT_REFETCH_INTERVAL = 30000;
+const DEFAULT_REFETCH_INTERVAL = 120000;
 
 const ADMIN_PREFIXES = [
   "/api/admin",
@@ -17,6 +17,7 @@ const ADMIN_PREFIXES = [
 
 export function useAdminDashboardRefresh(enabled = true) {
   const queryClient = useQueryClient();
+  const [isVisible, setIsVisible] = useState(document.visibilityState === "visible");
 
   const invalidateAll = useCallback(() => {
     queryClient.invalidateQueries({
@@ -44,7 +45,9 @@ export function useAdminDashboardRefresh(enabled = true) {
     if (!enabled) return;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
+      const visible = document.visibilityState === "visible";
+      setIsVisible(visible);
+      if (visible) {
         invalidateAll();
       }
     };
@@ -56,14 +59,14 @@ export function useAdminDashboardRefresh(enabled = true) {
   }, [enabled, invalidateAll]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !isVisible) return;
 
     const intervalId = setInterval(() => {
       invalidateAll();
     }, DEFAULT_REFETCH_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [enabled, invalidateAll]);
+  }, [enabled, isVisible, invalidateAll]);
 
   return {
     invalidateAll,

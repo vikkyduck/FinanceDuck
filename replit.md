@@ -91,6 +91,19 @@ Admin and Assistant dashboards now share the same data source for bonus calculat
   - `AssistantBonusManager` - for admin dashboard (with payout button)
 - Both components display identical bonus data with identical UI layout
 
+### Express API Migration (2025-11-29)
+
+Key components migrated from Supabase RPC to Express API:
+- **AdminCashFlowForecast**: Uses `/api/admin/forecast` + `/api/dashboard/stats`
+- **KeyMetricsCards**: Uses `/api/dashboard/stats` with 30s polling and visibility refresh
+- **RecalculateInvoicesButton**: Uses `/api/admin/recalculate-invoices`
+- **SecurityMonitoring**: Simplified to static security info (security_events table not in Neon)
+
+Remaining Supabase usage (historical, some components still reference supabaseHelpers for partner/client specific features):
+- Partner reports (PartnerClientStats, PartnerCommissionReport, PartnerDebtTrafficLight)
+- Assistant insights (AssistantInsights, AssistantYearlyOverview)
+- Working capital management (WorkingCapitalManager)
+
 # External Dependencies
 
 ## Primary Services

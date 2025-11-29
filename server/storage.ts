@@ -202,6 +202,9 @@ export interface IStorage {
   deleteSignedAct(id: string): Promise<void>;
   getActsStatistics(excludeHidden?: boolean): Promise<{ executorActs: number; companyActs: number; totalPaidInvoices: number }>;
   
+  // Draft invoices statistics (sales funnel)
+  getDraftsStats(): Promise<DraftsStats>;
+  
   // Recurring invoices
   getRecurringInvoices(): Promise<any[]>;
   getRecurringInvoice(id: string): Promise<any | null>;
@@ -247,6 +250,15 @@ export interface MonthlyData {
   totalProfit: number;
   invoiceCount: number;
   expenses: number;
+}
+
+export interface DraftsStats {
+  totalDrafts: number;
+  totalDraftAmount: number;
+  currentMonthDrafts: number;
+  currentMonthAmount: number;
+  fromRecurring: number;
+  fromRecurringAmount: number;
 }
 
 export interface ForecastData {
@@ -2338,6 +2350,55 @@ export class DatabaseStorage implements IStorage {
     await db.update(invoiceCalculations)
       .set({ assistantBonusPaid: true, updatedAt: new Date() })
       .where(inArray(invoiceCalculations.invoiceId, invoiceIds));
+  }
+
+  async getDraftsStats(): Promise<DraftsStats> {
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    
+    const draftInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(eq(invoices.status, 'draft'));
+    
+    let totalDrafts = 0;
+    let totalDraftAmount = 0;
+    let currentMonthDrafts = 0;
+    let currentMonthAmount = 0;
+    let fromRecurring = 0;
+    let fromRecurringAmount = 0;
+    
+    for (const row of draftInvoices) {
+      const clientBill = row.calculations?.clientBill ? parseFloat(row.calculations.clientBill) : 0;
+      const issueDate = row.invoice.issueDate ? new Date(row.invoice.issueDate) : null;
+      
+      totalDrafts++;
+      totalDraftAmount += clientBill;
+      
+      if (issueDate && issueDate >= currentMonthStart && issueDate < nextMonthStart) {
+        currentMonthDrafts++;
+        currentMonthAmount += clientBill;
+      }
+      
+      if (row.invoice.recurringInvoiceId) {
+        fromRecurring++;
+        fromRecurringAmount += clientBill;
+      }
+    }
+    
+    return {
+      totalDrafts,
+      totalDraftAmount,
+      currentMonthDrafts,
+      currentMonthAmount,
+      fromRecurring,
+      fromRecurringAmount,
+    };
   }
 
   async getRecurringInvoices(): Promise<any[]> {

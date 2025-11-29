@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { StatsGrid, StatConfig } from "@/components/ui/stats-grid";
-import { TrendingUp, ShoppingCart, Calendar, Target } from "lucide-react";
+import { TrendingUp, ShoppingCart, FileText, Repeat } from "lucide-react";
 import { apiGet } from "@/lib/api";
 
 interface MonthlyData {
@@ -12,6 +12,15 @@ interface MonthlyData {
   expenses: number;
 }
 
+interface DraftsStats {
+  totalDrafts: number;
+  totalDraftAmount: number;
+  currentMonthDrafts: number;
+  currentMonthAmount: number;
+  fromRecurring: number;
+  fromRecurringAmount: number;
+}
+
 interface SalesStatisticsProps {
   year: number;
 }
@@ -20,6 +29,12 @@ export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
   const { data, isLoading } = useQuery<MonthlyData[]>({
     queryKey: ['admin-monthly-data', year],
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
+  });
+
+  const { data: draftsStats, isLoading: draftsLoading } = useQuery<DraftsStats>({
+    queryKey: ['admin-drafts-stats'],
+    queryFn: () => apiGet<DraftsStats>('/admin/drafts-stats'),
+    refetchInterval: 30000,
   });
 
   const currentMonth = new Date().getMonth() + 1;
@@ -40,8 +55,6 @@ export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
     }
   });
 
-  const avgDealSize = yearCount > 0 ? yearSales / yearCount : 0;
-
   const getMonthName = () => {
     const monthNames = [
       "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -50,34 +63,42 @@ export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
     return monthNames[new Date().getMonth()];
   };
 
+  const pluralize = (n: number) => {
+    if (n === 1) return 'черновик';
+    if (n >= 2 && n <= 4) return 'черновика';
+    return 'черновиков';
+  };
+
   const statsConfig: StatConfig[] = [
     {
+      icon: FileText,
+      title: "Черновики к отправке",
+      value: draftsStats?.totalDrafts || 0,
+      description: formatCurrency(draftsStats?.totalDraftAmount || 0),
+      valueClassName: "text-amber-600 dark:text-amber-400",
+    },
+    {
+      icon: Repeat,
+      title: "Из recurring",
+      value: draftsStats?.fromRecurring || 0,
+      description: formatCurrency(draftsStats?.fromRecurringAmount || 0),
+      valueClassName: "text-blue-600 dark:text-blue-400",
+    },
+    {
       icon: ShoppingCart,
-      title: `Продажи за ${getMonthName()}`,
+      title: `Оплачено за ${getMonthName()}`,
       value: formatCurrency(currentMonthSales),
-      description: `${currentMonthCount} ${currentMonthCount === 1 ? 'счет' : 'счетов'}`,
-      valueClassName: "text-primary",
+      description: `${currentMonthCount} счетов`,
+      valueClassName: "text-green-600 dark:text-green-400",
     },
     {
       icon: TrendingUp,
-      title: "Продажи за год",
+      title: "Оплачено за год",
       value: formatCurrency(yearSales),
-      description: `${yearCount} ${yearCount === 1 ? 'счет' : 'счетов'}`,
+      description: `${yearCount} счетов`,
       valueClassName: "text-chart-2",
-    },
-    {
-      icon: Target,
-      title: "Средний чек",
-      value: formatCurrency(avgDealSize),
-      description: "в среднем за год",
-    },
-    {
-      icon: Calendar,
-      title: "Новых счетов в месяц",
-      value: yearCount > 0 ? Math.round(yearCount / 12) : 0,
-      description: "среднее значение",
     },
   ];
 
-  return <StatsGrid stats={statsConfig} loading={isLoading} columns={4} />;
+  return <StatsGrid stats={statsConfig} loading={isLoading || draftsLoading} columns={4} />;
 };

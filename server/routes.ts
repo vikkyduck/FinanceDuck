@@ -618,6 +618,16 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/admin/drafts-stats", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getDraftsStats();
+      res.json(data);
+    } catch (error) {
+      console.error("Get drafts stats error:", error);
+      res.status(500).json({ error: "Failed to get drafts stats" });
+    }
+  });
+
   app.get("/api/invoices/overdue", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const data = await storage.getOverdueInvoices();

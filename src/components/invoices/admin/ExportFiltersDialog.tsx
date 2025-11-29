@@ -7,7 +7,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Download, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { showSuccess } from "@/lib/errorHandler";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -33,18 +32,9 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
     partner_ids: [],
   });
 
-  // Fetch partners list
-  const { data: partners } = useQuery({
-    queryKey: ['partners-for-export'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('partners')
-        .select('id, name')
-        .order('name');
-      
-      if (error) throw error;
-      return data || [];
-    },
+  // Fetch partners list from Express API
+  const { data: partners } = useQuery<Array<{id: string, name: string}>>({
+    queryKey: ['/api/partners'],
     enabled: open,
   });
 
@@ -103,6 +93,16 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
   const handleExport = async () => {
     setExporting(true);
     try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        toast.error("Экспорт временно недоступен", {
+          description: "Функция экспорта в разработке. Используйте просмотр данных в интерфейсе.",
+        });
+        return;
+      }
+
       const session = JSON.parse(sessionStorage.getItem('access_session') || '{}');
       const accessTokenId = session.accessTokenId;
 
@@ -111,8 +111,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
         return;
       }
 
-      // Prepare filter params, removing empty values
-      const filterParams: any = {
+      const filterParams: Record<string, unknown> = {
         token_id: accessTokenId,
       };
 
@@ -123,11 +122,6 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
       if (filters.statuses.length > 0) filterParams.statuses = filters.statuses;
       if (filters.partner_ids.length > 0) filterParams.partner_ids = filters.partner_ids;
 
-      console.log('Export with filters:', filterParams);
-
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      
       const response = await fetch(`${supabaseUrl}/functions/v1/export-admin-data`, {
         method: 'POST',
         headers: {
@@ -157,7 +151,6 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
       const a = document.createElement('a');
       a.href = url;
       
-      // Generate filename with filter info
       const dateStr = new Date().toISOString().split('T')[0];
       const filterStr = filters.statuses.length > 0 || filters.partner_ids.length > 0 
         ? '_filtered' 
@@ -174,10 +167,10 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
 
       showSuccess("Экспорт завершен", "Файл успешно загружен");
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Export error:', error);
       toast.error("Ошибка экспорта", {
-        description: error?.message || "Не удалось экспортировать данные",
+        description: error instanceof Error ? error.message : "Не удалось экспортировать данные",
       });
     } finally {
       setExporting(false);

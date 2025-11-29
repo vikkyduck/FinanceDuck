@@ -167,6 +167,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
           commission_rate: invoiceData.calculations.commissionRate,
           commission_amount: invoiceData.calculations.commissionAmount,
           amount_to_admin: invoiceData.calculations.amountToAdmin,
+          partner_transfer_due: invoiceData.calculations.partnerTransferDue,
           agency_margin: invoiceData.calculations.agencyMargin,
           partner_share_from_margin: invoiceData.calculations.partnerShareFromMargin,
           admin_share_from_margin: invoiceData.calculations.adminShareFromMargin,
@@ -1026,8 +1027,8 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                           )}
                           
                           <div className="flex justify-between text-sm">
-                            <span>К админу:</span>
-                            <span className="text-primary font-medium">{formatCurrency(calc?.amount_to_admin || 0)}</span>
+                            <span>Долг партнёра к переводу:</span>
+                            <span className="text-primary font-medium">{formatCurrency(calc?.partner_transfer_due || 0)}</span>
                           </div>
                           
                           {permissions.showExpensesTotal && (

@@ -1,84 +1,71 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, DollarSign, PiggyBank, Clock, Lock, HelpCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { MetricCardSkeleton } from "@/components/ui/metric-card-skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/hooks/useAuth";
 
-interface MetricData {
-  currentMonth: number;
-  previousMonth: number;
-  trend: number;
+interface DashboardStats {
+  totalClientBill?: number;
+  totalNetProfit?: number;
+  paidInvoicesCount?: number;
+  draftInvoicesCount?: number;
+  sentInvoicesCount?: number;
+  totalClientRemaining?: number;
 }
 
 export const KeyMetricsCards = () => {
-  const [revenue, setRevenue] = useState<MetricData>({ currentMonth: 0, previousMonth: 0, trend: 0 });
-  const [profit, setProfit] = useState<MetricData>({ currentMonth: 0, previousMonth: 0, trend: 0 });
-  const [expected, setExpected] = useState<number>(0);
-  const [clientRemaining, setClientRemaining] = useState<number>(0);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const { accessTokenId } = useAuth();
+  const { isAuthenticated } = useAuth();
 
-  const fetchMetrics = async () => {
-    if (!accessTokenId) return;
+  const fetchMetrics = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      return;
+    }
     
-    setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_admin_stats', {
-        _token_id: accessTokenId
+      const response = await fetch('/api/dashboard/stats', {
+        credentials: 'include',
       });
-
-      if (error) throw error;
       
-      if (data && data.length > 0) {
-        const stats = data[0];
-        
-        setRevenue({ 
-          currentMonth: Number(stats.current_month_revenue || 0),
-          previousMonth: Number(stats.previous_month_revenue || 0),
-          trend: Number(stats.revenue_trend || 0)
-        });
-        
-        setProfit({ 
-          currentMonth: Number(stats.current_month_profit || 0),
-          previousMonth: Number(stats.previous_month_profit || 0),
-          trend: Number(stats.profit_trend || 0)
-        });
-        
-        setExpected(Number(stats.expected_revenue_3months || 0));
-        setClientRemaining(Number(stats.total_client_remaining || 0));
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
       }
     } catch (error) {
       console.error("Error fetching metrics:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     fetchMetrics();
-  }, [accessTokenId]);
+    const interval = setInterval(fetchMetrics, 30000);
+    return () => clearInterval(interval);
+  }, [fetchMetrics]);
 
-  // Realtime subscriptions for automatic updates
-  useRealtimeSubscription({
-    channelName: 'key_metrics_invoices',
-    table: 'invoices',
-    event: '*',
-    onUpdate: fetchMetrics,
-    enabled: true,
-  });
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMetrics();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchMetrics]);
 
-  useRealtimeSubscription({
-    channelName: 'key_metrics_calculations',
-    table: 'invoice_calculations',
-    event: '*',
-    onUpdate: fetchMetrics,
-    enabled: true,
-  });
+  const revenue = stats?.totalClientBill || 0;
+  const profit = stats?.totalNetProfit || 0;
+  const clientRemaining = stats?.totalClientRemaining || 0;
+  const sentCount = stats?.sentInvoicesCount || 0;
 
   const MetricCard = ({
     title, 
@@ -120,7 +107,7 @@ export const KeyMetricsCards = () => {
         style={{ animationDelay: `${delay}ms` }}
       >
         <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 {title}
@@ -167,27 +154,27 @@ export const KeyMetricsCards = () => {
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
       <MetricCard
         title="Выручка"
-        value={revenue.currentMonth}
-        trend={revenue.trend}
+        value={revenue}
         icon={DollarSign}
         delay={0}
-        tooltip="Общая сумма по всем оплаченным счетам в текущем месяце"
+        showTrend={false}
+        tooltip="Общая сумма по всем оплаченным счетам"
       />
       <MetricCard
         title="Прибыль"
-        value={profit.currentMonth}
-        trend={profit.trend}
+        value={profit}
         icon={PiggyBank}
         delay={100}
+        showTrend={false}
         tooltip="Чистая прибыль после всех расходов и выплат партнерам"
       />
       <MetricCard
-        title="Прогноз 3 мес."
-        value={expected}
+        title="Ожидаемые"
+        value={sentCount}
         icon={Clock}
         delay={200}
         showTrend={false}
-        tooltip="Ожидаемые поступления по отправленным счетам в ближайшие 3 месяца"
+        tooltip="Количество отправленных счетов, ожидающих оплаты"
       />
       <MetricCard
         title="Средства клиентов"
@@ -195,7 +182,7 @@ export const KeyMetricsCards = () => {
         icon={Lock}
         delay={300}
         showTrend={false}
-        valueClassName="text-green-600"
+        valueClassName="text-green-600 dark:text-green-400"
         tooltip="Бюджет клиентов, зарезервированный на их счетах"
       />
     </div>

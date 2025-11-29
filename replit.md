@@ -108,6 +108,14 @@ Critical fixes for production deployment:
 - **Deployment config**: Uses `NODE_ENV=production` with frozen lockfile to prevent dependency re-optimization
 - **Recurring scheduler**: Lazy initialization 60 seconds after server start to not block health checks
 
+### Waterfall Chart Fix (2025-11-29)
+
+Fixed the invoice waterfall visualization to correctly display expenses based on who paid them:
+- **Partner-paid expenses**: Now shown as "Расходы (партнёр)" with correct visual representation
+- **Net profit display**: Uses stored `netProfitAdmin` value from backend (single source of truth)
+- **Expense tracking**: `InvoiceDetailsDialog` now passes `paidByAdmin` flag for each expense to the waterfall chart
+- **Key insight**: When partner pays expenses, they reduce partner's transfer amount, not admin's received funds
+
 ### Recurring Invoices System (2025-11-29)
 
 Fully functional recurring invoice management with automatic draft generation:

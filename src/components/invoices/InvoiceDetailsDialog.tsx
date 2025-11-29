@@ -189,6 +189,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         amount: exp.amount,
         date: exp.date,
         notes: exp.notes,
+        paidByAdmin: exp.paidByAdmin === true,
       }));
       setExpenses(mappedExpenses);
 
@@ -853,18 +854,30 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Waterfall Visualization - only for admin, contains commission/profit data */}
-                {userRole === 'admin' && (
-                  <InvoiceWaterfallChart
-                    clientBill={calc?.client_bill || 0}
-                    scheme={invoice.scheme}
-                    commissionRate={calc?.commission_rate}
-                    executorExpenses={calc?.executor_expenses_total || 0}
-                    partnerShare={isAgency30 ? (calc?.partner_share_from_margin || 0) : (calc?.commission_amount || 0)}
-                    adminShare={isAgency30 ? (calc?.admin_share_from_margin || 0) : (calc?.net_profit_admin || 0)}
-                    catShare={calc?.cat_share_50}
-                    showCatShare={true}
-                  />
-                )}
+                {userRole === 'admin' && (() => {
+                  const expensesPaidByPartner = expenses
+                    .filter((e: any) => e.paidByAdmin !== true)
+                    .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+                  const expensesPaidByAdmin = expenses
+                    .filter((e: any) => e.paidByAdmin === true)
+                    .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+                  
+                  return (
+                    <InvoiceWaterfallChart
+                      clientBill={calc?.client_bill || 0}
+                      scheme={invoice.scheme}
+                      commissionRate={calc?.commission_rate}
+                      executorExpenses={calc?.executor_expenses_total || 0}
+                      expensesPaidByPartner={expensesPaidByPartner}
+                      expensesPaidByAdmin={expensesPaidByAdmin}
+                      partnerShare={isAgency30 ? (calc?.partner_share_from_margin || 0) : (calc?.commission_amount || 0)}
+                      adminShare={isAgency30 ? (calc?.admin_share_from_margin || 0) : (calc?.net_profit_admin || 0)}
+                      netProfitAdmin={calc?.net_profit_admin || 0}
+                      catShare={calc?.cat_share_50}
+                      showCatShare={true}
+                    />
+                  );
+                })()}
 
                 <div className="flex justify-between text-lg font-bold">
                   <span>Счет клиенту:</span>

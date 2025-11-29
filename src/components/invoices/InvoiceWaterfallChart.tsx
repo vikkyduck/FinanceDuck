@@ -7,8 +7,12 @@ interface WaterfallChartProps {
   scheme: "agency_30" | "commission_based";
   commissionRate?: number;
   executorExpenses: number;
+  expensesPaidByPartner?: number;
+  expensesPaidByAdmin?: number;
   partnerShare: number;
   adminShare: number;
+  netProfitAdmin?: number;
+  partnerTransferDue?: number;
   catShare?: number;
   showCatShare?: boolean;
 }
@@ -26,8 +30,12 @@ export function InvoiceWaterfallChart({
   scheme,
   commissionRate = 0,
   executorExpenses,
+  expensesPaidByPartner = 0,
+  expensesPaidByAdmin = 0,
   partnerShare,
   adminShare,
+  netProfitAdmin,
+  partnerTransferDue,
   catShare = 0,
   showCatShare = false,
 }: WaterfallChartProps) {
@@ -65,7 +73,7 @@ export function InvoiceWaterfallChart({
     } else {
       const commissionAmount = clientBill * (commissionRate / 100);
       items.push({
-        name: `Комиссия (${commissionRate}%)`,
+        name: `Комиссия (${commissionRate.toFixed(2)}%)`,
         value: -commissionAmount,
         total: runningTotal - commissionAmount,
         isPositive: false,
@@ -74,25 +82,28 @@ export function InvoiceWaterfallChart({
       runningTotal -= commissionAmount;
     }
 
-    if (executorExpenses > 0) {
+    if (expensesPaidByPartner > 0) {
       items.push({
-        name: "Расходы",
-        value: -executorExpenses,
-        total: runningTotal - executorExpenses,
+        name: "Расходы (партнёр)",
+        value: -expensesPaidByPartner,
+        total: runningTotal - expensesPaidByPartner,
         isPositive: false,
-        color: "hsl(var(--destructive))",
+        color: "hsl(var(--chart-3))",
       });
-      runningTotal -= executorExpenses;
+      runningTotal -= expensesPaidByPartner;
     }
 
-    if (showCatShare && catShare > 0 && runningTotal > 0) {
+    const actualNetProfit = netProfitAdmin ?? runningTotal - expensesPaidByAdmin;
+    
+    if (showCatShare && catShare > 0 && actualNetProfit > 0) {
       items.push({
         name: "Чистая прибыль",
-        value: runningTotal,
-        total: runningTotal,
+        value: actualNetProfit,
+        total: actualNetProfit,
         isPositive: true,
         color: "hsl(var(--chart-1))",
       });
+      runningTotal = actualNetProfit;
       
       const halfProfit = catShare;
       
@@ -115,16 +126,16 @@ export function InvoiceWaterfallChart({
       runningTotal -= halfProfit;
     } else {
       items.push({
-        name: "Остаток",
-        value: runningTotal,
-        total: runningTotal,
-        isPositive: runningTotal >= 0,
-        color: runningTotal >= 0 ? "hsl(var(--chart-1))" : "hsl(var(--destructive))",
+        name: "Чистая прибыль",
+        value: actualNetProfit,
+        total: actualNetProfit,
+        isPositive: actualNetProfit >= 0,
+        color: actualNetProfit >= 0 ? "hsl(var(--chart-1))" : "hsl(var(--destructive))",
       });
     }
 
     return items;
-  }, [clientBill, scheme, commissionRate, executorExpenses, partnerShare, adminShare, catShare, showCatShare]);
+  }, [clientBill, scheme, commissionRate, expensesPaidByPartner, expensesPaidByAdmin, partnerShare, adminShare, netProfitAdmin, catShare, showCatShare]);
 
   const chartData = useMemo(() => {
     let cumulative = 0;

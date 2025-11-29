@@ -72,7 +72,7 @@ export const CriticalAlertsSection = () => {
         break;
       case "draft":
         icon = FileText;
-        action = () => navigate(`/?open=${alert.id}`);
+        action = () => navigate(`/invoices?open=${alert.id}`);
         actionLabel = "Заполнить";
         break;
       case "long_sent":

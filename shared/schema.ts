@@ -74,6 +74,9 @@ export const invoices = pgTable("invoices", {
   status: invoiceStatusEnum("status").default('draft').notNull(),
   clientBill: numeric("client_bill", { precision: 15, scale: 2 }),
   commissionAmount: numeric("commission_amount", { precision: 15, scale: 2 }),
+  partnerCommissionRate: numeric("partner_commission_rate", { precision: 5, scale: 2 }),
+  description: text("description"),
+  issueDate: date("issue_date"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -81,6 +84,7 @@ export const invoices = pgTable("invoices", {
   actualPaymentDate: date("actual_payment_date"),
   notes: text("notes"),
   hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
+  recurringInvoiceId: uuid("recurring_invoice_id"),
 });
 
 export const assistantBonusPayments = pgTable("assistant_bonus_payments", {

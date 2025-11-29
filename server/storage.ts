@@ -6,7 +6,7 @@ import {
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType
 } from "../shared/schema";
-import { eq, and, desc, asc, isNull, gte, sql, inArray, or } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, gte, lte, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 /**
@@ -2064,14 +2064,202 @@ export class DatabaseStorage implements IStorage {
         partnerId: data.partnerId,
         scheme: data.scheme,
         partnerCommissionRate: data.partnerCommissionRate,
+        amount: data.amount,
+        description: data.description,
         frequency: data.frequency,
         dayOfMonth: data.dayOfMonth,
+        startDate: data.startDate,
+        endDate: data.endDate || null,
         nextInvoiceDate: data.nextInvoiceDate,
         notes: data.notes,
         createdBy: data.createdBy,
       })
       .returning();
     return created;
+  }
+
+  async getDueRecurringInvoices(upToDate?: Date): Promise<any[]> {
+    const checkDate = upToDate || new Date();
+    const dateStr = checkDate.toISOString().split('T')[0];
+    
+    const result = await db.select({
+      recurring: recurringInvoices,
+      clientName: clients.name,
+      partnerName: partners.name,
+    })
+    .from(recurringInvoices)
+    .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
+    .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
+    .where(and(
+      eq(recurringInvoices.isActive, true),
+      lte(recurringInvoices.nextInvoiceDate, dateStr)
+    ))
+    .orderBy(asc(recurringInvoices.nextInvoiceDate));
+    
+    return result.map(r => ({
+      ...r.recurring,
+      clients: { name: r.clientName },
+      partners: { name: r.partnerName },
+    }));
+  }
+
+  async getActiveRecurringInvoicesForCashFlow(): Promise<any[]> {
+    const result = await db.select({
+      recurring: recurringInvoices,
+      clientName: clients.name,
+      partnerName: partners.name,
+    })
+    .from(recurringInvoices)
+    .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
+    .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
+    .where(eq(recurringInvoices.isActive, true))
+    .orderBy(asc(recurringInvoices.nextInvoiceDate));
+    
+    return result.map(r => ({
+      ...r.recurring,
+      clients: { name: r.clientName },
+      partners: { name: r.partnerName },
+    }));
+  }
+
+  calculateNextInvoiceDate(currentDate: string, frequency: string): string {
+    const date = new Date(currentDate);
+    switch (frequency) {
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+      case 'quarterly':
+        date.setMonth(date.getMonth() + 3);
+        break;
+      case 'yearly':
+        date.setFullYear(date.getFullYear() + 1);
+        break;
+    }
+    return date.toISOString().split('T')[0];
+  }
+
+  async generateInvoiceNumber(): Promise<string> {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(invoices);
+    const count = Number(result[0]?.count || 0) + 1;
+    return `INV-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
+  }
+
+  async createDraftFromRecurring(recurringId: string, invoiceDate?: string): Promise<any> {
+    const recurring = await this.getRecurringInvoice(recurringId);
+    if (!recurring) {
+      throw new Error('Recurring invoice not found');
+    }
+
+    const targetDate = invoiceDate || recurring.nextInvoiceDate;
+    const invoiceNumber = await this.generateInvoiceNumber();
+    
+    const invoice = await this.createInvoice(
+      {
+        invoiceNumber,
+        clientId: recurring.clientId,
+        partnerId: recurring.partnerId,
+        scheme: recurring.scheme,
+        partnerCommissionRate: recurring.partnerCommissionRate,
+        clientBill: recurring.amount,
+        description: recurring.description || `Recurring invoice for ${targetDate}`,
+        issueDate: targetDate,
+        status: 'draft',
+        hideFromAssistant: false,
+        recurringInvoiceId: recurring.id,
+        createdBy: recurring.createdBy,
+      },
+      { clientBill: recurring.amount }
+    );
+
+    const newNextDate = this.calculateNextInvoiceDate(recurring.nextInvoiceDate, recurring.frequency);
+    
+    const shouldDeactivate = recurring.endDate && new Date(newNextDate) > new Date(recurring.endDate);
+    
+    await db.update(recurringInvoices)
+      .set({
+        nextInvoiceDate: newNextDate,
+        isActive: !shouldDeactivate,
+        updatedAt: new Date(),
+      })
+      .where(eq(recurringInvoices.id, recurringId));
+
+    return invoice;
+  }
+
+  async processAllDueRecurringInvoices(): Promise<{ created: number; errors: string[] }> {
+    const dueInvoices = await this.getDueRecurringInvoices();
+    let created = 0;
+    const errors: string[] = [];
+
+    for (const recurring of dueInvoices) {
+      try {
+        await this.createDraftFromRecurring(recurring.id);
+        created++;
+      } catch (error: any) {
+        errors.push(`Failed to create invoice for recurring ${recurring.id}: ${error.message}`);
+      }
+    }
+
+    return { created, errors };
+  }
+
+  async generateBackdatedInvoices(recurringId: string, fromDate: string): Promise<{ created: number; invoices: any[] }> {
+    const recurring = await this.getRecurringInvoice(recurringId);
+    if (!recurring) {
+      throw new Error('Recurring invoice not found');
+    }
+
+    const createdInvoices: any[] = [];
+    let currentDate = new Date(fromDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    
+    const dayOfMonth = parseInt(recurring.dayOfMonth) || 1;
+    currentDate.setDate(dayOfMonth);
+
+    while (currentDate <= today) {
+      if (recurring.endDate && currentDate > new Date(recurring.endDate)) {
+        break;
+      }
+      
+      const invoiceDate = currentDate.toISOString().split('T')[0];
+      const invoiceNumber = await this.generateInvoiceNumber();
+
+      const invoice = await this.createInvoice(
+        {
+          invoiceNumber,
+          clientId: recurring.clientId,
+          partnerId: recurring.partnerId,
+          scheme: recurring.scheme,
+          partnerCommissionRate: recurring.partnerCommissionRate,
+          clientBill: recurring.amount,
+          description: recurring.description || `Backdated invoice for ${invoiceDate}`,
+          issueDate: invoiceDate,
+          status: 'draft',
+          hideFromAssistant: false,
+          recurringInvoiceId: recurring.id,
+          createdBy: recurring.createdBy,
+        },
+        { clientBill: recurring.amount }
+      );
+
+      createdInvoices.push(invoice);
+
+      switch (recurring.frequency) {
+        case 'monthly':
+          currentDate.setMonth(currentDate.getMonth() + 1);
+          break;
+        case 'quarterly':
+          currentDate.setMonth(currentDate.getMonth() + 3);
+          break;
+        case 'yearly':
+          currentDate.setFullYear(currentDate.getFullYear() + 1);
+          break;
+      }
+    }
+
+    return { created: createdInvoices.length, invoices: createdInvoices };
   }
 
   async updateRecurringInvoice(id: string, data: any): Promise<any | null> {

@@ -1272,4 +1272,65 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to get assistant stats" });
     }
   });
+
+  // Recurring invoices
+  app.get("/api/recurring-invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const recurring = await storage.getRecurringInvoices();
+      res.json(recurring);
+    } catch (error) {
+      console.error("Get recurring invoices error:", error);
+      res.status(500).json({ error: "Failed to get recurring invoices" });
+    }
+  });
+
+  app.post("/api/recurring-invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { clientId, partnerId, scheme, partnerCommissionRate, frequency, dayOfMonth, nextInvoiceDate, notes } = req.body;
+      
+      const created = await storage.createRecurringInvoice({
+        clientId,
+        partnerId,
+        scheme,
+        partnerCommissionRate: partnerCommissionRate ? partnerCommissionRate.toString() : null,
+        frequency: frequency || 'monthly',
+        dayOfMonth: dayOfMonth?.toString() || '1',
+        nextInvoiceDate,
+        notes,
+        createdBy: req.user!.token.id,
+      });
+      
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Create recurring invoice error:", error);
+      res.status(500).json({ error: "Failed to create recurring invoice" });
+    }
+  });
+
+  app.patch("/api/recurring-invoices/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updated = await storage.updateRecurringInvoice(id, req.body);
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Recurring invoice not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Update recurring invoice error:", error);
+      res.status(500).json({ error: "Failed to update recurring invoice" });
+    }
+  });
+
+  app.delete("/api/recurring-invoices/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteRecurringInvoice(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete recurring invoice error:", error);
+      res.status(500).json({ error: "Failed to delete recurring invoice" });
+    }
+  });
 }

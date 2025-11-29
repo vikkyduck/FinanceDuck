@@ -1,12 +1,12 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments,
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments, recurringInvoices,
   Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment,
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType
 } from "../shared/schema";
-import { eq, and, desc, isNull, gte, sql, inArray, or } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, gte, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 /**
@@ -201,6 +201,13 @@ export interface IStorage {
   getSignedAct(id: string): Promise<SignedAct | null>;
   deleteSignedAct(id: string): Promise<void>;
   getActsStatistics(excludeHidden?: boolean): Promise<{ executorActs: number; companyActs: number; totalPaidInvoices: number }>;
+  
+  // Recurring invoices
+  getRecurringInvoices(): Promise<any[]>;
+  getRecurringInvoice(id: string): Promise<any | null>;
+  createRecurringInvoice(data: any): Promise<any>;
+  updateRecurringInvoice(id: string, data: any): Promise<any | null>;
+  deleteRecurringInvoice(id: string): Promise<void>;
 }
 
 export interface MonthlyData {
@@ -1992,6 +1999,64 @@ export class DatabaseStorage implements IStorage {
     await db.update(invoiceCalculations)
       .set({ assistantBonusPaid: true, updatedAt: new Date() })
       .where(inArray(invoiceCalculations.invoiceId, invoiceIds));
+  }
+
+  async getRecurringInvoices(): Promise<any[]> {
+    const result = await db.select({
+      recurring: recurringInvoices,
+      clientName: clients.name,
+      partnerName: partners.name,
+    })
+    .from(recurringInvoices)
+    .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
+    .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
+    .orderBy(asc(recurringInvoices.nextInvoiceDate));
+    
+    return result.map(r => ({
+      ...r.recurring,
+      clients: { name: r.clientName },
+      partners: { name: r.partnerName },
+    }));
+  }
+
+  async getRecurringInvoice(id: string): Promise<any | null> {
+    const [result] = await db.select()
+      .from(recurringInvoices)
+      .where(eq(recurringInvoices.id, id));
+    return result || null;
+  }
+
+  async createRecurringInvoice(data: any): Promise<any> {
+    const [created] = await db.insert(recurringInvoices)
+      .values({
+        clientId: data.clientId,
+        partnerId: data.partnerId,
+        scheme: data.scheme,
+        partnerCommissionRate: data.partnerCommissionRate,
+        frequency: data.frequency,
+        dayOfMonth: data.dayOfMonth,
+        nextInvoiceDate: data.nextInvoiceDate,
+        notes: data.notes,
+        createdBy: data.createdBy,
+      })
+      .returning();
+    return created;
+  }
+
+  async updateRecurringInvoice(id: string, data: any): Promise<any | null> {
+    const [updated] = await db.update(recurringInvoices)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(recurringInvoices.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deleteRecurringInvoice(id: string): Promise<void> {
+    await db.delete(recurringInvoices)
+      .where(eq(recurringInvoices.id, id));
   }
 }
 

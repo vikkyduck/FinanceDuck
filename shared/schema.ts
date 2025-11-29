@@ -169,6 +169,27 @@ export const monthlyFinancialPlans = pgTable("monthly_financial_plans", {
   index("idx_monthly_plans_year_month").on(table.year, table.month),
 ]);
 
+export const frequencyEnum = pgEnum('frequency', ['monthly', 'quarterly', 'yearly']);
+
+export const recurringInvoices = pgTable("recurring_invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: 'cascade' }).notNull(),
+  partnerId: uuid("partner_id").references(() => partners.id, { onDelete: 'cascade' }).notNull(),
+  scheme: invoiceSchemeEnum("scheme").notNull(),
+  partnerCommissionRate: numeric("partner_commission_rate", { precision: 5, scale: 2 }),
+  frequency: frequencyEnum("frequency").default('monthly').notNull(),
+  dayOfMonth: numeric("day_of_month", { precision: 2, scale: 0 }).default("1").notNull(),
+  nextInvoiceDate: date("next_invoice_date").notNull(),
+  notes: text("notes"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_recurring_invoices_next_date").on(table.nextInvoiceDate),
+  index("idx_recurring_invoices_client").on(table.clientId),
+]);
+
 export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = typeof partners.$inferInsert;
 export type Client = typeof clients.$inferSelect;
@@ -190,7 +211,10 @@ export type AssistantBonusPayment = typeof assistantBonusPayments.$inferSelect;
 export type InsertAssistantBonusPayment = typeof assistantBonusPayments.$inferInsert;
 export type AccessToken = typeof accessTokens.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
+export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
+export type InsertRecurringInvoice = typeof recurringInvoices.$inferInsert;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
 export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'commission_based';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 export type ActType = 'executor' | 'company';
+export type Frequency = 'monthly' | 'quarterly' | 'yearly';

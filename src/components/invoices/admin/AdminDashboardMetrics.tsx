@@ -11,7 +11,8 @@ import {
   Banknote,
   FileText,
   Percent,
-  DollarSign
+  DollarSign,
+  Users
 } from "lucide-react";
 
 interface DashboardStats {
@@ -23,6 +24,13 @@ interface DashboardStats {
   monthlyCashFlow: {
     received: number;
     expected: number;
+  };
+  monthlyProfit: number;
+  ownerShares: {
+    yearlyKrya: number;
+    yearlyKot: number;
+    monthlyKrya: number;
+    monthlyKot: number;
   };
   monthlySales: {
     draftsCount: number;
@@ -273,6 +281,61 @@ export const AdminDashboardMetrics = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Owner Shares Card - Full Width */}
+      <Card className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/20" data-testid="card-owner-shares">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Users className="h-5 w-5 text-amber-600" />
+            Доли партнёров (50/50)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Yearly Shares */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-muted-foreground">
+                За {selectedYear} год (чистая прибыль: {formatCurrency(stats.yearlySummary.totalProfit)})
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 bg-background/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-1">Доля Кря</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-yearly-krya">
+                    {formatCurrency(stats.ownerShares.yearlyKrya)}
+                  </p>
+                </div>
+                <div className="text-center p-4 bg-background/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-1">Доля Кота</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-yearly-kot">
+                    {formatCurrency(stats.ownerShares.yearlyKot)}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Monthly Shares */}
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-muted-foreground">
+                {MONTH_NAMES[selectedMonth]} {selectedYear} (чистая прибыль: {formatCurrency(stats.monthlyProfit)})
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 bg-background/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-1">Доля Кря</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-monthly-krya">
+                    {formatCurrency(stats.ownerShares.monthlyKrya)}
+                  </p>
+                </div>
+                <div className="text-center p-4 bg-background/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-1">Доля Кота</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-monthly-kot">
+                    {formatCurrency(stats.ownerShares.monthlyKot)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

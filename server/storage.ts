@@ -1162,6 +1162,13 @@ export class DatabaseStorage implements IStorage {
       received: number;
       expected: number;
     };
+    monthlyProfit: number;
+    ownerShares: {
+      yearlyKrya: number;
+      yearlyKot: number;
+      monthlyKrya: number;
+      monthlyKot: number;
+    };
     monthlySales: {
       draftsCount: number;
       draftsTotal: number;
@@ -1201,6 +1208,7 @@ export class DatabaseStorage implements IStorage {
     let monthlyExpected = 0;
     let monthlyVikaProfit = 0;
     let monthlyOthersProfit = 0;
+    let monthlyProfit = 0;
     
     // Collect available years from invoices
     const yearsSet = new Set<number>();
@@ -1249,6 +1257,7 @@ export class DatabaseStorage implements IStorage {
         // Monthly cash flow - based on payment date within selected month
         if (paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
           monthlyReceived += cashToAdmin;
+          monthlyProfit += netProfit;
           
           // Monthly leverage calculation
           if (isVika) {
@@ -1290,6 +1299,10 @@ export class DatabaseStorage implements IStorage {
       availableYears.unshift(now.getFullYear());
     }
     
+    // Owner shares: split profit 50/50 between Kря and Kot
+    const yearlyOwnerShare = yearlyProfit / 2;
+    const monthlyOwnerShare = monthlyProfit / 2;
+    
     return {
       yearlySummary: {
         totalRevenue: yearlyRevenue,
@@ -1299,6 +1312,13 @@ export class DatabaseStorage implements IStorage {
       monthlyCashFlow: {
         received: monthlyReceived,
         expected: monthlyExpected,
+      },
+      monthlyProfit,
+      ownerShares: {
+        yearlyKrya: yearlyOwnerShare,
+        yearlyKot: yearlyOwnerShare,
+        monthlyKrya: monthlyOwnerShare,
+        monthlyKot: monthlyOwnerShare,
       },
       monthlySales: {
         draftsCount,

@@ -116,6 +116,16 @@ Fixed the invoice waterfall visualization to correctly display expenses based on
 - **Expense tracking**: `InvoiceDetailsDialog` now passes `paidByAdmin` flag for each expense to the waterfall chart
 - **Key insight**: When partner pays expenses, they reduce partner's transfer amount, not admin's received funds
 
+### Centralized Expense Recalculation (2025-11-29)
+
+Created `recalculateInvoiceExpenses()` private helper in `server/storage.ts` to ensure ALL expense operations correctly split expenses by payer:
+- **Single source of truth**: One function handles expense split calculation for all CRUD operations
+- **Used by**: `createInvoiceExpense()`, `updateInvoiceExpense()`, `deleteInvoiceExpense()`
+- **Logic**: Splits expenses into `expensesPaidByPartner` (paidByAdmin=false) and `expensesPaidByAdmin` (paidByAdmin=true)
+- **Recalculates**: Calls `calculateInvoiceServer()` with proper splits, then updates `invoice_calculations`
+- **Consistency**: Matches logic in `recalculateAllInvoices()` for bulk operations
+- **Action required**: After deployment, run "Recalculate all invoices" button in admin panel to fix historical data
+
 ### Recurring Invoices System (2025-11-29)
 
 Fully functional recurring invoice management with automatic draft generation:

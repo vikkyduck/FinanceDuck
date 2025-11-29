@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InvoiceProgressBadge } from "./InvoiceProgressBadge";
-import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice, calculatePartnerDebt } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
 import { Eye, CheckCircle2, Send, Trash2, EyeOff, Clock } from "lucide-react";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -206,7 +206,10 @@ export const InvoiceCard = ({
 
             {/* Admin Financial Details - полная информация для админа */}
             {role === 'admin' && (() => {
-              const debtResult = calculatePartnerDebt(scheme, clientBill, commissionAmount, executorExpensesTotal);
+              // Use stored partnerTransferDue as single source of truth
+              const storedDebt = Number(invoice.partner_transfer_due) || 0;
+              const debtToAdmin = Math.max(0, storedDebt);
+              const netProfit = invoice.net_profit_admin ?? calc.net_profit_admin ?? 0;
               return (
                 <div className="space-y-2 pt-2 border-t">
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -218,14 +221,14 @@ export const InvoiceCard = ({
                       <p className="text-xs text-muted-foreground">
                         {scheme === 'agency_30' ? 'Доля админа (15%)' : 'Прибыль админа'}
                       </p>
-                      <p className="font-semibold text-primary">{formatCurrency(calc.net_profit_admin)}</p>
+                      <p className="font-semibold text-primary">{formatCurrency(netProfit)}</p>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <p className="text-xs text-muted-foreground">Долг партнёра</p>
-                      <p className="font-semibold text-destructive">{formatCurrency(debtResult.debtToAdmin)}</p>
+                      <p className="font-semibold text-destructive">{formatCurrency(debtToAdmin)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">

@@ -786,7 +786,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]> {
-    // Get all partner's paid invoices to calculate total debt
+    // Get all partner's paid invoices with stored partnerTransferDue (single source of truth)
     const paidInvoices = await db
       .select({
         invoice: invoices,
@@ -799,59 +799,13 @@ export class DatabaseStorage implements IStorage {
         eq(invoices.status, 'paid')
       ));
 
-    // Get expenses by invoice
-    const allExpenses = await db.select().from(invoiceExpenses);
-    const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
-    for (const exp of allExpenses) {
-      if (!expensesByInvoice.has(exp.invoiceId)) {
-        expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
-      }
-      const amounts = expensesByInvoice.get(exp.invoiceId)!;
-      const amount = parseFloat(exp.amount);
-      if (exp.paidByAdmin) {
-        amounts.byAdmin += amount;
-      } else {
-        amounts.byPartner += amount;
-      }
-    }
-
-    // Calculate total debt - use same logic as getPartnerDebtSummaries
+    // Calculate total debt using stored partnerTransferDue values
     let totalDebt = 0;
     for (const r of paidInvoices) {
-      const scheme = r.invoice.scheme;
-      // Use clientBill from calculations if available, otherwise from invoice
-      const clientBill = r.calculations 
-        ? parseFloat(r.calculations.clientBill || "0")
-        : 0;
-      
-      if (clientBill === 0) continue; // Skip invoices without amount
-      
-      const expenses = expensesByInvoice.get(r.invoice.id) || { byPartner: 0, byAdmin: 0 };
-
-      if (scheme === 'agency_30') {
-        // Agency 30%: Partner owes admin 15% (fixed)
-        totalDebt += clientBill * 0.15;
-      } else {
-        // partner_10, partner_15, commission_based
-        // Use scheme-defined rates, not calculated from commissionAmount
-        let commissionRate: number;
-        if (scheme === 'partner_10') {
-          commissionRate = 0.10;
-        } else if (scheme === 'partner_15') {
-          commissionRate = 0.15;
-        } else if (r.calculations?.commissionRate) {
-          // commission_based: use stored commission rate
-          commissionRate = parseFloat(r.calculations.commissionRate) / 100;
-        } else if (r.calculations?.commissionAmount && clientBill > 0) {
-          // Fallback: derive rate from stored commission amount
-          const comm = parseFloat(r.calculations.commissionAmount);
-          commissionRate = comm / clientBill;
-        } else {
-          // Last resort: use partner's default rate or 15%
-          commissionRate = 0.15;
-        }
-        const partnerCommission = clientBill * commissionRate;
-        totalDebt += clientBill - partnerCommission - expenses.byPartner;
+      if (r.calculations) {
+        // Use stored value as single source of truth
+        const storedDebt = parseFloat(r.calculations.partnerTransferDue || "0");
+        totalDebt += Math.max(0, storedDebt);
       }
     }
 
@@ -1580,7 +1534,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(partnerPayments.partnerId, partnerId))
       .orderBy(partnerPayments.paymentDate);
     
-    // Calculate totals and prepare invoice details
+    // Calculate totals using stored partnerTransferDue values (single source of truth)
     let totalDebt = 0;
     const invoiceDetails: Array<{
       id: string;
@@ -1599,26 +1553,11 @@ export class DatabaseStorage implements IStorage {
       const scheme = row.invoice.scheme;
       const cBill = parseFloat(row.calculations.clientBill || "0");
       const expenses = expensesByInvoice.get(row.invoice.id) || { byPartner: 0, byAdmin: 0 };
-      let partnerCommission = 0;
-      let debt = 0;
       
-      if (scheme === 'agency_30') {
-        partnerCommission = cBill * 0.15; // Partner gets 15%
-        debt = cBill * 0.15; // Admin also gets 15%
-      } else {
-        // Partner schemes
-        let commissionRate: number;
-        if (scheme === 'partner_10') {
-          commissionRate = 0.10;
-        } else if (scheme === 'partner_15') {
-          commissionRate = 0.15;
-        } else {
-          const comm = parseFloat(row.calculations.commissionAmount || "0");
-          commissionRate = cBill > 0 ? comm / cBill : 0.10;
-        }
-        partnerCommission = cBill * commissionRate;
-        debt = cBill - partnerCommission - expenses.byPartner;
-      }
+      // Use stored values as single source of truth
+      const storedDebt = parseFloat(row.calculations.partnerTransferDue || "0");
+      const partnerCommission = parseFloat(row.calculations.commissionAmount || "0");
+      const debt = Math.max(0, storedDebt);
       
       totalDebt += debt;
       

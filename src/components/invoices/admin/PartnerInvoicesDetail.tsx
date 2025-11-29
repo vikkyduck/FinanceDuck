@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Check, FileText } from "lucide-react";
-import { formatCurrency, formatDate, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,7 +58,8 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
             client_bill,
             partner_share_from_margin,
             commission_amount,
-            executor_expenses_total
+            executor_expenses_total,
+            partner_transfer_due
           )
         `)
         .eq("partner_id", partnerId)
@@ -88,19 +89,12 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
 
       const formattedInvoices: PartnerInvoice[] = (invoicesData || []).map((inv: any) => {
         const calc = inv.invoice_calculations?.[0];
-        const scheme = inv.scheme as InvoiceScheme;
         const clientBill = Number(calc?.client_bill) || 0;
-        const executorExpenses = Number(calc?.executor_expenses_total) || 0;
-        let partnerCommission = 0;
+        let partnerCommission = Number(calc?.commission_amount) || Number(calc?.partner_share_from_margin) || 0;
 
-        if (scheme === 'agency_30') {
-          partnerCommission = Number(calc?.partner_share_from_margin) || 0;
-        } else if (scheme === 'commission_based') {
-          partnerCommission = Number(calc?.commission_amount) || 0;
-        }
-
-        // Use centralized debt calculation function
-        const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
+        // Use stored partnerTransferDue as single source of truth
+        const storedDebt = Number(calc?.partner_transfer_due) || 0;
+        const debtToAdmin = Math.max(0, storedDebt);
         const paidAmount = paymentsByInvoice.get(inv.id) || 0;
         const remaining = Math.max(0, debtToAdmin - paidAmount);
 

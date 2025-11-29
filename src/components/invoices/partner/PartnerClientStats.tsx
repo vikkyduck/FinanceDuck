@@ -4,7 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { formatCurrency, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
+import { formatCurrency, InvoiceScheme } from "@/lib/invoiceCalculations";
 import { Loader2, User, Wallet, ShieldAlert, CreditCard } from "lucide-react";
 
 interface ClientStatsData {
@@ -45,7 +45,8 @@ export const PartnerClientStats = () => {
             partner_share_from_margin,
             client_remaining,
             client_base_after_margin,
-            executor_expenses_total
+            executor_expenses_total,
+            partner_transfer_due
           ),
           clients(id, name)
         `,
@@ -116,9 +117,9 @@ export const PartnerClientStats = () => {
           
           clientData.partner_commission += commission;
           
-          // Use centralized debt calculation
-          const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, commission, executorExpenses);
-          clientData.total_debt_to_admin += debtToAdmin;
+          // Use stored partnerTransferDue as single source of truth
+          const storedDebt = Number(calc.partner_transfer_due) || 0;
+          clientData.total_debt_to_admin += Math.max(0, storedDebt);
         }
       });
 

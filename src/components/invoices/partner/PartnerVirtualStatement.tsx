@@ -8,7 +8,7 @@ import { ArrowDownRight, ArrowUpRight, Calendar, FileText, TrendingDown, Trendin
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatCurrency, formatDate, calculatePartnerDebt, InvoiceScheme } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
@@ -64,7 +64,8 @@ export function PartnerVirtualStatement() {
             client_bill,
             commission_amount,
             partner_share_from_margin,
-            executor_expenses_total
+            executor_expenses_total,
+            partner_transfer_due
           )
         `)
         .eq("partner_id", partnerId)
@@ -123,19 +124,9 @@ export function PartnerVirtualStatement() {
       
       if (!calc) return;
       
-      const scheme = inv.scheme as InvoiceScheme;
-      const clientBill = calc.client_bill || 0;
-      const executorExpenses = calc.executor_expenses_total || 0;
-      let partnerCommission = 0;
-      
-      if (scheme === 'agency_30') {
-        partnerCommission = calc.partner_share_from_margin || 0;
-      } else {
-        partnerCommission = calc.commission_amount || 0;
-      }
-      
-      // Use centralized debt calculation
-      const { debtToAdmin } = calculatePartnerDebt(scheme, clientBill, partnerCommission, executorExpenses);
+      // Use stored partnerTransferDue as single source of truth
+      const storedDebt = Number(calc.partner_transfer_due) || 0;
+      const debtToAdmin = Math.max(0, storedDebt);
       
       runningBalance += debtToAdmin;
       

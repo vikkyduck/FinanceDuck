@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { querySupabaseWithFilter } from "@/lib/supabaseHelpers";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
-import { formatCurrency, calculatePartnerDebt } from "@/lib/invoiceCalculations";
+import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Loader2, TrendingUp, Wallet, Receipt, CreditCard, ShieldAlert } from "lucide-react";
 
 interface CommissionData {
@@ -43,7 +43,8 @@ export const PartnerCommissionReport = () => {
             client_bill,
             commission_amount,
             client_remaining,
-            executor_expenses_total
+            executor_expenses_total,
+            partner_transfer_due
           )
         `,
         (query) => query
@@ -85,9 +86,9 @@ export const PartnerCommissionReport = () => {
           partnerCommission += commission;
           clientRemaining += calc.client_remaining || 0;
           
-          // Use centralized calculation: debt = clientBill - commission - expenses
-          const { debtToAdmin } = calculatePartnerDebt('commission_based', clientBill, commission, executorExpenses);
-          totalDebtToAdmin += debtToAdmin;
+          // Use stored partnerTransferDue as single source of truth
+          const storedDebt = Number(calc.partner_transfer_due) || 0;
+          totalDebtToAdmin += Math.max(0, storedDebt);
         }
       });
 

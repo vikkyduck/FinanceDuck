@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice, calculatePartnerDebt } from "@/lib/invoiceCalculations";
+import { formatCurrency, formatDate, getSchemeLabel } from "@/lib/invoiceCalculations";
 import { Progress } from "@/components/ui/progress";
 import { Eye, Trash2, Loader2, FileText, Trash, EyeOff, Clock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -130,6 +130,7 @@ export const UnifiedInvoicesList = ({
         executor_expenses_total: inv.calculations?.executorExpensesTotal || '0',
         net_profit_admin: inv.calculations?.netProfitAdmin,
         client_remaining: inv.calculations?.clientRemaining,
+        partner_transfer_due: inv.calculations?.partnerTransferDue,
         hidden_from_assistant: inv.hiddenFromAssistant,
       }));
 
@@ -474,20 +475,17 @@ export const UnifiedInvoicesList = ({
                       </>
                     )}
                     {role === 'admin' && (() => {
-                      const scheme = invoice.scheme as 'agency_30' | 'commission_based';
-                      const clientBill = invoice.client_bill || 0;
                       const executorExpenses = invoice.executor_expenses_total || 0;
-                      const commissionRate = invoice.partner_commission_rate || invoice.commission_rate || 10;
-                      
-                      const calc = calculateInvoice(scheme, clientBill, commissionRate, executorExpenses);
-                      const commissionAmount = calc.commission_amount || 0;
-                      const debtResult = calculatePartnerDebt(scheme, clientBill, commissionAmount, executorExpenses);
+                      const netProfit = invoice.net_profit_admin || 0;
+                      // Use stored partnerTransferDue as single source of truth
+                      const storedDebt = Number(invoice.partner_transfer_due) || 0;
+                      const debtToAdmin = Math.max(0, storedDebt);
                       
                       return (
                         <>
                           <TableCell className="text-muted-foreground">{formatCurrency(executorExpenses)}</TableCell>
-                          <TableCell className="font-semibold text-primary">{formatCurrency(calc.net_profit_admin)}</TableCell>
-                          <TableCell className="font-semibold text-destructive">{formatCurrency(debtResult.debtToAdmin)}</TableCell>
+                          <TableCell className="font-semibold text-primary">{formatCurrency(netProfit)}</TableCell>
+                          <TableCell className="font-semibold text-destructive">{formatCurrency(debtToAdmin)}</TableCell>
                         </>
                       );
                     })()}

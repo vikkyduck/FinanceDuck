@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCurrency, calculatePartnerDebt } from "@/lib/invoiceCalculations";
+import { formatCurrency } from "@/lib/invoiceCalculations";
 import { useAuth } from "@/hooks/useAuth";
 import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -61,7 +61,8 @@ export const PartnerAgency30Report = () => {
             partner_share_from_margin,
             admin_share_from_margin,
             client_base_after_margin,
-            executor_expenses_total
+            executor_expenses_total,
+            partner_transfer_due
           )
         `)
         .eq("partner_id", partnerId)
@@ -102,10 +103,9 @@ export const PartnerAgency30Report = () => {
         partnerShare += partnerShareAmt;
         adminShare += Number(calc.admin_share_from_margin) || 0;
         
-        // For Agency 30%, partner debt = just 15% commission (partner_share_from_margin)
-        // Client remaining (70% - expenses) tracked separately in DoNotSpendDashboard
-        const { debtToAdmin } = calculatePartnerDebt('agency_30', clientBill, partnerShareAmt, executorExpenses);
-        totalDebtToAdmin += debtToAdmin;
+        // Use stored partnerTransferDue as single source of truth
+        const storedDebt = Number(calc.partner_transfer_due) || 0;
+        totalDebtToAdmin += Math.max(0, storedDebt);
         
         // Client remaining is 70% base minus executor expenses
         clientRemaining += Math.max(0, clientBase - executorExpenses);

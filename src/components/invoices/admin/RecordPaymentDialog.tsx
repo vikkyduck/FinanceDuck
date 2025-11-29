@@ -11,7 +11,7 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRateLimit } from "@/hooks/useRateLimit";
 import { invoiceService, type InvoiceListItem } from "@/lib/services/invoices";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 
 interface RecordPaymentDialogProps {
   open: boolean;
@@ -85,14 +85,6 @@ export const RecordPaymentDialog = ({
     }
 
     const amountNum = parseFloat(amount);
-    if (amountNum > remaining) {
-      toast({
-        title: "Ошибка",
-        description: "Сумма платежа не может превышать остаток долга",
-        variant: "destructive",
-      });
-      return;
-    }
 
     setLoading(true);
 
@@ -174,13 +166,18 @@ export const RecordPaymentDialog = ({
               type="number"
               step="0.01"
               min="0"
-              max={remaining}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               required
               data-testid="input-payment-amount"
             />
+            {amount && parseFloat(amount) > remaining && remaining > 0 && (
+              <div className="flex items-center gap-2 mt-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-sm">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>Сумма превышает остаток долга на {formatCurrency(parseFloat(amount) - remaining)}</span>
+              </div>
+            )}
           </div>
 
           <div>

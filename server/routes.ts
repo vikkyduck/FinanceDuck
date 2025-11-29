@@ -1016,7 +1016,9 @@ export function registerRoutes(app: Express): void {
   // Admin dashboard stats (Cash Flow, Sales, Yearly Summary, Leverage)
   app.get("/api/admin/dashboard-stats", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const stats = await storage.getAdminDashboardStats();
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+      const stats = await storage.getAdminDashboardStats(year, month);
       res.json(stats);
     } catch (error) {
       console.error("Get admin dashboard stats error:", error);

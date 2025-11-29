@@ -1152,11 +1152,11 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => b.remaining - a.remaining);
   }
   
-  async getAdminDashboardStats(): Promise<{
+  async getAdminDashboardStats(year?: number, month?: number): Promise<{
     yearlySummary: {
+      totalRevenue: number;
       totalProfit: number;
-      totalWithdrawn: number;
-      remaining: number;
+      netProfitMargin: number;
     };
     monthlyCashFlow: {
       received: number;
@@ -1166,19 +1166,22 @@ export class DatabaseStorage implements IStorage {
       draftsCount: number;
       draftsTotal: number;
     };
-    withdrawnThisMonth: number;
     leverage: {
       othersProfit: number;
       vikaProfit: number;
       ratio: number;
     };
+    selectedYear: number;
+    selectedMonth: number;
+    availableYears: number[];
   }> {
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const monthStart = new Date(currentYear, currentMonth, 1);
-    const monthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
-    const yearStart = new Date(currentYear, 0, 1);
+    const selectedYear = year ?? now.getFullYear();
+    const selectedMonth = month ?? now.getMonth();
+    const monthStart = new Date(selectedYear, selectedMonth, 1);
+    const monthEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+    const yearStart = new Date(selectedYear, 0, 1);
+    const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59);
     
     // Get all invoices with calculations
     const allInvoices = await db
@@ -1191,99 +1194,107 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
       .leftJoin(partners, eq(invoices.partnerId, partners.id));
     
-    // Get all partner payments
-    const allPayments = await db.select().from(partnerPayments);
-    
-    // Calculate yearly profit and cash flow
+    // Calculate yearly metrics
+    let yearlyRevenue = 0;
     let yearlyProfit = 0;
     let monthlyReceived = 0;
     let monthlyExpected = 0;
-    let vikaProfit = 0;
-    let othersProfit = 0;
+    let monthlyVikaProfit = 0;
+    let monthlyOthersProfit = 0;
+    
+    // Collect available years from invoices
+    const yearsSet = new Set<number>();
     
     for (const row of allInvoices) {
+      // Track available years
+      if (row.invoice.paymentDate) {
+        yearsSet.add(new Date(row.invoice.paymentDate).getFullYear());
+      } else if (row.invoice.createdAt) {
+        yearsSet.add(new Date(row.invoice.createdAt).getFullYear());
+      }
+      
       if (!row.calculations) continue;
       
       const scheme = row.invoice.scheme;
       const status = row.invoice.status;
-      // Use paymentDate for paid invoices, fallback to createdAt
       const paymentDate = row.invoice.paymentDate 
         ? new Date(row.invoice.paymentDate) 
         : (row.invoice.createdAt ? new Date(row.invoice.createdAt) : null);
       const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
       
+      // Client bill is the revenue
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      
       // Use appropriate cash field based on scheme
-      // agency_30: admin receives adminShareFromMargin (15% of clientBill)
-      // other schemes: admin receives amountToAdmin
       let cashToAdmin: number;
       if (scheme === 'agency_30') {
         cashToAdmin = parseFloat(row.calculations.adminShareFromMargin || "0");
       } else {
         cashToAdmin = parseFloat(row.calculations.amountToAdmin || "0");
       }
-      // Use netProfitAdmin for profit metrics
+      
       const netProfit = parseFloat(row.calculations.netProfitAdmin || "0");
       
       const isVika = row.partnerName?.toLowerCase().includes("вика уткина") || 
                      row.partnerName?.toLowerCase().includes("vika utkina");
       
-      // Only count paid invoices for cash flow and profit
+      // Only count paid invoices
       if (status === 'paid') {
-        // Yearly profit - based on payment date
-        if (paymentDate && paymentDate >= yearStart) {
+        // Yearly metrics - based on payment date within selected year
+        if (paymentDate && paymentDate >= yearStart && paymentDate <= yearEnd) {
+          yearlyRevenue += clientBill;
           yearlyProfit += netProfit;
         }
         
-        // Monthly cash flow - based on payment date, use cashToAdmin (actual cash)
+        // Monthly cash flow - based on payment date within selected month
         if (paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
           monthlyReceived += cashToAdmin;
-        }
-        
-        // Leverage calculation - all paid invoices
-        if (isVika) {
-          vikaProfit += netProfit;
-        } else {
-          othersProfit += netProfit;
+          
+          // Monthly leverage calculation
+          if (isVika) {
+            monthlyVikaProfit += netProfit;
+          } else {
+            monthlyOthersProfit += netProfit;
+          }
         }
       }
       
-      // Expected this month - sent invoices (use cashToAdmin for expected cash)
+      // Expected this month - sent invoices
       if (status === 'sent' && createdAt && createdAt >= monthStart && createdAt <= monthEnd) {
         monthlyExpected += cashToAdmin;
       }
     }
     
-    // Drafts (sales pipeline) - count invoices with status 'draft' (sent/paid are not drafts)
-    const drafts = allInvoices.filter(row => 
-      row.invoice.status !== 'paid' && row.invoice.status !== 'sent' && row.invoice.status !== 'cancelled'
-    );
-    const draftsCount = drafts.length;
-    const draftsTotal = drafts.reduce((sum, row) => {
+    // Drafts (sales pipeline) for selected month
+    const monthlyDrafts = allInvoices.filter(row => {
+      if (row.invoice.status === 'paid' || row.invoice.status === 'sent' || row.invoice.status === 'cancelled') {
+        return false;
+      }
+      const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
+      return createdAt && createdAt >= monthStart && createdAt <= monthEnd;
+    });
+    const draftsCount = monthlyDrafts.length;
+    const draftsTotal = monthlyDrafts.reduce((sum, row) => {
       return sum + parseFloat(row.calculations?.clientBill || "0");
     }, 0);
     
-    // Partner payments this month (withdrawn)
-    const monthlyPayments = allPayments.filter(p => {
-      const paymentDate = new Date(p.paymentDate);
-      return paymentDate >= monthStart && paymentDate <= monthEnd;
-    });
-    const withdrawnThisMonth = monthlyPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    // Net Profit Margin = (Net Profit / Revenue) * 100
+    const netProfitMargin = yearlyRevenue > 0 ? (yearlyProfit / yearlyRevenue) * 100 : 0;
     
-    // Total withdrawn (this year only - to match yearly profit)
-    const yearlyPayments = allPayments.filter(p => {
-      const paymentDate = new Date(p.paymentDate);
-      return paymentDate >= yearStart;
-    });
-    const totalWithdrawn = yearlyPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    // Leverage ratio for selected month
+    const leverageRatio = monthlyVikaProfit > 0 ? monthlyOthersProfit / monthlyVikaProfit : 0;
     
-    // Leverage ratio
-    const leverageRatio = vikaProfit > 0 ? othersProfit / vikaProfit : 0;
+    // Sort available years descending
+    const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
+    if (!availableYears.includes(now.getFullYear())) {
+      availableYears.unshift(now.getFullYear());
+    }
     
     return {
       yearlySummary: {
+        totalRevenue: yearlyRevenue,
         totalProfit: yearlyProfit,
-        totalWithdrawn: totalWithdrawn,
-        remaining: yearlyProfit - totalWithdrawn,
+        netProfitMargin: netProfitMargin,
       },
       monthlyCashFlow: {
         received: monthlyReceived,
@@ -1293,12 +1304,14 @@ export class DatabaseStorage implements IStorage {
         draftsCount,
         draftsTotal,
       },
-      withdrawnThisMonth,
       leverage: {
-        othersProfit,
-        vikaProfit,
+        othersProfit: monthlyOthersProfit,
+        vikaProfit: monthlyVikaProfit,
         ratio: leverageRatio,
       },
+      selectedYear,
+      selectedMonth,
+      availableYears,
     };
   }
   

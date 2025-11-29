@@ -662,6 +662,56 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Alert counts for sidebar badges
+  app.get("/api/alert-counts", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role || "client";
+      const counts = await storage.getAlertCounts(role);
+      res.json(counts);
+    } catch (error) {
+      console.error("Get alert counts error:", error);
+      res.status(500).json({ error: "Failed to get alert counts" });
+    }
+  });
+
+  // Global search for command palette
+  app.get("/api/search", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role || "client";
+      const query = req.query.q as string || "";
+      if (!query.trim()) {
+        return res.json([]);
+      }
+      const results = await storage.globalSearch(query, role);
+      res.json(results);
+    } catch (error) {
+      console.error("Global search error:", error);
+      res.status(500).json({ error: "Failed to search" });
+    }
+  });
+
+  // Priority actions for dashboard
+  app.get("/api/priority-actions", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const actions = await storage.getPriorityActions();
+      res.json(actions);
+    } catch (error) {
+      console.error("Get priority actions error:", error);
+      res.status(500).json({ error: "Failed to get priority actions" });
+    }
+  });
+
+  // Overdue invoices with details for alerts
+  app.get("/api/overdue-invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getOverdueInvoicesDetailed();
+      res.json(data);
+    } catch (error) {
+      console.error("Get overdue invoices detailed error:", error);
+      res.status(500).json({ error: "Failed to get overdue invoices" });
+    }
+  });
+
   app.get("/api/admin/plan-fact", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const year = parseInt(req.query.year as string) || new Date().getFullYear();

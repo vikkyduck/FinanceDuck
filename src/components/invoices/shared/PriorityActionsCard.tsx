@@ -2,172 +2,85 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, FileText, Send, Clock, TrendingDown } from "lucide-react";
 import { motion } from "framer-motion";
-import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useState } from "react";
-import { format, differenceInDays } from "date-fns";
-import { ru } from "date-fns/locale";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPatch } from "@/lib/api";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 
 interface PriorityAction {
   id: string;
-  type: "overdue" | "draft" | "long_sent" | "inactive_partner";
+  type: string;
   priority: number;
   title: string;
   description: string;
-  amount?: number;
-  icon: any;
-  action: () => void;
-  actionLabel: string;
+  amount: number | null;
+  actionType: string;
 }
 
+const iconMap: Record<string, any> = {
+  overdue: AlertCircle,
+  draft: FileText,
+  long_sent: Clock,
+  inactive_partner: TrendingDown,
+};
+
 export const PriorityActionsCard = () => {
-  const [actions, setActions] = useState<PriorityAction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    fetchPriorityActions();
-  }, []);
+  const { data: actions = [], isLoading } = useQuery<PriorityAction[]>({
+    queryKey: ["/api/priority-actions"],
+    queryFn: () => apiGet<PriorityAction[]>("/priority-actions"),
+  });
 
-  const fetchPriorityActions = async () => {
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-      const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-
-      const priorityActions: PriorityAction[] = [];
-
-      // Просроченные платежи
-      const { data: overdueInvoices } = await supabase
-        .from("invoices")
-        .select(
-          `
-          id,
-          invoice_number,
-          payment_date,
-          clients(name),
-          invoice_calculations(client_bill)
-        `
-        )
-        .eq("status", "sent")
-        .is("actual_payment_date", null)
-        .lt("payment_date", today);
-
-      overdueInvoices?.forEach((invoice: any) => {
-        const daysOverdue = differenceInDays(
-          new Date(),
-          new Date(invoice.payment_date)
-        );
-        priorityActions.push({
-          id: invoice.id,
-          type: "overdue",
-          priority: daysOverdue * (invoice.invoice_calculations?.[0]?.client_bill || 0),
-          title: `Просрочен на ${daysOverdue} дн.`,
-          description: `Счет ${invoice.invoice_number} • ${invoice.clients?.name}`,
-          amount: invoice.invoice_calculations?.[0]?.client_bill,
-          icon: AlertCircle,
-          action: () => handleMarkAsPaid(invoice.id),
-          actionLabel: "Отметить оплату",
-        });
+  const markPaidMutation = useMutation({
+    mutationFn: async (invoiceId: string) => {
+      return apiPatch(`/invoices/${invoiceId}`, {
+        status: "paid",
+        actualPaymentDate: new Date().toISOString().split('T')[0],
       });
-
-      // Черновики без даты
-      const { data: draftInvoices } = await supabase
-        .from("invoices")
-        .select(
-          `
-          id,
-          invoice_number,
-          clients(name),
-          invoice_calculations(client_bill)
-        `
-        )
-        .eq("status", "draft")
-        .is("payment_date", null);
-
-      draftInvoices?.forEach((invoice: any) => {
-        priorityActions.push({
-          id: invoice.id,
-          type: "draft",
-          priority: 50,
-          title: "Заполните дату оплаты",
-          description: `Счет ${invoice.invoice_number} • ${invoice.clients?.name}`,
-          amount: invoice.invoice_calculations?.[0]?.client_bill,
-          icon: FileText,
-          action: () => navigate(`/invoices?open=${invoice.id}`),
-          actionLabel: "Заполнить",
-        });
-      });
-
-      // Долго отправленные
-      const { data: longSentInvoices } = await supabase
-        .from("invoices")
-        .select(
-          `
-          id,
-          invoice_number,
-          created_at,
-          clients(name),
-          invoice_calculations(client_bill)
-        `
-        )
-        .eq("status", "sent")
-        .is("actual_payment_date", null)
-        .lt("created_at", thirtyDaysAgo);
-
-      longSentInvoices?.forEach((invoice: any) => {
-        const daysWaiting = differenceInDays(
-          new Date(),
-          new Date(invoice.created_at)
-        );
-        priorityActions.push({
-          id: invoice.id,
-          type: "long_sent",
-          priority: daysWaiting,
-          title: `Ожидает ${daysWaiting} дней`,
-          description: `Счет ${invoice.invoice_number} • ${invoice.clients?.name}`,
-          amount: invoice.invoice_calculations?.[0]?.client_bill,
-          icon: Clock,
-          action: () =>
-            toast.success(`Напоминание отправлено для счета ${invoice.invoice_number}`),
-          actionLabel: "Напомнить",
-        });
-      });
-
-      // Сортировка по приоритету
-      priorityActions.sort((a, b) => b.priority - a.priority);
-      setActions(priorityActions.slice(0, 5)); // Топ-5
-    } catch (error) {
-      console.error("Error fetching priority actions:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleMarkAsPaid = async (invoiceId: string) => {
-    try {
-      const { error } = await supabase
-        .from("invoices")
-        .update({ actual_payment_date: new Date().toISOString(), status: "paid" })
-        .eq("id", invoiceId);
-
-      if (error) throw error;
+    },
+    onSuccess: () => {
       toast.success("Счет отмечен как оплаченный");
-      fetchPriorityActions();
-    } catch (error) {
+      queryClient.invalidateQueries({ queryKey: ["/api/priority-actions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+    },
+    onError: () => {
       toast.error("Ошибка при обновлении счета");
+    },
+  });
+
+  const handleAction = (action: PriorityAction) => {
+    switch (action.actionType) {
+      case "mark_paid":
+        markPaidMutation.mutate(action.id);
+        break;
+      case "edit":
+        navigate(`/invoices?open=${action.id}`);
+        break;
+      case "remind":
+        toast.success(`Напоминание отправлено`);
+        break;
     }
   };
 
-  if (loading) {
+  const getActionLabel = (actionType: string) => {
+    switch (actionType) {
+      case "mark_paid":
+        return "Отметить оплату";
+      case "edit":
+        return "Заполнить";
+      case "remind":
+        return "Напомнить";
+      default:
+        return "Действие";
+    }
+  };
+
+  if (isLoading) {
     return (
-      <Card className="hover-scale">
+      <Card>
         <CardHeader>
           <Skeleton className="h-6 w-48" />
         </CardHeader>
@@ -208,7 +121,7 @@ export const PriorityActionsCard = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="border-destructive/50 hover-scale">
+      <Card className="border-destructive/50">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-destructive">
             <div className="relative p-1.5 rounded-full bg-destructive/10">
@@ -221,7 +134,7 @@ export const PriorityActionsCard = () => {
         <CardContent>
           <div className="space-y-3">
             {actions.map((action, index) => {
-              const Icon = action.icon;
+              const Icon = iconMap[action.type] || AlertCircle;
               return (
                 <motion.div
                   key={action.id}
@@ -229,6 +142,7 @@ export const PriorityActionsCard = () => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                   className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  data-testid={`priority-action-${action.id}`}
                 >
                   <div className="flex items-start gap-3 flex-1">
                     <div className="p-2 rounded-full bg-destructive/10">
@@ -239,9 +153,9 @@ export const PriorityActionsCard = () => {
                       <p className="text-xs text-muted-foreground truncate">
                         {action.description}
                       </p>
-                      {action.amount && (
+                      {action.amount && action.amount > 0 && (
                         <p className="text-sm font-semibold mt-1">
-                          {action.amount.toLocaleString("ru-RU")} ₽
+                          {action.amount.toLocaleString("ru-RU")} rub
                         </p>
                       )}
                     </div>
@@ -249,10 +163,12 @@ export const PriorityActionsCard = () => {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={action.action}
+                    onClick={() => handleAction(action)}
                     className="ml-2"
+                    disabled={markPaidMutation.isPending}
+                    data-testid={`btn-action-${action.id}`}
                   >
-                    {action.actionLabel}
+                    {getActionLabel(action.actionType)}
                   </Button>
                 </motion.div>
               );

@@ -21,7 +21,7 @@ import {
   Home,
   Settings,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 
@@ -61,113 +61,55 @@ export function GlobalCommandPalette() {
 
     setLoading(true);
     try {
-      const searchResults: SearchResult[] = [];
-
-      if (role === "admin" || role === "assistant") {
-        const { data: invoices } = await supabase
-          .from("invoices")
-          .select("id, invoice_number, clients(name), partners(name)")
-          .ilike("invoice_number", `%${query}%`)
-          .limit(5);
-
-        if (invoices) {
-          invoices.forEach((inv: any) => {
-            searchResults.push({
-              id: inv.id,
-              type: "invoice",
-              title: inv.invoice_number || `Счёт ${inv.id.slice(0, 8)}`,
-              subtitle: `${inv.clients?.name || "Клиент"} • ${inv.partners?.name || "Партнёр"}`,
-              url: `/invoices?invoice=${inv.id}`,
-            });
-          });
-        }
-
-        const { data: partners } = await supabase
-          .from("partners")
-          .select("id, name")
-          .ilike("name", `%${query}%`)
-          .limit(5);
-
-        if (partners) {
-          partners.forEach((p: any) => {
-            searchResults.push({
-              id: p.id,
-              type: "partner",
-              title: p.name,
-              url: "/partners",
-            });
-          });
-        }
-
-        const { data: clients } = await supabase
-          .from("clients")
-          .select("id, name")
-          .ilike("name", `%${query}%`)
-          .limit(5);
-
-        if (clients) {
-          clients.forEach((c: any) => {
-            searchResults.push({
-              id: c.id,
-              type: "client",
-              title: c.name,
-              url: "/clients",
-            });
-          });
-        }
-      }
-
+      const searchResults = await apiGet<SearchResult[]>(`/search?q=${encodeURIComponent(query)}`);
       setResults(searchResults);
     } catch (error) {
       console.error("[GlobalCommandPalette] Search error:", error);
+      setResults([]);
     } finally {
       setLoading(false);
     }
-  }, [role]);
+  }, []);
 
   useEffect(() => {
-    const debounce = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       searchData(search);
     }, 300);
-    return () => clearTimeout(debounce);
+
+    return () => clearTimeout(timeoutId);
   }, [search, searchData]);
-
-  const pages: SearchResult[] = [
-    { id: "home", type: "page", title: "Главная", url: "/" },
-    { id: "invoices", type: "page", title: "Счета", url: "/invoices" },
-  ];
-
-  if (role === "admin") {
-    pages.push(
-      { id: "partners", type: "page", title: "Партнёры", url: "/partners" },
-      { id: "clients", type: "page", title: "Клиенты", url: "/clients" },
-      { id: "stats", type: "page", title: "Аналитика", url: "/stats" },
-      { id: "security", type: "page", title: "Безопасность", url: "/security" },
-      { id: "partner-debt", type: "page", title: "Долги партнёров", url: "/partner-debt" },
-    );
-  }
 
   const handleSelect = (result: SearchResult) => {
     setOpen(false);
-    setSearch("");
-    
     if (result.url) {
       setLocation(result.url);
     }
   };
 
+  const pages = [
+    { title: "Главная", url: "/", icon: Home },
+    { title: "Счета", url: "/invoices", icon: FileText },
+    { title: "Статистика", url: "/stats", icon: BarChart3 },
+    ...(role === "admin"
+      ? [
+          { title: "Клиенты", url: "/clients", icon: Users },
+          { title: "Партнёры", url: "/partners", icon: Building2 },
+          { title: "Коды доступа", url: "/access-codes", icon: Shield },
+          { title: "Долг партнёров", url: "/partner-debt", icon: CreditCard },
+        ]
+      : []),
+  ];
+
   const getIcon = (type: SearchResult["type"]) => {
     switch (type) {
       case "invoice":
-        return <FileText className="h-4 w-4" />;
+        return FileText;
       case "partner":
-        return <Building2 className="h-4 w-4" />;
+        return Building2;
       case "client":
-        return <Users className="h-4 w-4" />;
-      case "page":
-        return <Home className="h-4 w-4" />;
+        return Users;
       default:
-        return <Search className="h-4 w-4" />;
+        return Search;
     }
   };
 
@@ -179,8 +121,6 @@ export function GlobalCommandPalette() {
         return "Партнёр";
       case "client":
         return "Клиент";
-      case "page":
-        return "Страница";
       default:
         return "";
     }
@@ -188,73 +128,79 @@ export function GlobalCommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput 
-        placeholder="Поиск по счетам, партнёрам, клиентам..." 
+      <CommandInput
+        placeholder="Поиск счетов, партнёров, клиентов..."
         value={search}
         onValueChange={setSearch}
         data-testid="input-command-search"
       />
       <CommandList>
         <CommandEmpty>
-          {loading ? "Поиск..." : "Ничего не найдено"}
+          {loading ? "Поиск..." : "Ничего не найдено."}
         </CommandEmpty>
 
-        {!search && (
-          <CommandGroup heading="Страницы">
-            {pages.map((page) => (
-              <CommandItem
-                key={page.id}
-                onSelect={() => handleSelect(page)}
-                data-testid={`command-item-${page.id}`}
-              >
-                {getIcon(page.type)}
-                <span className="ml-2">{page.title}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-
         {results.length > 0 && (
-          <>
-            <CommandSeparator />
-            <CommandGroup heading="Результаты поиска">
-              {results.map((result) => (
+          <CommandGroup heading="Результаты поиска">
+            {results.map((result) => {
+              const Icon = getIcon(result.type);
+              return (
                 <CommandItem
-                  key={`${result.type}-${result.id}`}
+                  key={result.id}
                   onSelect={() => handleSelect(result)}
-                  data-testid={`command-result-${result.type}-${result.id}`}
+                  className="flex items-center gap-3"
+                  data-testid={`search-result-${result.id}`}
                 >
-                  {getIcon(result.type)}
-                  <div className="ml-2 flex-1">
-                    <span>{result.title}</span>
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate">{result.title}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {getTypeLabel(result.type)}
+                      </Badge>
+                    </div>
                     {result.subtitle && (
-                      <span className="text-muted-foreground text-xs ml-2">
+                      <span className="text-xs text-muted-foreground truncate block">
                         {result.subtitle}
                       </span>
                     )}
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {getTypeLabel(result.type)}
-                  </Badge>
                 </CommandItem>
-              ))}
-            </CommandGroup>
-          </>
+              );
+            })}
+          </CommandGroup>
         )}
 
-        {(role === "admin" || role === "assistant") && !search && (
+        <CommandSeparator />
+
+        <CommandGroup heading="Страницы">
+          {pages.map((page) => (
+            <CommandItem
+              key={page.url}
+              onSelect={() => {
+                setOpen(false);
+                setLocation(page.url);
+              }}
+              data-testid={`nav-${page.url.replace("/", "") || "home"}`}
+            >
+              <page.icon className="mr-2 h-4 w-4" />
+              <span>{page.title}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+
+        {(role === "admin" || role === "assistant") && (
           <>
             <CommandSeparator />
             <CommandGroup heading="Быстрые действия">
               <CommandItem
                 onSelect={() => {
                   setOpen(false);
-                  window.dispatchEvent(new CustomEvent("open-create-invoice"));
+                  setLocation("/invoices?action=new");
                 }}
-                data-testid="command-action-create-invoice"
+                data-testid="action-new-invoice"
               >
-                <Plus className="h-4 w-4" />
-                <span className="ml-2">Создать счёт</span>
+                <Plus className="mr-2 h-4 w-4" />
+                <span>Создать счёт</span>
               </CommandItem>
             </CommandGroup>
           </>

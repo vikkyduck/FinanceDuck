@@ -1,95 +1,27 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useUserRole } from "./useUserRole";
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
+import { useVisibilityAwareInterval } from "./useVisibilityAwareInterval";
 
 interface AlertCounts {
   overdueInvoices: number;
   pendingInvoices: number;
   unresolvedSecurityEvents: number;
-  loading: boolean;
 }
 
 export const useAlertCounts = () => {
-  const { role } = useUserRole();
-  const [counts, setCounts] = useState<AlertCounts>({
-    overdueInvoices: 0,
-    pendingInvoices: 0,
-    unresolvedSecurityEvents: 0,
-    loading: true,
+  const refetchInterval = useVisibilityAwareInterval();
+
+  const { data, isLoading } = useQuery<AlertCounts>({
+    queryKey: ["/api/alert-counts"],
+    queryFn: () => apiGet<AlertCounts>("/alert-counts"),
+    refetchInterval,
+    staleTime: 30000,
   });
 
-  useEffect(() => {
-    if (!role) return;
-    
-    const fetchCounts = async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-
-        // Overdue invoices (only for admin/assistant)
-        let overdueCount = 0;
-        if (role === 'admin' || role === 'assistant') {
-          const { count: overdue } = await supabase
-            .from("invoices")
-            .select("*", { count: 'exact', head: true })
-            .eq('status', 'sent')
-            .is('actual_payment_date', null)
-            .lt('payment_date', today)
-            .not('payment_date', 'is', null);
-          
-          overdueCount = overdue || 0;
-        }
-
-        // Pending invoices (for all roles)
-        const { count: pending } = await supabase
-          .from("invoices")
-          .select("*", { count: 'exact', head: true })
-          .eq('status', 'draft');
-        
-        const pendingCount = pending || 0;
-
-        // Unresolved security events (only for admin)
-        let securityCount = 0;
-        if (role === 'admin') {
-          const { count: security } = await supabase
-            .from("security_events")
-            .select("*", { count: 'exact', head: true })
-            .eq('resolved', false)
-            .in('severity', ['high', 'critical']);
-          
-          securityCount = security || 0;
-        }
-
-        setCounts({
-          overdueInvoices: overdueCount,
-          pendingInvoices: pendingCount,
-          unresolvedSecurityEvents: securityCount,
-          loading: false,
-        });
-      } catch (error) {
-        console.error("Error fetching alert counts:", error);
-        setCounts(prev => ({ ...prev, loading: false }));
-      }
-    };
-
-    fetchCounts();
-
-    let isVisible = document.visibilityState === 'visible';
-    
-    const handleVisibilityChange = () => {
-      isVisible = document.visibilityState === 'visible';
-      if (isVisible) fetchCounts();
-    };
-
-    const interval = setInterval(() => {
-      if (isVisible) fetchCounts();
-    }, 120000);
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [role]);
-
-  return counts;
+  return {
+    overdueInvoices: data?.overdueInvoices ?? 0,
+    pendingInvoices: data?.pendingInvoices ?? 0,
+    unresolvedSecurityEvents: data?.unresolvedSecurityEvents ?? 0,
+    loading: isLoading,
+  };
 };

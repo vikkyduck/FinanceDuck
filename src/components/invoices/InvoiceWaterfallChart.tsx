@@ -39,41 +39,56 @@ export function InvoiceWaterfallChart({
   catShare = 0,
   showCatShare = false,
 }: WaterfallChartProps) {
+  // Validate inputs - convert to safe numbers
+  const safeClientBill = Number(clientBill) || 0;
+  const safeCommissionRate = Number(commissionRate) || 0;
+  const safePartnerShare = Number(partnerShare) || 0;
+  const safeAdminShare = Number(adminShare) || 0;
+  const safeExpensesPaidByPartner = Number(expensesPaidByPartner) || 0;
+  const safeExpensesPaidByAdmin = Number(expensesPaidByAdmin) || 0;
+  const safeCatShare = Number(catShare) || 0;
+  const safeNetProfitAdmin = netProfitAdmin !== undefined && netProfitAdmin !== null ? Number(netProfitAdmin) : undefined;
+
   const data = useMemo(() => {
+    // If no client bill, return empty array
+    if (safeClientBill <= 0) {
+      return [];
+    }
+
     const items: WaterfallItem[] = [];
     let runningTotal = 0;
 
     items.push({
       name: "Счёт клиенту",
-      value: clientBill,
-      total: clientBill,
+      value: safeClientBill,
+      total: safeClientBill,
       isPositive: true,
       color: "hsl(var(--primary))",
     });
-    runningTotal = clientBill;
+    runningTotal = safeClientBill;
 
     if (scheme === "agency_30") {
       items.push({
         name: "Партнёру (15%)",
-        value: -partnerShare,
-        total: runningTotal - partnerShare,
+        value: -safePartnerShare,
+        total: runningTotal - safePartnerShare,
         isPositive: false,
         color: "hsl(var(--chart-2))",
       });
-      runningTotal -= partnerShare;
+      runningTotal -= safePartnerShare;
 
       items.push({
         name: "Админу (15%)",
-        value: -adminShare,
-        total: runningTotal - adminShare,
+        value: -safeAdminShare,
+        total: runningTotal - safeAdminShare,
         isPositive: false,
         color: "hsl(var(--chart-3))",
       });
-      runningTotal -= adminShare;
+      runningTotal -= safeAdminShare;
     } else {
-      const commissionAmount = clientBill * (commissionRate / 100);
+      const commissionAmount = safeClientBill * (safeCommissionRate / 100);
       items.push({
-        name: `Комиссия (${commissionRate.toFixed(2)}%)`,
+        name: `Комиссия (${safeCommissionRate.toFixed(2)}%)`,
         value: -commissionAmount,
         total: runningTotal - commissionAmount,
         isPositive: false,
@@ -82,20 +97,20 @@ export function InvoiceWaterfallChart({
       runningTotal -= commissionAmount;
     }
 
-    if (expensesPaidByPartner > 0) {
+    if (safeExpensesPaidByPartner > 0) {
       items.push({
         name: "Расходы (партнёр)",
-        value: -expensesPaidByPartner,
-        total: runningTotal - expensesPaidByPartner,
+        value: -safeExpensesPaidByPartner,
+        total: runningTotal - safeExpensesPaidByPartner,
         isPositive: false,
         color: "hsl(var(--chart-3))",
       });
-      runningTotal -= expensesPaidByPartner;
+      runningTotal -= safeExpensesPaidByPartner;
     }
 
-    const actualNetProfit = netProfitAdmin ?? runningTotal - expensesPaidByAdmin;
+    const actualNetProfit = safeNetProfitAdmin ?? runningTotal - safeExpensesPaidByAdmin;
     
-    if (showCatShare && catShare > 0 && actualNetProfit > 0) {
+    if (showCatShare && safeCatShare > 0 && actualNetProfit > 0) {
       items.push({
         name: "Чистая прибыль",
         value: actualNetProfit,
@@ -105,7 +120,7 @@ export function InvoiceWaterfallChart({
       });
       runningTotal = actualNetProfit;
       
-      const halfProfit = catShare;
+      const halfProfit = safeCatShare;
       
       items.push({
         name: "→ Админ (50%)",
@@ -135,7 +150,7 @@ export function InvoiceWaterfallChart({
     }
 
     return items;
-  }, [clientBill, scheme, commissionRate, expensesPaidByPartner, expensesPaidByAdmin, partnerShare, adminShare, netProfitAdmin, catShare, showCatShare]);
+  }, [safeClientBill, scheme, safeCommissionRate, safeExpensesPaidByPartner, safeExpensesPaidByAdmin, safePartnerShare, safeAdminShare, safeNetProfitAdmin, safeCatShare, showCatShare]);
 
   const chartData = useMemo(() => {
     let cumulative = 0;
@@ -167,6 +182,11 @@ export function InvoiceWaterfallChart({
       </div>
     );
   };
+
+  // Don't render if no data
+  if (!chartData || chartData.length === 0) {
+    return null;
+  }
 
   return (
     <div className="w-full h-[200px]" data-testid="chart-waterfall">

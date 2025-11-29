@@ -177,8 +177,12 @@ export const recurringInvoices = pgTable("recurring_invoices", {
   partnerId: uuid("partner_id").references(() => partners.id, { onDelete: 'cascade' }).notNull(),
   scheme: invoiceSchemeEnum("scheme").notNull(),
   partnerCommissionRate: numeric("partner_commission_rate", { precision: 5, scale: 2 }),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  description: text("description"),
   frequency: frequencyEnum("frequency").default('monthly').notNull(),
   dayOfMonth: numeric("day_of_month", { precision: 2, scale: 0 }).default("1").notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
   nextInvoiceDate: date("next_invoice_date").notNull(),
   notes: text("notes"),
   isActive: boolean("is_active").default(true).notNull(),
@@ -188,6 +192,7 @@ export const recurringInvoices = pgTable("recurring_invoices", {
 }, (table) => [
   index("idx_recurring_invoices_next_date").on(table.nextInvoiceDate),
   index("idx_recurring_invoices_client").on(table.clientId),
+  index("idx_recurring_invoices_active").on(table.isActive),
 ]);
 
 export type Partner = typeof partners.$inferSelect;

@@ -2,14 +2,15 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { useToast } from "@/hooks/use-toast";
-import { DollarSign, CheckCircle, History, FileCheck2, FileText, Calendar, CreditCard, RefreshCw } from "lucide-react";
+import { DollarSign, CheckCircle, History, FileCheck2, FileText, Calendar, CreditCard, RefreshCw, User, Building2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,10 +24,12 @@ interface UnpaidBonusData {
   companyActs: number;
 }
 
-interface ActStats {
-  executorActs: number;
-  companyActs: number;
+interface AssistantStats {
+  paidInvoicesCount: number;
+  executorActsCount: number;
+  companyActsCount: number;
   totalPaidInvoices: number;
+  assistantBonus: number;
 }
 
 export const AssistantBonusManager = () => {
@@ -40,7 +43,7 @@ export const AssistantBonusManager = () => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
         queryClient.invalidateQueries({ queryKey: ['/api/admin/bonus-payments'] });
       }
     };
@@ -51,14 +54,16 @@ export const AssistantBonusManager = () => {
     };
   }, [queryClient]);
 
-  const { data: unpaidBonus, isLoading: loadingUnpaid, isFetching: fetchingUnpaid } = useQuery<UnpaidBonusData>({
-    queryKey: ['/api/admin/unpaid-bonus'],
+  // Use the same API as AssistantBonusCard for unified data source
+  const { data: stats, isLoading: loadingStats, isFetching: fetchingStats } = useQuery<AssistantStats>({
+    queryKey: ['/api/assistant/stats'],
+    queryFn: () => apiGet('/assistant/stats'),
     refetchInterval: 30000,
     staleTime: 10000,
   });
 
-  const { data: actStats, isLoading: loadingStats } = useQuery<ActStats>({
-    queryKey: ['/api/acts-statistics'],
+  const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
+    queryKey: ['/api/admin/unpaid-bonus'],
     refetchInterval: 30000,
     staleTime: 10000,
   });
@@ -99,11 +104,24 @@ export const AssistantBonusManager = () => {
     },
   });
 
-  const executorActsAmount = (actStats?.executorActs || 0) * 1000;
-  const companyActsAmount = (actStats?.companyActs || 0) * 2000;
-  const calculatedTotal = executorActsAmount + companyActsAmount;
+  // Use unified stats from /api/assistant/stats
+  const executorActsCount = stats?.executorActsCount || 0;
+  const companyActsCount = stats?.companyActsCount || 0;
+  const totalPaidInvoices = stats?.totalPaidInvoices || 0;
+  const executorActsAmount = executorActsCount * 1000;
+  const companyActsAmount = companyActsCount * 2000;
+  const calculatedTotal = stats?.assistantBonus || (executorActsAmount + companyActsAmount);
 
   const loading = loadingUnpaid || loadingStats;
+  
+  // Progress calculations (same as AssistantBonusCard)
+  const progressPercent = Math.min((calculatedTotal / 50000) * 100, 100);
+  const executorProgress = totalPaidInvoices > 0 
+    ? (executorActsCount / totalPaidInvoices) * 100 
+    : 0;
+  const companyProgress = totalPaidInvoices > 0 
+    ? (companyActsCount / totalPaidInvoices) * 100 
+    : 0;
 
   if (loading) {
     return (
@@ -131,20 +149,15 @@ export const AssistantBonusManager = () => {
 
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <DollarSign className="h-5 w-5 text-primary" />
-              Бонусы ассистента
-              {fetchingUnpaid && (
-                <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin" />
-              )}
-            </CardTitle>
-            <CardDescription>
-              За подписанные акты с исполнителями и клиентами
-            </CardDescription>
-          </div>
+      <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-primary" />
+            Бонусы ассистента
+            {fetchingStats && (
+              <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin" />
+            )}
+          </CardTitle>
           <Button 
             variant="ghost" 
             size="sm"
@@ -155,40 +168,69 @@ export const AssistantBonusManager = () => {
             История выплат
           </Button>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-baseline gap-3">
-            <div className="text-3xl font-bold text-primary">
-              {formatCurrency(calculatedTotal)}
+        <CardContent className="space-y-6">
+          <div>
+            <div className="flex items-baseline gap-3">
+              <div className="text-3xl font-bold text-primary" data-testid="text-admin-bonus-total">
+                {formatCurrency(calculatedTotal)}
+              </div>
+              {hasUnpaidBonuses && (
+                <Badge variant="secondary" className="text-xs">
+                  К выплате: {formatCurrency(unpaidTotal)}
+                </Badge>
+              )}
             </div>
-            {hasUnpaidBonuses && (
-              <Badge variant="secondary" className="text-xs">
-                К выплате: {formatCurrency(unpaidTotal)}
-              </Badge>
-            )}
+            <p className="text-sm text-muted-foreground mt-1">
+              Всего начислено за {totalPaidInvoices} оплаченных счетов
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Всего начислено за {actStats?.totalPaidInvoices || 0} оплаченных счетов
-          </p>
 
-          <div className="grid grid-cols-2 gap-4 pt-3 border-t">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileCheck2 className="h-4 w-4" />
-                Акты с исполнителями
+          <div>
+            <div className="flex justify-between text-sm mb-1">
+              <span className="text-muted-foreground">Прогресс до 50 000</span>
+              <span className="font-medium">{progressPercent.toFixed(0)}%</span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+          </div>
+
+          <div className="space-y-4 pt-2">
+            <div className="p-3 rounded-md bg-background/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="h-4 w-4 text-purple-500" />
+                  <span>Акты компаний</span>
+                </div>
+                <span className="text-sm font-medium">
+                  {companyActsCount} / {totalPaidInvoices}
+                </span>
               </div>
-              <p className="font-semibold">
-                {actStats?.executorActs || 0} x 1000 = {formatCurrency(executorActsAmount)}
-              </p>
+              <Progress value={companyProgress} className="h-1.5" />
+              <div className="text-sm font-semibold text-right">
+                {companyActsCount} x 2 000 = {formatCurrency(companyActsAmount)}
+              </div>
             </div>
 
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileText className="h-4 w-4" />
-                Акты с клиентами (компании)
+            <div className="p-3 rounded-md bg-background/50 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="h-4 w-4 text-blue-500" />
+                  <span>Акты исполнителей</span>
+                </div>
+                <span className="text-sm font-medium">
+                  {executorActsCount} / {totalPaidInvoices}
+                </span>
               </div>
-              <p className="font-semibold">
-                {actStats?.companyActs || 0} x 2000 = {formatCurrency(companyActsAmount)}
-              </p>
+              <Progress value={executorProgress} className="h-1.5" />
+              <div className="text-sm font-semibold text-right">
+                {executorActsCount} x 1 000 = {formatCurrency(executorActsAmount)}
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t">
+            <div className="flex items-center justify-between p-2 rounded-md bg-primary/10">
+              <span className="font-medium">Итого бонус:</span>
+              <span className="font-bold text-primary">{formatCurrency(calculatedTotal)}</span>
             </div>
           </div>
 
@@ -196,7 +238,7 @@ export const AssistantBonusManager = () => {
             <Button 
               onClick={() => setPayoutDialogOpen(true)}
               disabled={payoutMutation.isPending}
-              className="w-full mt-4"
+              className="w-full"
               variant="default"
               data-testid="button-payout-bonus"
             >

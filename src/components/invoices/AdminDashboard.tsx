@@ -5,7 +5,6 @@ import { BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AdminInvoicesList } from "./admin/AdminInvoicesList";
-import { AdminStats } from "./admin/AdminStats";
 import { WorkingCapitalManager } from "./admin/WorkingCapitalManager";
 import { ClientLTVReport } from "./admin/ClientLTVReport";
 import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
@@ -54,7 +53,6 @@ export const AdminDashboard = () => {
   const { isExpanded, toggleSection, expandAll, collapseAll } = useCollapsibleSections(
     "admin-dashboard-sections",
     {
-      stats: true,
       workingCapital: true,
       cashFlow: true,
       recurringInvoices: true,
@@ -164,15 +162,6 @@ export const AdminDashboard = () => {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
-              <CollapsibleSection
-                id="stats"
-                title="Прибыль за всё время"
-                isExpanded={isExpanded("stats")}
-                onToggle={() => toggleSection("stats")}
-              >
-                <AdminStats />
-              </CollapsibleSection>
-
               <PartnerDebtDashboard />
 
               <DoNotSpendDashboard />

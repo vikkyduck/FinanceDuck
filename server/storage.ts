@@ -1242,18 +1242,26 @@ export class DatabaseStorage implements IStorage {
     totalPaid: number;
     remaining: number;
     invoiceCount: number;
+    paidCommission: number;
+    totalInvoiceCount: number;
+    email: string | null;
+    phone: string | null;
   }[]> {
-    // Get all paid invoices with their stored partnerTransferDue values
-    const paidInvoices = await db
+    // Get all invoices for total counts
+    const allInvoicesList = await db
       .select({
         invoice: invoices,
         calculations: invoiceCalculations,
         partnerName: partners.name,
+        partnerEmail: partners.email,
+        partnerPhone: partners.phone,
       })
       .from(invoices)
       .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-      .leftJoin(partners, eq(invoices.partnerId, partners.id))
-      .where(eq(invoices.status, 'paid'));
+      .leftJoin(partners, eq(invoices.partnerId, partners.id));
+    
+    // Get all paid invoices with their stored partnerTransferDue values
+    const paidInvoices = allInvoicesList.filter(r => r.invoice.status === 'paid');
 
     const allPayments = await db.select().from(partnerPayments);
 
@@ -1264,16 +1272,49 @@ export class DatabaseStorage implements IStorage {
       totalPaid: number;
       remaining: number;
       invoiceCount: number;
+      paidCommission: number;
+      totalInvoiceCount: number;
+      email: string | null;
+      phone: string | null;
     }>();
 
+    // First pass: count all invoices per partner
+    for (const row of allInvoicesList) {
+      if (!row.invoice.partnerId) continue;
+      
+      const pid = row.invoice.partnerId;
+      const pName = row.partnerName || 'Unknown';
+      
+      if (!partnerMap.has(pid)) {
+        partnerMap.set(pid, {
+          partnerId: pid,
+          partnerName: pName,
+          totalToTransfer: 0,
+          totalPaid: 0,
+          remaining: 0,
+          invoiceCount: 0,
+          paidCommission: 0,
+          totalInvoiceCount: 0,
+          email: row.partnerEmail,
+          phone: row.partnerPhone,
+        });
+      }
+      
+      const summary = partnerMap.get(pid)!;
+      summary.totalInvoiceCount += 1;
+    }
+
+    // Second pass: process paid invoices for debt and commission
     for (const row of paidInvoices) {
       if (!row.invoice.partnerId || !row.calculations) continue;
       
       const pid = row.invoice.partnerId;
       const pName = row.partnerName || 'Unknown';
       
-      // Use stored partnerTransferDue from calculations - single source of truth
-      const debt = parseFloat(row.calculations.partnerTransferDue || "0");
+      // Use stored values from calculations - single source of truth
+      // Guard against NaN with || 0
+      const debt = parseFloat(row.calculations.partnerTransferDue || "0") || 0;
+      const commission = parseFloat(row.calculations.commissionAmount || "0") || 0;
 
       if (!partnerMap.has(pid)) {
         partnerMap.set(pid, {
@@ -1283,25 +1324,30 @@ export class DatabaseStorage implements IStorage {
           totalPaid: 0,
           remaining: 0,
           invoiceCount: 0,
+          paidCommission: 0,
+          totalInvoiceCount: 0,
+          email: row.partnerEmail,
+          phone: row.partnerPhone,
         });
       }
 
       const summary = partnerMap.get(pid)!;
       summary.totalToTransfer += debt;
       summary.invoiceCount += 1;
+      summary.paidCommission += commission;
     }
 
     for (const payment of allPayments) {
       if (partnerMap.has(payment.partnerId)) {
         const summary = partnerMap.get(payment.partnerId)!;
-        summary.totalPaid += parseFloat(payment.amount);
+        summary.totalPaid += parseFloat(payment.amount) || 0;
       }
     }
 
     // Include ALL partners, not just those with debt
-    const allPartners = await db.select().from(partners);
+    const allPartnersDb = await db.select().from(partners);
     
-    for (const partner of allPartners) {
+    for (const partner of allPartnersDb) {
       if (!partnerMap.has(partner.id)) {
         partnerMap.set(partner.id, {
           partnerId: partner.id,
@@ -1310,6 +1356,10 @@ export class DatabaseStorage implements IStorage {
           totalPaid: 0,
           remaining: 0,
           invoiceCount: 0,
+          paidCommission: 0,
+          totalInvoiceCount: 0,
+          email: partner.email,
+          phone: partner.phone,
         });
       }
     }

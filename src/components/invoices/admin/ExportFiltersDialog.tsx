@@ -41,7 +41,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
     export_types: ['invoices'],
   });
 
-  const { data: partners } = useQuery<Array<{id: string, name: string}>>({
+  const { data: partners, isLoading: loadingPartners, error: partnersError } = useQuery<Array<{id: string, name: string}>>({
     queryKey: ['/api/partners'],
     queryFn: () => apiGet("/partners"),
     enabled: open,
@@ -382,7 +382,18 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                 </div>
                 <ScrollArea className="h-48 border rounded-lg p-3">
                   <div className="space-y-3">
-                    {partners?.map((partner) => (
+                    {loadingPartners && (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <span className="text-sm text-muted-foreground">Загрузка партнёров...</span>
+                      </div>
+                    )}
+                    {partnersError && (
+                      <p className="text-sm text-destructive text-center py-4">
+                        Ошибка загрузки партнёров
+                      </p>
+                    )}
+                    {!loadingPartners && !partnersError && partners?.map((partner) => (
                       <div key={partner.id} className="flex items-center space-x-2">
                         <Checkbox
                           id={`partner-${partner.id}`}
@@ -398,9 +409,9 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                         </Label>
                       </div>
                     ))}
-                    {(!partners || partners.length === 0) && (
+                    {!loadingPartners && !partnersError && (!partners || partners.length === 0) && (
                       <p className="text-sm text-muted-foreground text-center py-4">
-                        Нет партнеров
+                        Нет партнёров
                       </p>
                     )}
                   </div>

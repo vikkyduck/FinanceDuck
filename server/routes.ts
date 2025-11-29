@@ -1933,7 +1933,7 @@ export function registerRoutes(app: Express): void {
         }
       }
 
-      // Export Partners
+      // Export Partners - use getPartnerDebtSummaries for full consistency with dashboard
       if (exportTypes.includes('partners')) {
         const sheet = workbook.addWorksheet('Партнёры');
         
@@ -1941,9 +1941,12 @@ export function registerRoutes(app: Express): void {
           { header: 'Название', key: 'name', width: 30 },
           { header: 'Email', key: 'email', width: 25 },
           { header: 'Телефон', key: 'phone', width: 18 },
-          { header: 'Счетов', key: 'invoicesCount', width: 10 },
-          { header: 'Общая комиссия', key: 'totalCommission', width: 18, style: { numFmt: '#,##0.00 ₽' } },
-          { header: 'Долг админу', key: 'debtToAdmin', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Счетов (всего)', key: 'invoicesCount', width: 12 },
+          { header: 'Счетов (оплач.)', key: 'paidCount', width: 12 },
+          { header: 'Комиссия (оплач.)', key: 'paidCommission', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Должен перевести', key: 'totalToTransfer', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Уже оплатил', key: 'totalPaid', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Остаток долга', key: 'remaining', width: 18, style: { numFmt: '#,##0.00 ₽' } },
         ];
 
         const headerRow = sheet.getRow(1);
@@ -1954,24 +1957,20 @@ export function registerRoutes(app: Express): void {
           fgColor: { argb: 'FFE0E0E0' }
         };
 
-        for (const partner of allPartners) {
-          const partnerInvoices = allInvoices.filter(inv => inv.partnerId === partner.id);
-          const totalCommission = partnerInvoices.reduce((sum, inv) => {
-            return sum + Number(inv.calculations?.commissionAmount || 0);
-          }, 0);
-          const debtToAdmin = partnerInvoices
-            .filter(inv => inv.status === 'paid')
-            .reduce((sum, inv) => {
-              return sum + Number(inv.calculations?.partnerTransferDue || 0);
-            }, 0);
-
+        // Get all data from the same source as dashboard - single source of truth
+        const partnerDebts = await storage.getPartnerDebtSummaries();
+        
+        for (const partnerData of partnerDebts) {
           sheet.addRow({
-            name: partner.name,
-            email: partner.email || '',
-            phone: partner.phone || '',
-            invoicesCount: partnerInvoices.length,
-            totalCommission,
-            debtToAdmin: Math.max(0, debtToAdmin),
+            name: partnerData.partnerName,
+            email: partnerData.email || '',
+            phone: partnerData.phone || '',
+            invoicesCount: partnerData.totalInvoiceCount,
+            paidCount: partnerData.invoiceCount,
+            paidCommission: partnerData.paidCommission,
+            totalToTransfer: partnerData.totalToTransfer,
+            totalPaid: partnerData.totalPaid,
+            remaining: partnerData.remaining,
           });
         }
       }

@@ -6,7 +6,7 @@ expertMode = true
 channel = "stable-25_05"
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "vm"
 build = ["bun", "run", "build"]
 publicDir = "dist"
 run = ["bun", "run", "server/vite.ts"]
@@ -58,6 +58,10 @@ externalPort = 3003
 [[ports]]
 localPort = 38727
 externalPort = 3001
+
+[[ports]]
+localPort = 40815
+externalPort = 5000
 
 [[ports]]
 localPort = 46453

@@ -236,18 +236,19 @@ export const AssistantBonusManager = () => {
             </div>
           </div>
 
-          {hasUnpaidBonuses && (
-            <Button 
-              onClick={() => setPayoutDialogOpen(true)}
-              disabled={payoutMutation.isPending}
-              className="w-full"
-              variant="default"
-              data-testid="button-payout-bonus"
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              Выплатить {formatCurrency(unpaidTotal)}
-            </Button>
-          )}
+          <Button 
+            onClick={() => setPayoutDialogOpen(true)}
+            disabled={payoutMutation.isPending || unpaidTotal === 0}
+            className="w-full"
+            variant={hasUnpaidBonuses ? "default" : "outline"}
+            data-testid="button-payout-bonus"
+          >
+            <CreditCard className="h-4 w-4 mr-2" />
+            {hasUnpaidBonuses 
+              ? `Выплатить ${formatCurrency(unpaidTotal)}`
+              : "Всё выплачено"
+            }
+          </Button>
         </CardContent>
       </Card>
 

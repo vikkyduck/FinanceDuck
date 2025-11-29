@@ -287,7 +287,7 @@ export const AdminDashboardMetrics = () => {
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
             <Users className="h-5 w-5 text-amber-600" />
-            Доли партнёров (50/50)
+            Доли (50/50)
           </CardTitle>
         </CardHeader>
         <CardContent>

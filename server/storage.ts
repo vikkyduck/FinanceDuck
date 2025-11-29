@@ -1337,6 +1337,7 @@ export class DatabaseStorage implements IStorage {
       id: string;
       number: string;
       description: string | null;
+      notes: string | null;
       budget: number;
       spent: number;
       remaining: number;
@@ -1374,6 +1375,7 @@ export class DatabaseStorage implements IStorage {
         id: string;
         number: string;
         description: string | null;
+        notes: string | null;
         budget: number;
         spent: number;
         remaining: number;
@@ -1413,6 +1415,7 @@ export class DatabaseStorage implements IStorage {
         id: row.invoice.id,
         number: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
         description: row.invoice.description,
+        notes: row.invoice.notes,
         budget: doNotSpendBudget,
         spent: executorExpenses,
         remaining: invoiceRemaining,

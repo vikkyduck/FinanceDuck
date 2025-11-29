@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, Fragment } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, Building2, ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { AlertTriangle, Building2, ChevronDown, ChevronRight, FileText, MessageSquare } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ interface InvoiceDetail {
   id: string;
   number: string;
   description: string | null;
+  notes: string | null;
   budget: number;
   spent: number;
   remaining: number;
@@ -228,13 +229,21 @@ export const DoNotSpendDashboard = ({
                     <TableCell className="text-sm pl-8" colSpan={2}>
                       <div className="flex items-start gap-2">
                         <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                        <div className="min-w-0">
+                        <div className="min-w-0 space-y-1">
                           <div className="font-medium text-xs">
                             {invoice.number}
                           </div>
                           {invoice.description && (
-                            <div className="text-xs text-muted-foreground truncate max-w-[200px]" title={invoice.description}>
+                            <div className="text-xs text-muted-foreground" title={invoice.description}>
                               {invoice.description}
+                            </div>
+                          )}
+                          {invoice.notes && (
+                            <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
+                              <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                              <span className="line-clamp-2" title={invoice.notes}>
+                                {invoice.notes}
+                              </span>
                             </div>
                           )}
                         </div>

@@ -29,17 +29,28 @@ export interface InvoiceCalculations {
  * @param clientBill - Total amount client pays
  * @param partnerCommissionRate - Custom commission rate (for commission_based scheme)
  * @param executorExpenses - Total executor expenses (for reference)
- * @param expensesPaidByAdmin - Expenses paid by admin (reduces admin's net profit)
+ * @param expensesPaidByPartner - Expenses paid by partner from client money
+ * @param expensesPaidByAdmin - Expenses paid by admin from own funds
  * 
  * CRITICAL BUSINESS RULE:
- * - Expenses paid by PARTNER (from client money): NOT deducted from admin profit
- * - Expenses paid by ADMIN: DEDUCTED from admin profit (netProfitAdmin)
+ * For partner schemes (partner_10, partner_15, commission_based):
+ *   - Partner receives client payment
+ *   - Partner pays expenses from client money (expensesPaidByPartner)
+ *   - Partner transfers remainder to admin: amountToAdmin - expensesPaidByPartner
+ *   - Admin may also pay expenses from own pocket (expensesPaidByAdmin)
+ *   - Admin net profit = (amountToAdmin - expensesPaidByPartner) - expensesPaidByAdmin
+ * 
+ * For agency_30:
+ *   - 70% stays with partner for project expenses
+ *   - 30% is agency margin (15% partner + 15% admin)
+ *   - Admin's 15% is FIXED, not affected by expenses (they come from 70%)
  */
 export function calculateInvoice(
   scheme: InvoiceScheme,
   clientBill: number,
   partnerCommissionRate?: number,
   executorExpenses: number = 0,
+  expensesPaidByPartner: number = 0,
   expensesPaidByAdmin: number = 0
 ): InvoiceCalculations {
   let calculations: InvoiceCalculations = {
@@ -87,15 +98,14 @@ export function calculateInvoice(
       // Схема: Комиссия партнера 10%
       // Клиент платит: X
       // Комиссия партнера: X × 0.10
-      // Партнер переводит админу: X × 0.90
-      // Расходы оплаченные ПАРТНЕРОМ - НЕ вычитаются (это проблема партнера)
-      // Расходы оплаченные АДМИНОМ - ВЫЧИТАЮТСЯ из чистой прибыли
+      // Партнер переводит админу: X × 0.90 - расходы (оплаченные партнёром)
+      // Админ получает: amountToAdmin - expensesPaidByPartner
+      // Чистая прибыль: минус ещё расходы оплаченные админом
       
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
-      const amountToAdmin = clientBill * 0.90;
-      // netProfitAdmin = amountToAdmin - expensesPaidByAdmin
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -113,15 +123,14 @@ export function calculateInvoice(
       // Схема: Комиссия партнера 15%
       // Клиент платит: X
       // Комиссия партнера: X × 0.15
-      // Партнер переводит админу: X × 0.85
-      // Расходы оплаченные ПАРТНЕРОМ - НЕ вычитаются (это проблема партнера)
-      // Расходы оплаченные АДМИНОМ - ВЫЧИТАЮТСЯ из чистой прибыли
+      // Партнер переводит админу: X × 0.85 - расходы (оплаченные партнёром)
+      // Админ получает: amountToAdmin - expensesPaidByPartner
+      // Чистая прибыль: минус ещё расходы оплаченные админом
       
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
-      const amountToAdmin = clientBill * 0.85;
-      // netProfitAdmin = amountToAdmin - expensesPaidByAdmin
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -139,15 +148,14 @@ export function calculateInvoice(
       // Универсальная схема с произвольной комиссией
       // Клиент платит: X
       // Комиссия партнера: X × (rate / 100)
-      // Партнер переводит админу: X × (1 - rate / 100)
-      // Расходы оплаченные ПАРТНЕРОМ - НЕ вычитаются (это проблема партнера)
-      // Расходы оплаченные АДМИНОМ - ВЫЧИТАЮТСЯ из чистой прибыли
+      // Партнер переводит админу: amountToAdmin - расходы (оплаченные партнёром)
+      // Админ получает: amountToAdmin - expensesPaidByPartner
+      // Чистая прибыль: минус ещё расходы оплаченные админом
       
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
-      const amountToAdmin = clientBill - commissionAmount;
-      // netProfitAdmin = amountToAdmin - expensesPaidByAdmin
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -166,7 +174,7 @@ export function calculateInvoice(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,

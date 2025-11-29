@@ -13,16 +13,27 @@ import { randomBytes } from "crypto";
  * Server-side invoice calculations
  * 
  * CRITICAL BUSINESS RULE:
- * - Expenses paid by PARTNER (from client money): NOT deducted from admin profit
- * - Expenses paid by ADMIN: DEDUCTED from admin profit (netProfitAdmin)
+ * For partner schemes (partner_10, partner_15, commission_based):
+ *   - Partner receives client payment
+ *   - Partner pays expenses from client money (expensesPaidByPartner)
+ *   - Partner transfers remainder to admin: amountToAdmin - expensesPaidByPartner
+ *   - Admin may also pay expenses from own pocket (expensesPaidByAdmin)
+ *   - Admin net profit = (amountToAdmin - expensesPaidByPartner) - expensesPaidByAdmin
  * 
- * @param expensesPaidByAdmin - Sum of expenses where paidByAdmin=true
+ * For agency_30:
+ *   - 70% stays with partner for project expenses
+ *   - 30% is agency margin (15% partner + 15% admin)
+ *   - Admin's 15% is FIXED, not affected by expenses (they come from 70%)
+ * 
+ * @param expensesPaidByPartner - Expenses paid by partner from client money (paidByAdmin=false)
+ * @param expensesPaidByAdmin - Expenses paid by admin from own funds (paidByAdmin=true)
  */
 function calculateInvoiceServer(
   scheme: InvoiceScheme,
   clientBill: number,
   partnerCommissionRate?: number,
   executorExpenses: number = 0,
+  expensesPaidByPartner: number = 0,
   expensesPaidByAdmin: number = 0
 ): Partial<InvoiceCalculation> {
   const result: Partial<InvoiceCalculation> = {
@@ -38,7 +49,8 @@ function calculateInvoiceServer(
       const adminShare = clientBill * 0.15;
       const clientBase = clientBill * 0.70;
       const clientRemaining = clientBase - executorExpenses;
-      const netProfitAdmin = adminShare; // Фиксированная 15%
+      // Для agency_30 админ получает фиксированные 15% - расходы идут из 70% клиента
+      const netProfitAdmin = adminShare;
       
       result.agencyMargin = agencyMargin.toString();
       result.partnerShareFromMargin = partnerShare.toString();
@@ -51,11 +63,14 @@ function calculateInvoiceServer(
       break;
     }
     case 'partner_10': {
-      // Partner 10%: расходы оплаченные АДМИНОМ вычитаются из его прибыли
+      // Partner 10%: партнёр платит расходы из денег клиента, потом переводит остаток админу
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
-      const amountToAdmin = clientBill * 0.90;
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
+      // Фактическая прибыль админа = что получит от партнёра - свои расходы
+      // Партнёр переведёт: amountToAdmin - expensesPaidByPartner
+      // Админ получит и заплатит свои расходы
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -66,11 +81,12 @@ function calculateInvoiceServer(
       break;
     }
     case 'partner_15': {
-      // Partner 15%: расходы оплаченные АДМИНОМ вычитаются из его прибыли
+      // Partner 15%: партнёр платит расходы из денег клиента, потом переводит остаток админу
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
-      const amountToAdmin = clientBill * 0.85;
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
+      // Фактическая прибыль админа = что получит от партнёра - свои расходы
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -82,11 +98,12 @@ function calculateInvoiceServer(
     }
     case 'commission_based':
     default: {
-      // Commission-based: расходы оплаченные АДМИНОМ вычитаются из его прибыли
+      // Commission-based: партнёр платит расходы из денег клиента, потом переводит остаток админу
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
-      const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin - expensesPaidByAdmin;
+      const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
+      // Фактическая прибыль админа = что получит от партнёра - свои расходы
+      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -630,18 +647,22 @@ export class DatabaseStorage implements IStorage {
       ? parseFloat(calculations.executorExpensesTotal)
       : (existing?.executorExpensesTotal ? parseFloat(existing.executorExpensesTotal) : 0);
     
-    // Calculate expenses paid by admin (for correct netProfitAdmin calculation)
+    // Calculate expenses by payer (for correct netProfitAdmin calculation)
     const expenses = await this.getInvoiceExpenses(invoiceId);
+    const expensesPaidByPartner = expenses
+      .filter(e => e.paidByAdmin !== true)
+      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
     const expensesPaidByAdmin = expenses
       .filter(e => e.paidByAdmin === true)
       .reduce((sum, e) => sum + parseFloat(e.amount), 0);
     
-    // Recalculate all fields with expensesPaidByAdmin
+    // Recalculate all fields with both expense types
     const computed = calculateInvoiceServer(
       invoice.scheme as InvoiceScheme,
       clientBill,
       commissionRate,
       executorExpenses,
+      expensesPaidByPartner,
       expensesPaidByAdmin
     );
     
@@ -1858,6 +1879,9 @@ export class DatabaseStorage implements IStorage {
         // Get expenses for this invoice
         const expenses = await this.getInvoiceExpenses(invoice.id);
         const totalExpenses = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+        const expensesPaidByPartner = expenses
+          .filter(e => e.paidByAdmin !== true)
+          .reduce((sum, e) => sum + parseFloat(e.amount), 0);
         const expensesPaidByAdmin = expenses
           .filter(e => e.paidByAdmin === true)
           .reduce((sum, e) => sum + parseFloat(e.amount), 0);
@@ -1865,12 +1889,13 @@ export class DatabaseStorage implements IStorage {
         const clientBill = parseFloat(existing.clientBill || "0");
         const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
         
-        // Recalculate with correct expensesPaidByAdmin
+        // Recalculate with correct expense breakdown
         const computed = calculateInvoiceServer(
           invoice.scheme as InvoiceScheme,
           clientBill,
           commissionRate,
           totalExpenses,
+          expensesPaidByPartner,
           expensesPaidByAdmin
         );
         

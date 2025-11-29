@@ -41,7 +41,8 @@ interface AuthenticatedRequest extends Request {
  * - Admin: sees everything (full financial transparency)
  * - Partner: sees their commission, debt, client remaining
  * - Client: sees their bill and remaining budget
- * - Assistant: sees ONLY basic invoice info + client bill + expenses (NO financials)
+ * - Assistant: sees basic invoice info + for Agency 30%: margin, client budget (70%), remaining
+ *             BUT does NOT see partner/admin split (15%/15%)
  */
 const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   admin: [
@@ -85,6 +86,8 @@ const ROLE_CALCULATION_PERMISSIONS: Record<UserRole, readonly string[]> = {
   ],
   assistant: [
     'id', 'invoiceId', 'clientBill', 'executorExpensesTotal',
+    // Для Agency 30% показываем бюджет клиента и остаток, но НЕ разбивку партнёр/админ
+    'agencyMargin', 'clientBaseAfterMargin', 'clientRemaining',
   ],
 };
 

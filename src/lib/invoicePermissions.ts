@@ -58,18 +58,18 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
     };
   }
 
-  // Assistant permissions - НЕ видит маржу, комиссии, распределения
+  // Assistant permissions - видит маржу 30%, НО НЕ видит распределение между партнёром и админом
   if (userRole === 'assistant') {
     return {
       showBasicInfo: true,
       showClientBill: true,
       showCommissionDetails: false, // НЕ видит процент партнера
-      showAgencyMargin: false, // НЕ видит маржу агентства
+      showAgencyMargin: scheme === 'agency_30', // Видит общую маржу агентства 30%, но НЕ разбивку
       showClientBudget: scheme === 'agency_30', // Видит базу клиента только для agency_30
       showExpensesTotal: true, // Видит расходы для обеих схем
       showClientRemaining: scheme === 'agency_30', // Видит остаток клиента только для agency_30
-      showPartnerShare: false, // НЕ видит распределение партнер/админ
-      showAdminShare: false,
+      showPartnerShare: false, // НЕ видит распределение партнер/админ (15%/15%)
+      showAdminShare: false, // НЕ видит долю админа
       showNetProfitAdmin: false,
       showAdminCatSplit: false,
       showAssistantBonus: true,

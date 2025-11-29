@@ -1480,12 +1480,13 @@ export class DatabaseStorage implements IStorage {
       // Client bill is the revenue
       const clientBill = parseFloat(row.calculations.clientBill || "0");
       
-      // Use appropriate cash field based on scheme
+      // Use partnerTransferDue for cash flow - this is what partner actually transfers after expenses
       let cashToAdmin: number;
       if (scheme === 'agency_30') {
         cashToAdmin = parseFloat(row.calculations.adminShareFromMargin || "0");
       } else {
-        cashToAdmin = parseFloat(row.calculations.amountToAdmin || "0");
+        // Partner transfers partnerTransferDue = amountToAdmin - expensesPaidByPartner
+        cashToAdmin = parseFloat(row.calculations.partnerTransferDue || "0");
       }
       
       const netProfit = parseFloat(row.calculations.netProfitAdmin || "0");

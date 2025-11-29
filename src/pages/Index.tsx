@@ -49,7 +49,13 @@ const Index = () => {
   // Fetch dashboard stats from Express API
   const { data: dashboardData, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['/api/dashboard/stats'],
+    queryFn: async () => {
+      const response = await fetch('/api/dashboard/stats', { credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to fetch dashboard stats');
+      return response.json();
+    },
     enabled: !roleLoading && !!role,
+    retry: 2,
   });
 
   // Calculate quick stats from dashboard data

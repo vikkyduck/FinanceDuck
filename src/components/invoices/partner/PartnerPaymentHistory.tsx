@@ -1,13 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { History, TrendingDown, Check, AlertCircle } from "lucide-react";
+import { History, TrendingDown, Check, AlertCircle, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
+import { useToast } from "@/hooks/use-toast";
+import { showSuccess } from "@/lib/errorHandler";
+import { apiPut, apiDelete } from "@/lib/api";
 
 interface PaymentHistoryEntry {
   id: string;
@@ -22,20 +31,34 @@ interface PartnerPaymentHistoryProps {
   showTitle?: boolean;
   className?: string;
   compact?: boolean;
+  editable?: boolean;
+  onPaymentChanged?: () => void;
 }
 
 export function PartnerPaymentHistory({ 
   partnerId, 
   showTitle = true, 
   className,
-  compact = false 
+  compact = false,
+  editable = false,
+  onPaymentChanged
 }: PartnerPaymentHistoryProps) {
   const refetchInterval = useVisibilityAwareInterval();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentHistoryEntry | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editNotes, setEditNotes] = useState("");
+  
   const apiUrl = partnerId 
     ? `/api/partners/${partnerId}/payment-history` 
     : "/api/my-payment-history";
 
-  const { data: history, isLoading, error } = useQuery<PaymentHistoryEntry[]>({
+  const { data: history, isLoading, error, refetch } = useQuery<PaymentHistoryEntry[]>({
     queryKey: ["partner-payment-history", partnerId || "self"],
     queryFn: async () => {
       const response = await fetch(apiUrl, { credentials: "include" });
@@ -45,6 +68,88 @@ export function PartnerPaymentHistory({
     staleTime: 30000,
     refetchInterval,
   });
+  
+  const updatePaymentMutation = useMutation({
+    mutationFn: async (data: { id: string; amount: string; paymentDate: string; notes: string }) => {
+      return apiPut(`/partner-payments/${data.id}`, {
+        amount: data.amount,
+        paymentDate: data.paymentDate,
+        notes: data.notes || null,
+      });
+    },
+    onSuccess: () => {
+      showSuccess("Готово", "Платёж обновлён");
+      setEditDialogOpen(false);
+      setSelectedPayment(null);
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-debt"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-payments"] });
+      onPaymentChanged?.();
+    },
+    onError: (error) => {
+      toast({ title: "Ошибка", description: "Не удалось обновить платёж", variant: "destructive" });
+      console.error("Update payment error:", error);
+    },
+  });
+
+  const deletePaymentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiDelete(`/partner-payments/${id}`);
+    },
+    onSuccess: () => {
+      showSuccess("Готово", "Платёж удалён");
+      setDeleteDialogOpen(false);
+      setSelectedPayment(null);
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-debt"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner-payments"] });
+      onPaymentChanged?.();
+    },
+    onError: (error) => {
+      toast({ title: "Ошибка", description: "Не удалось удалить платёж", variant: "destructive" });
+      console.error("Delete payment error:", error);
+    },
+  });
+
+  const handleEdit = (payment: PaymentHistoryEntry) => {
+    setSelectedPayment(payment);
+    setEditAmount(payment.amount.toString());
+    setEditDate(payment.paymentDate);
+    setEditNotes(payment.notes || "");
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = (payment: PaymentHistoryEntry) => {
+    setSelectedPayment(payment);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!selectedPayment) return;
+    
+    const amount = parseFloat(editAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: "Ошибка", description: "Введите корректную сумму", variant: "destructive" });
+      return;
+    }
+    
+    if (!editDate) {
+      toast({ title: "Ошибка", description: "Введите дату платежа", variant: "destructive" });
+      return;
+    }
+
+    updatePaymentMutation.mutate({
+      id: selectedPayment.id,
+      amount: editAmount,
+      paymentDate: editDate,
+      notes: editNotes,
+    });
+  };
+
+  const handleConfirmDelete = () => {
+    if (!selectedPayment) return;
+    deletePaymentMutation.mutate(selectedPayment.id);
+  };
 
   if (isLoading) {
     return (
@@ -158,24 +263,142 @@ export function PartnerPaymentHistory({
                   )}
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <div className="text-sm font-semibold text-green-600">
-                  -{formatCurrency(entry.amount)}
+              <div className="flex items-center gap-3">
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-semibold text-green-600">
+                    -{formatCurrency(entry.amount)}
+                  </div>
+                  <div className={cn(
+                    "text-xs",
+                    entry.runningBalance < 0 ? "text-green-600" : "text-muted-foreground"
+                  )}>
+                    {entry.runningBalance < 0 
+                      ? `Переплата: ${formatCurrency(Math.abs(entry.runningBalance))}`
+                      : `Остаток: ${formatCurrency(entry.runningBalance)}`
+                    }
+                  </div>
                 </div>
-                <div className={cn(
-                  "text-xs",
-                  entry.runningBalance < 0 ? "text-green-600" : "text-muted-foreground"
-                )}>
-                  {entry.runningBalance < 0 
-                    ? `Переплата: ${formatCurrency(Math.abs(entry.runningBalance))}`
-                    : `Остаток: ${formatCurrency(entry.runningBalance)}`
-                  }
-                </div>
+                {editable && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleEdit(entry)}
+                      data-testid={`button-edit-payment-${entry.id}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleDelete(entry)}
+                      data-testid={`button-delete-payment-${entry.id}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
       </CardContent>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактировать платёж</DialogTitle>
+            <DialogDescription>
+              Изменение данных платежа от {selectedPayment && format(new Date(selectedPayment.paymentDate), "d MMMM yyyy", { locale: ru })}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-amount">Сумма</Label>
+              <Input
+                id="edit-amount"
+                type="number"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                placeholder="0"
+                data-testid="input-edit-payment-amount"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-date">Дата платежа</Label>
+              <Input
+                id="edit-date"
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                data-testid="input-edit-payment-date"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-notes">Примечание</Label>
+              <Input
+                id="edit-notes"
+                type="text"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Необязательно"
+                data-testid="input-edit-payment-notes"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={updatePaymentMutation.isPending}>
+              {updatePaymentMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Сохранение...
+                </>
+              ) : (
+                "Сохранить"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить платёж?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Вы уверены, что хотите удалить платёж на сумму {formatCurrency(selectedPayment?.amount || 0)} 
+              от {selectedPayment && format(new Date(selectedPayment.paymentDate), "d MMMM yyyy", { locale: ru })}?
+              Это действие нельзя отменить и повлияет на расчёт долга партнёра.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletePaymentMutation.isPending}
+            >
+              {deletePaymentMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Удаление...
+                </>
+              ) : (
+                "Удалить"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

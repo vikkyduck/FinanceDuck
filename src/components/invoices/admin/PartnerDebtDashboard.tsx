@@ -224,6 +224,8 @@ export const PartnerDebtDashboard = ({
                     partnerId={summary.partnerId} 
                     showTitle={false}
                     compact={true}
+                    editable={true}
+                    onPaymentChanged={fetchData}
                   />
                 </TabsContent>
                 <TabsContent value="invoices" className="mt-4">

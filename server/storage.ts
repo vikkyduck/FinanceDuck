@@ -169,7 +169,10 @@ export interface IStorage {
   deleteDocument(id: string): Promise<void>;
   
   getPartnerPayments(partnerId?: string): Promise<PartnerPayment[]>;
+  getPartnerPayment(id: string): Promise<PartnerPayment | null>;
   createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment>;
+  updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>): Promise<PartnerPayment | null>;
+  deletePartnerPayment(id: string): Promise<void>;
   getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]>;
   
   getAccessTokens(): Promise<AccessToken[]>;
@@ -934,6 +937,24 @@ export class DatabaseStorage implements IStorage {
   async createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment> {
     const [created] = await db.insert(partnerPayments).values(payment).returning();
     return created;
+  }
+
+  async getPartnerPayment(id: string): Promise<PartnerPayment | null> {
+    const [payment] = await db.select().from(partnerPayments).where(eq(partnerPayments.id, id)).limit(1);
+    return payment || null;
+  }
+
+  async updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>): Promise<PartnerPayment | null> {
+    const [updated] = await db
+      .update(partnerPayments)
+      .set(updates)
+      .where(eq(partnerPayments.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deletePartnerPayment(id: string): Promise<void> {
+    await db.delete(partnerPayments).where(eq(partnerPayments.id, id));
   }
 
   async getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]> {

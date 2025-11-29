@@ -1174,6 +1174,64 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Update partner payment (admin only)
+  app.put("/api/partner-payments/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { amount, paymentDate, notes } = req.body;
+      
+      // Validate amount - must be a positive number
+      const parsedAmount = parseFloat(String(amount));
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: "Invalid amount: must be a positive number" });
+      }
+      
+      // Validate paymentDate - must be a valid ISO date
+      if (!paymentDate || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) {
+        return res.status(400).json({ error: "Invalid paymentDate: must be in YYYY-MM-DD format" });
+      }
+      
+      // Validate notes - must be string or null
+      const sanitizedNotes = notes ? String(notes).trim() : null;
+      
+      // Check if payment exists
+      const existing = await storage.getPartnerPayment(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      
+      const updated = await storage.updatePartnerPayment(id, {
+        amount: parsedAmount.toString(),
+        paymentDate,
+        notes: sanitizedNotes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Update payment error:", error);
+      res.status(500).json({ error: "Failed to update payment" });
+    }
+  });
+
+  // Delete partner payment (admin only)
+  app.delete("/api/partner-payments/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      // Check if payment exists
+      const existing = await storage.getPartnerPayment(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      
+      await storage.deletePartnerPayment(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete payment error:", error);
+      res.status(500).json({ error: "Failed to delete payment" });
+    }
+  });
+
   app.get("/api/partner-debt", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role;

@@ -6,7 +6,7 @@ expertMode = true
 channel = "stable-25_05"
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "autoscale"
 build = ["bun", "run", "build"]
 publicDir = "dist"
 run = ["bun", "run", "server/vite.ts"]

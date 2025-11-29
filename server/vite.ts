@@ -3,39 +3,8 @@ import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import { app } from "./index";
-import { storage } from "./storage";
 
 const isProduction = process.env.NODE_ENV === "production";
-
-const RECURRING_CHECK_INTERVAL = 60 * 60 * 1000;
-const INITIAL_DELAY = 30000;
-
-async function processRecurringInvoices() {
-  try {
-    const result = await storage.processAllDueRecurringInvoices();
-    if (result.created > 0) {
-      console.log(`[Recurring] Created ${result.created} draft invoice(s) from recurring templates`);
-    }
-    if (result.errors.length > 0) {
-      console.error(`[Recurring] Errors:`, result.errors);
-    }
-  } catch (error) {
-    console.error("[Recurring] Failed to process recurring invoices:", error);
-  }
-}
-
-function startRecurringInvoiceScheduler() {
-  console.log("[Recurring] Scheduler will start in 30 seconds");
-  
-  setTimeout(() => {
-    console.log("[Recurring] Running initial check");
-    processRecurringInvoices();
-    
-    setInterval(() => {
-      processRecurringInvoices();
-    }, RECURRING_CHECK_INTERVAL);
-  }, INITIAL_DELAY);
-}
 
 async function setupVite(server: Express, vite: ViteDevServer) {
   server.use(vite.middlewares);
@@ -92,7 +61,5 @@ function serveStatic(server: Express) {
   const port = 5000;
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
-    
-    startRecurringInvoiceScheduler();
   });
 })();

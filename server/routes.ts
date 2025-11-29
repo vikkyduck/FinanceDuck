@@ -3,6 +3,16 @@ import { storage } from "./storage";
 import { AccessToken, UserRole } from "../shared/schema";
 
 export function registerHealthCheck(app: Express) {
+  app.get("/", (req: Request, res: Response, next: NextFunction) => {
+    const userAgent = req.headers['user-agent'] || '';
+    const acceptHeader = req.headers['accept'] || '';
+    if (!userAgent || userAgent.includes('HealthCheck') || userAgent.includes('kube-probe') || 
+        userAgent.includes('curl') || !acceptHeader.includes('text/html')) {
+      return res.status(200).send('OK');
+    }
+    next();
+  });
+  
   app.get("/health", (_req: Request, res: Response) => {
     res.status(200).json({ status: "ok", timestamp: Date.now() });
   });

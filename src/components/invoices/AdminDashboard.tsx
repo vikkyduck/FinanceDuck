@@ -29,7 +29,6 @@ import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { getTimeBasedGreeting } from "@/lib/greetingUtils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInvalidateAllDashboards, useAdminDashboardRefresh } from "@/hooks/useAdminDashboardRefresh";
 
@@ -153,135 +152,101 @@ export const AdminDashboard = () => {
           </div>
         </div>
 
-        <AnimatePresence mode="wait">
-          <TabsContent value="overview" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+        <TabsContent value="overview" className="space-y-6">
+          <div className="space-y-6">
+            <PartnerDebtDashboard />
+            <DoNotSpendDashboard />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="finances" className="space-y-6">
+          <div className="space-y-6">
+            <CollapsibleSection
+              id="workingCapital"
+              title="Оборотный капитал"
+              isExpanded={isExpanded("workingCapital")}
+              onToggle={() => toggleSection("workingCapital")}
             >
-              <PartnerDebtDashboard />
+              <WorkingCapitalManager />
+            </CollapsibleSection>
 
-              <DoNotSpendDashboard />
-            </motion.div>
-          </TabsContent>
-
-          <TabsContent value="finances" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+            <CollapsibleSection
+              id="cashFlow"
+              title="Прогноз денежных потоков"
+              isExpanded={isExpanded("cashFlow")}
+              onToggle={() => toggleSection("cashFlow")}
             >
-              <CollapsibleSection
-                id="workingCapital"
-                title="Оборотный капитал"
-                isExpanded={isExpanded("workingCapital")}
-                onToggle={() => toggleSection("workingCapital")}
-              >
-                <WorkingCapitalManager />
-              </CollapsibleSection>
+              <AdminCashFlowForecast />
+            </CollapsibleSection>
+          </div>
+        </TabsContent>
 
-              <CollapsibleSection
-                id="cashFlow"
-                title="Прогноз денежных потоков"
-                isExpanded={isExpanded("cashFlow")}
-                onToggle={() => toggleSection("cashFlow")}
-              >
-                <AdminCashFlowForecast />
-              </CollapsibleSection>
-            </motion.div>
-          </TabsContent>
-
-          <TabsContent value="invoices" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+        <TabsContent value="invoices" className="space-y-6">
+          <div className="space-y-6">
+            <CollapsibleSection
+              id="recurringInvoices"
+              title="Автоматические счета"
+              isExpanded={isExpanded("recurringInvoices")}
+              onToggle={() => toggleSection("recurringInvoices")}
             >
-              <CollapsibleSection
-                id="recurringInvoices"
-                title="Автоматические счета"
-                isExpanded={isExpanded("recurringInvoices")}
-                onToggle={() => toggleSection("recurringInvoices")}
-              >
-                <RecurringInvoicesManager />
-              </CollapsibleSection>
+              <RecurringInvoicesManager />
+            </CollapsibleSection>
 
-              <CollapsibleSection
-                id="invoicesList"
-                title="Все счета"
-                isExpanded={isExpanded("invoicesList")}
-                onToggle={() => toggleSection("invoicesList")}
-                headerActions={
-                  <ViewModeToggle 
-                    value={viewMode}
-                    onValueChange={setViewMode}
-                    className="hidden sm:flex"
-                  />
-                }
-              >
-                <div className="px-0 -mx-6">
-                  <AdminInvoicesList 
-                    viewMode={viewMode}
-                    initialStatusFilter={showAlerts ? 'overdue' : undefined}
-                  />
-                </div>
-              </CollapsibleSection>
-            </motion.div>
-          </TabsContent>
-
-          <TabsContent value="team" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-6"
+            <CollapsibleSection
+              id="invoicesList"
+              title="Все счета"
+              isExpanded={isExpanded("invoicesList")}
+              onToggle={() => toggleSection("invoicesList")}
+              headerActions={
+                <ViewModeToggle 
+                  value={viewMode}
+                  onValueChange={setViewMode}
+                  className="hidden sm:flex"
+                />
+              }
             >
-              <CollapsibleSection
-                id="bonuses"
-                title="Бонусы ассистенту"
-                isExpanded={isExpanded("bonuses")}
-                onToggle={() => toggleSection("bonuses")}
-              >
-                <AssistantBonusManager />
-              </CollapsibleSection>
+              <div className="px-0 -mx-6">
+                <AdminInvoicesList 
+                  viewMode={viewMode}
+                  initialStatusFilter={showAlerts ? 'overdue' : undefined}
+                />
+              </div>
+            </CollapsibleSection>
+          </div>
+        </TabsContent>
 
-              <CollapsibleSection
-                id="partnerPayments"
-                title="Расчёты с партнёрами"
-                isExpanded={isExpanded("partnerPayments")}
-                onToggle={() => toggleSection("partnerPayments")}
-              >
-                <PartnerPaymentsManager />
-              </CollapsibleSection>
-            </motion.div>
-          </TabsContent>
-
-          <TabsContent value="clients" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
+        <TabsContent value="team" className="space-y-6">
+          <div className="space-y-6">
+            <CollapsibleSection
+              id="bonuses"
+              title="Бонусы ассистенту"
+              isExpanded={isExpanded("bonuses")}
+              onToggle={() => toggleSection("bonuses")}
             >
-              <CollapsibleSection
-                id="clientLTV"
-                title="LTV клиентов"
-                isExpanded={isExpanded("clientLTV")}
-                onToggle={() => toggleSection("clientLTV")}
-              >
-                <ClientLTVReport />
-              </CollapsibleSection>
-            </motion.div>
-          </TabsContent>
-        </AnimatePresence>
+              <AssistantBonusManager />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              id="partnerPayments"
+              title="Расчёты с партнёрами"
+              isExpanded={isExpanded("partnerPayments")}
+              onToggle={() => toggleSection("partnerPayments")}
+            >
+              <PartnerPaymentsManager />
+            </CollapsibleSection>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="clients" className="space-y-6">
+          <CollapsibleSection
+            id="clientLTV"
+            title="LTV клиентов"
+            isExpanded={isExpanded("clientLTV")}
+            onToggle={() => toggleSection("clientLTV")}
+          >
+            <ClientLTVReport />
+          </CollapsibleSection>
+        </TabsContent>
       </Tabs>
 
       <CreateInvoiceDialog 

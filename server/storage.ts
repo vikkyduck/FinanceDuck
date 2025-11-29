@@ -161,6 +161,7 @@ export interface IStorage {
   deleteInvoice(id: string): Promise<void>;
   
   getInvoiceExpenses(invoiceId: string): Promise<InvoiceExpense[]>;
+  getAllExpenses(): Promise<InvoiceExpense[]>;
   createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense>;
   updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null>;
   deleteInvoiceExpense(id: string): Promise<void>;
@@ -817,6 +818,13 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(invoiceExpenses)
       .where(eq(invoiceExpenses.invoiceId, invoiceId))
+      .orderBy(desc(invoiceExpenses.date));
+  }
+
+  async getAllExpenses(): Promise<InvoiceExpense[]> {
+    return db
+      .select()
+      .from(invoiceExpenses)
       .orderBy(desc(invoiceExpenses.date));
   }
 

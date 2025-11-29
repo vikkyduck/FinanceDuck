@@ -5,9 +5,8 @@ import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Download, X } from "lucide-react";
+import { Loader2, Download, X, FileSpreadsheet, Users, Building2, Receipt } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { showSuccess } from "@/lib/errorHandler";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { apiGet } from "@/lib/api";
@@ -24,17 +23,25 @@ interface ExportFilters {
   actual_date_to?: Date;
   statuses: string[];
   partner_ids: string[];
+  export_types: string[];
 }
+
+const exportTypeOptions = [
+  { value: 'invoices', label: 'Счета', icon: Receipt, description: 'Все счета с расчётами' },
+  { value: 'clients', label: 'Клиенты', icon: Users, description: 'Список клиентов' },
+  { value: 'partners', label: 'Партнёры', icon: Building2, description: 'Список партнёров' },
+  { value: 'expenses', label: 'Расходы', icon: FileSpreadsheet, description: 'Все расходы по счетам' },
+];
 
 export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogProps) => {
   const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState<ExportFilters>({
     statuses: [],
     partner_ids: [],
+    export_types: ['invoices'],
   });
 
-  // Fetch partners list from Express API
-  const { data: partners, isError } = useQuery<Array<{id: string, name: string}>>({
+  const { data: partners } = useQuery<Array<{id: string, name: string}>>({
     queryKey: ['/api/partners'],
     queryFn: () => apiGet("/partners"),
     enabled: open,
@@ -66,6 +73,15 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
     }));
   };
 
+  const handleExportTypeToggle = (exportType: string) => {
+    setFilters(prev => ({
+      ...prev,
+      export_types: prev.export_types.includes(exportType)
+        ? prev.export_types.filter(t => t !== exportType)
+        : [...prev.export_types, exportType]
+    }));
+  };
+
   const handleSelectAllStatuses = () => {
     if (filters.statuses.length === statusOptions.length) {
       setFilters(prev => ({ ...prev, statuses: [] }));
@@ -82,6 +98,14 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
     }
   };
 
+  const handleSelectAllTypes = () => {
+    if (filters.export_types.length === exportTypeOptions.length) {
+      setFilters(prev => ({ ...prev, export_types: [] }));
+    } else {
+      setFilters(prev => ({ ...prev, export_types: exportTypeOptions.map(t => t.value) }));
+    }
+  };
+
   const handleClearFilters = () => {
     setFilters({
       date_from: undefined,
@@ -90,49 +114,41 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
       actual_date_to: undefined,
       statuses: [],
       partner_ids: [],
+      export_types: ['invoices'],
     });
   };
 
   const handleExport = async () => {
+    if (filters.export_types.length === 0) {
+      toast.error("Выберите данные для экспорта", {
+        description: "Необходимо выбрать хотя бы один тип данных",
+      });
+      return;
+    }
+
     setExporting(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      
-      if (!supabaseUrl || !supabaseKey) {
-        toast.error("Экспорт временно недоступен", {
-          description: "Функция экспорта в разработке. Используйте просмотр данных в интерфейсе.",
-        });
-        return;
-      }
-
-      const session = JSON.parse(sessionStorage.getItem('access_session') || '{}');
-      const accessTokenId = session.accessTokenId;
-
-      if (!accessTokenId) {
-        toast.error("Ошибка", { description: "Сессия не найдена" });
-        return;
-      }
-
-      const filterParams: Record<string, unknown> = {
-        token_id: accessTokenId,
+      const requestBody: Record<string, unknown> = {
+        exportTypes: filters.export_types,
       };
 
-      if (filters.date_from) filterParams.date_from = format(filters.date_from, 'yyyy-MM-dd');
-      if (filters.date_to) filterParams.date_to = format(filters.date_to, 'yyyy-MM-dd');
-      if (filters.actual_date_from) filterParams.actual_date_from = format(filters.actual_date_from, 'yyyy-MM-dd');
-      if (filters.actual_date_to) filterParams.actual_date_to = format(filters.actual_date_to, 'yyyy-MM-dd');
-      if (filters.statuses.length > 0) filterParams.statuses = filters.statuses;
-      if (filters.partner_ids.length > 0) filterParams.partner_ids = filters.partner_ids;
+      if (filters.date_from) requestBody.dateFrom = format(filters.date_from, 'yyyy-MM-dd');
+      if (filters.date_to) requestBody.dateTo = format(filters.date_to, 'yyyy-MM-dd');
+      if (filters.actual_date_from) requestBody.actualDateFrom = format(filters.actual_date_from, 'yyyy-MM-dd');
+      if (filters.actual_date_to) requestBody.actualDateTo = format(filters.actual_date_to, 'yyyy-MM-dd');
+      if (filters.statuses.length > 0) requestBody.statuses = filters.statuses;
+      if (filters.partner_ids.length > 0) requestBody.partnerIds = filters.partner_ids;
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/export-admin-data`, {
+      const csrfToken = localStorage.getItem("csrf_token");
+      
+      const response = await fetch('/api/admin/export', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
-        body: JSON.stringify(filterParams),
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -155,10 +171,11 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
       a.href = url;
       
       const dateStr = new Date().toISOString().split('T')[0];
+      const typesStr = filters.export_types.length > 1 ? '_full' : `_${filters.export_types[0]}`;
       const filterStr = filters.statuses.length > 0 || filters.partner_ids.length > 0 
         ? '_filtered' 
         : '';
-      a.download = `admin_export${filterStr}_${dateStr}.xlsx`;
+      a.download = `export${typesStr}${filterStr}_${dateStr}.xlsx`;
       
       document.body.appendChild(a);
       a.click();
@@ -168,7 +185,9 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
         document.body.removeChild(a);
       }, 100);
 
-      showSuccess("Экспорт завершен", "Файл успешно загружен");
+      toast.success("Экспорт завершён", {
+        description: "Файл успешно загружен",
+      });
       onOpenChange(false);
     } catch (error: unknown) {
       console.error('Export error:', error);
@@ -189,138 +208,205 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Экспорт данных в Excel</DialogTitle>
+          <DialogTitle className="text-2xl flex items-center gap-2">
+            <FileSpreadsheet className="h-6 w-6 text-primary" />
+            Экспорт данных в Excel
+          </DialogTitle>
           <DialogDescription>
-            Выберите фильтры для выборочной выгрузки данных. Без фильтров будут выгружены все данные.
+            Выберите какие данные экспортировать и примените фильтры при необходимости.
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="flex-1 pr-4">
           <div className="space-y-6">
-            {/* Date Filters */}
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold mb-3 text-foreground/90">
-                  Фильтр по запланированной дате оплаты
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs">От</Label>
-                    <DatePicker
-                      date={filters.date_from}
-                      onDateChange={(date) => setFilters(prev => ({ ...prev, date_from: date }))}
-                      placeholder="Выберите дату"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">До</Label>
-                    <DatePicker
-                      date={filters.date_to}
-                      onDateChange={(date) => setFilters(prev => ({ ...prev, date_to: date }))}
-                      placeholder="Выберите дату"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold mb-3 text-foreground/90">
-                  Фильтр по фактической дате оплаты
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs">От</Label>
-                    <DatePicker
-                      date={filters.actual_date_from}
-                      onDateChange={(date) => setFilters(prev => ({ ...prev, actual_date_from: date }))}
-                      placeholder="Выберите дату"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">До</Label>
-                    <DatePicker
-                      date={filters.actual_date_to}
-                      onDateChange={(date) => setFilters(prev => ({ ...prev, actual_date_to: date }))}
-                      placeholder="Выберите дату"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Status Filters */}
+            {/* Export Types */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground/90">Фильтр по статусам</h3>
+                <h3 className="text-sm font-semibold text-foreground/90">Данные для экспорта</h3>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={handleSelectAllStatuses}
+                  onClick={handleSelectAllTypes}
                   className="h-8 text-xs"
+                  data-testid="button-select-all-types"
                 >
-                  {filters.statuses.length === statusOptions.length ? 'Снять все' : 'Выбрать все'}
+                  {filters.export_types.length === exportTypeOptions.length ? 'Снять все' : 'Выбрать все'}
                 </Button>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {statusOptions.map((status) => (
-                  <div key={status.value} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`status-${status.value}`}
-                      checked={filters.statuses.includes(status.value)}
-                      onCheckedChange={() => handleStatusToggle(status.value)}
-                    />
-                    <Label
-                      htmlFor={`status-${status.value}`}
-                      className="text-sm font-normal cursor-pointer"
+                {exportTypeOptions.map((type) => {
+                  const Icon = type.icon;
+                  return (
+                    <div 
+                      key={type.value} 
+                      className={`flex items-start space-x-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        filters.export_types.includes(type.value) 
+                          ? 'border-primary bg-primary/5' 
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                      onClick={() => handleExportTypeToggle(type.value)}
+                      data-testid={`checkbox-export-${type.value}`}
                     >
-                      {status.label}
-                    </Label>
-                  </div>
-                ))}
+                      <Checkbox
+                        id={`export-${type.value}`}
+                        checked={filters.export_types.includes(type.value)}
+                        onCheckedChange={() => handleExportTypeToggle(type.value)}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4 text-muted-foreground" />
+                          <Label
+                            htmlFor={`export-${type.value}`}
+                            className="text-sm font-medium cursor-pointer"
+                          >
+                            {type.label}
+                          </Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {type.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Partner Filters */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-foreground/90">Фильтр по партнерам</h3>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSelectAllPartners}
-                  className="h-8 text-xs"
-                  disabled={!partners || partners.length === 0}
-                >
-                  {filters.partner_ids.length === (partners?.length || 0) ? 'Снять все' : 'Выбрать все'}
-                </Button>
+            {/* Date Filters - only show if invoices selected */}
+            {filters.export_types.includes('invoices') && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 text-foreground/90">
+                    Фильтр по запланированной дате оплаты
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">От</Label>
+                      <DatePicker
+                        date={filters.date_from}
+                        onDateChange={(date) => setFilters(prev => ({ ...prev, date_from: date }))}
+                        placeholder="Выберите дату"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">До</Label>
+                      <DatePicker
+                        date={filters.date_to}
+                        onDateChange={(date) => setFilters(prev => ({ ...prev, date_to: date }))}
+                        placeholder="Выберите дату"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold mb-3 text-foreground/90">
+                    Фильтр по фактической дате оплаты
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">От</Label>
+                      <DatePicker
+                        date={filters.actual_date_from}
+                        onDateChange={(date) => setFilters(prev => ({ ...prev, actual_date_from: date }))}
+                        placeholder="Выберите дату"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">До</Label>
+                      <DatePicker
+                        date={filters.actual_date_to}
+                        onDateChange={(date) => setFilters(prev => ({ ...prev, actual_date_to: date }))}
+                        placeholder="Выберите дату"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-              <ScrollArea className="h-48 border rounded-lg p-3">
-                <div className="space-y-3">
-                  {partners?.map((partner) => (
-                    <div key={partner.id} className="flex items-center space-x-2">
+            )}
+
+            {/* Status Filters - only show if invoices selected */}
+            {filters.export_types.includes('invoices') && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground/90">Фильтр по статусам</h3>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSelectAllStatuses}
+                    className="h-8 text-xs"
+                    data-testid="button-select-all-statuses"
+                  >
+                    {filters.statuses.length === statusOptions.length ? 'Снять все' : 'Выбрать все'}
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {statusOptions.map((status) => (
+                    <div key={status.value} className="flex items-center space-x-2">
                       <Checkbox
-                        id={`partner-${partner.id}`}
-                        checked={filters.partner_ids.includes(partner.id)}
-                        onCheckedChange={() => handlePartnerToggle(partner.id)}
+                        id={`status-${status.value}`}
+                        checked={filters.statuses.includes(status.value)}
+                        onCheckedChange={() => handleStatusToggle(status.value)}
+                        data-testid={`checkbox-status-${status.value}`}
                       />
                       <Label
-                        htmlFor={`partner-${partner.id}`}
+                        htmlFor={`status-${status.value}`}
                         className="text-sm font-normal cursor-pointer"
                       >
-                        {partner.name}
+                        {status.label}
                       </Label>
                     </div>
                   ))}
-                  {(!partners || partners.length === 0) && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Нет партнеров
-                    </p>
-                  )}
                 </div>
-              </ScrollArea>
-            </div>
+              </div>
+            )}
+
+            {/* Partner Filters - only show if invoices selected */}
+            {filters.export_types.includes('invoices') && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground/90">Фильтр по партнерам</h3>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSelectAllPartners}
+                    className="h-8 text-xs"
+                    disabled={!partners || partners.length === 0}
+                    data-testid="button-select-all-partners"
+                  >
+                    {filters.partner_ids.length === (partners?.length || 0) ? 'Снять все' : 'Выбрать все'}
+                  </Button>
+                </div>
+                <ScrollArea className="h-48 border rounded-lg p-3">
+                  <div className="space-y-3">
+                    {partners?.map((partner) => (
+                      <div key={partner.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`partner-${partner.id}`}
+                          checked={filters.partner_ids.includes(partner.id)}
+                          onCheckedChange={() => handlePartnerToggle(partner.id)}
+                          data-testid={`checkbox-partner-${partner.id}`}
+                        />
+                        <Label
+                          htmlFor={`partner-${partner.id}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {partner.name}
+                        </Label>
+                      </div>
+                    ))}
+                    {(!partners || partners.length === 0) && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Нет партнеров
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
           </div>
         </ScrollArea>
 
@@ -331,6 +417,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
             onClick={handleClearFilters}
             disabled={!hasActiveFilters || exporting}
             size="sm"
+            data-testid="button-clear-filters"
           >
             <X className="h-4 w-4 mr-2" />
             Сбросить фильтры
@@ -341,13 +428,15 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={exporting}
+              data-testid="button-cancel-export"
             >
               Отмена
             </Button>
             <Button
               onClick={handleExport}
-              disabled={exporting}
+              disabled={exporting || filters.export_types.length === 0}
               className="min-w-[140px]"
+              data-testid="button-export"
             >
               {exporting ? (
                 <>

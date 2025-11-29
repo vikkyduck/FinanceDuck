@@ -155,6 +155,17 @@ Fully functional recurring invoice management with automatic draft generation:
   - Used twice: once for monthly window, once for yearly totals
 - **Key fixes**: Date object cloning in `getAdminForecast` prevents mutation bugs; null guards for `nextInvoiceDate`
 
+### Excel Export System (2025-11-29)
+
+Comprehensive data export functionality with configurable filters:
+- **Endpoint**: `/api/admin/export` (POST, admin only)
+- **Library**: `exceljs` for Excel file generation
+- **Export types**: invoices, clients, partners, expenses (selectable)
+- **Filters**: date ranges (planned/actual), statuses, partner selection
+- **Data enrichment**: Invoices include full calculations, client/partner names
+- **Security**: CSRF token required, admin role verification
+- **Components**: `ExportFiltersDialog` with multi-select dropdowns
+
 Remaining Supabase usage (historical, some components still reference supabaseHelpers for partner/client specific features):
 - Partner reports (PartnerClientStats, PartnerCommissionReport, PartnerDebtTrafficLight)
 - Assistant insights (AssistantInsights, AssistantYearlyOverview)

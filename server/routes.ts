@@ -1756,4 +1756,274 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: "Failed to delete recurring invoice" });
     }
   });
+
+  // Export to Excel endpoint
+  app.post("/api/admin/export", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const ExcelJS = await import("exceljs");
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Invoice Management System';
+      workbook.created = new Date();
+
+      const { 
+        exportTypes = ['invoices'],
+        dateFrom,
+        dateTo,
+        actualDateFrom,
+        actualDateTo,
+        statuses = [],
+        partnerIds = []
+      } = req.body;
+
+      // Fetch all data as admin
+      const allInvoices = await storage.getInvoices('admin');
+      const allClients = await storage.getClients();
+      const allPartners = await storage.getPartners();
+      const allExpenses = await storage.getAllExpenses();
+
+      // Filter invoices
+      let filteredInvoices = allInvoices;
+      
+      if (statuses.length > 0) {
+        filteredInvoices = filteredInvoices.filter(inv => statuses.includes(inv.status));
+      }
+      
+      if (partnerIds.length > 0) {
+        filteredInvoices = filteredInvoices.filter(inv => inv.partnerId && partnerIds.includes(inv.partnerId));
+      }
+      
+      if (dateFrom) {
+        const fromDate = new Date(dateFrom);
+        filteredInvoices = filteredInvoices.filter(inv => {
+          if (!inv.paymentDate) return false;
+          return new Date(inv.paymentDate) >= fromDate;
+        });
+      }
+      
+      if (dateTo) {
+        const toDate = new Date(dateTo);
+        filteredInvoices = filteredInvoices.filter(inv => {
+          if (!inv.paymentDate) return false;
+          return new Date(inv.paymentDate) <= toDate;
+        });
+      }
+      
+      if (actualDateFrom) {
+        const fromDate = new Date(actualDateFrom);
+        filteredInvoices = filteredInvoices.filter(inv => {
+          if (!inv.actualPaymentDate) return false;
+          return new Date(inv.actualPaymentDate) >= fromDate;
+        });
+      }
+      
+      if (actualDateTo) {
+        const toDate = new Date(actualDateTo);
+        filteredInvoices = filteredInvoices.filter(inv => {
+          if (!inv.actualPaymentDate) return false;
+          return new Date(inv.actualPaymentDate) <= toDate;
+        });
+      }
+
+      // Export Invoices
+      if (exportTypes.includes('invoices')) {
+        const sheet = workbook.addWorksheet('Счета');
+        
+        sheet.columns = [
+          { header: 'Номер', key: 'number', width: 15 },
+          { header: 'Клиент', key: 'client', width: 25 },
+          { header: 'Партнёр', key: 'partner', width: 25 },
+          { header: 'Статус', key: 'status', width: 12 },
+          { header: 'Сумма клиента', key: 'clientBill', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Схема', key: 'scheme', width: 15 },
+          { header: 'Комиссия %', key: 'commissionRate', width: 12 },
+          { header: 'Комиссия', key: 'commissionAmount', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Расходы', key: 'expenses', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Чистая прибыль', key: 'netProfit', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Долг партнёра', key: 'partnerDebt', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Остаток клиента', key: 'clientRemaining', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'План. дата', key: 'paymentDate', width: 14 },
+          { header: 'Факт. дата', key: 'actualPaymentDate', width: 14 },
+          { header: 'Примечание', key: 'notes', width: 30 },
+        ];
+
+        // Style header row
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        const statusMap: Record<string, string> = {
+          draft: 'Черновик',
+          sent: 'Отправлен',
+          paid: 'Оплачен',
+          cancelled: 'Отменён'
+        };
+
+        const schemeMap: Record<string, string> = {
+          partner_10: 'Партнёр 10%',
+          partner_15: 'Партнёр 15%',
+          agency_30: 'Агентский 30%',
+          commission_based: 'Комиссионный'
+        };
+
+        for (const inv of filteredInvoices) {
+          const client = allClients.find(c => c.id === inv.clientId);
+          const partner = allPartners.find(p => p.id === inv.partnerId);
+          const calc = inv.calculations;
+
+          sheet.addRow({
+            number: inv.invoiceNumber,
+            client: client?.name || '',
+            partner: partner?.name || '',
+            status: statusMap[inv.status] || inv.status,
+            clientBill: Number(calc?.clientBill || inv.clientBill || 0),
+            scheme: schemeMap[inv.scheme] || inv.scheme,
+            commissionRate: calc?.commissionRate ? `${calc.commissionRate}%` : '',
+            commissionAmount: Number(calc?.commissionAmount || 0),
+            expenses: Number(calc?.executorExpensesTotal || 0),
+            netProfit: Number(calc?.netProfitAdmin || 0),
+            partnerDebt: Number(calc?.partnerTransferDue || 0),
+            clientRemaining: Number(calc?.clientRemaining || 0),
+            paymentDate: inv.paymentDate ? new Date(inv.paymentDate).toLocaleDateString('ru-RU') : '',
+            actualPaymentDate: inv.actualPaymentDate ? new Date(inv.actualPaymentDate).toLocaleDateString('ru-RU') : '',
+            notes: inv.notes || '',
+          });
+        }
+      }
+
+      // Export Clients
+      if (exportTypes.includes('clients')) {
+        const sheet = workbook.addWorksheet('Клиенты');
+        
+        sheet.columns = [
+          { header: 'Название', key: 'name', width: 30 },
+          { header: 'Контактное лицо', key: 'contact', width: 25 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'Телефон', key: 'phone', width: 18 },
+          { header: 'Счетов', key: 'invoicesCount', width: 10 },
+          { header: 'Общая сумма', key: 'totalBilled', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        ];
+
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        for (const client of allClients) {
+          const clientInvoices = allInvoices.filter(inv => inv.clientId === client.id);
+          const totalBilled = clientInvoices.reduce((sum, inv) => {
+            const bill = inv.calculations?.clientBill || inv.clientBill || 0;
+            return sum + Number(bill);
+          }, 0);
+
+          sheet.addRow({
+            name: client.name,
+            contact: '',
+            email: client.email || '',
+            phone: client.phone || '',
+            invoicesCount: clientInvoices.length,
+            totalBilled,
+          });
+        }
+      }
+
+      // Export Partners
+      if (exportTypes.includes('partners')) {
+        const sheet = workbook.addWorksheet('Партнёры');
+        
+        sheet.columns = [
+          { header: 'Название', key: 'name', width: 30 },
+          { header: 'Email', key: 'email', width: 25 },
+          { header: 'Телефон', key: 'phone', width: 18 },
+          { header: 'Счетов', key: 'invoicesCount', width: 10 },
+          { header: 'Общая комиссия', key: 'totalCommission', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Долг админу', key: 'debtToAdmin', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        ];
+
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        for (const partner of allPartners) {
+          const partnerInvoices = allInvoices.filter(inv => inv.partnerId === partner.id);
+          const totalCommission = partnerInvoices.reduce((sum, inv) => {
+            return sum + Number(inv.calculations?.commissionAmount || 0);
+          }, 0);
+          const debtToAdmin = partnerInvoices
+            .filter(inv => inv.status === 'paid')
+            .reduce((sum, inv) => {
+              return sum + Number(inv.calculations?.partnerTransferDue || 0);
+            }, 0);
+
+          sheet.addRow({
+            name: partner.name,
+            email: partner.email || '',
+            phone: partner.phone || '',
+            invoicesCount: partnerInvoices.length,
+            totalCommission,
+            debtToAdmin: Math.max(0, debtToAdmin),
+          });
+        }
+      }
+
+      // Export Expenses
+      if (exportTypes.includes('expenses')) {
+        const sheet = workbook.addWorksheet('Расходы');
+        
+        sheet.columns = [
+          { header: 'Номер счёта', key: 'invoiceNumber', width: 15 },
+          { header: 'Клиент', key: 'client', width: 25 },
+          { header: 'Описание', key: 'description', width: 35 },
+          { header: 'Сумма', key: 'amount', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+          { header: 'Оплатил', key: 'paidBy', width: 15 },
+          { header: 'Дата', key: 'date', width: 14 },
+          { header: 'Примечание', key: 'notes', width: 30 },
+        ];
+
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        for (const expense of allExpenses) {
+          const invoice = allInvoices.find(inv => inv.id === expense.invoiceId);
+          const client = invoice ? allClients.find(c => c.id === invoice.clientId) : null;
+
+          sheet.addRow({
+            invoiceNumber: invoice?.invoiceNumber || '',
+            client: client?.name || '',
+            description: expense.description,
+            amount: Number(expense.amount),
+            paidBy: expense.paidByAdmin ? 'Админ' : 'Партнёр',
+            date: expense.date ? new Date(expense.date).toLocaleDateString('ru-RU') : '',
+            notes: '',
+          });
+        }
+      }
+
+      // Generate buffer
+      const buffer = await workbook.xlsx.writeBuffer();
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=export_${new Date().toISOString().split('T')[0]}.xlsx`);
+      res.send(Buffer.from(buffer));
+
+    } catch (error: any) {
+      console.error("Export error:", error);
+      res.status(500).json({ error: error.message || "Failed to export data" });
+    }
+  });
 }

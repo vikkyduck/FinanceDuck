@@ -203,25 +203,12 @@ export function calculateInvoice(
 /**
  * Calculates partner debt to admin based on scheme
  * 
- * Partner Agreement (partner_10, partner_15, commission_based):
- *   Standard case (partner pays expenses from client money):
- *     debt = clientBill - partnerCommission - expensesPaidByPartner
- *   
- *   Exception (admin pays expenses):
- *     debt = clientBill - partnerCommission
- *     (Expenses paid by admin don't reduce partner's debt)
- *     Admin's net profit = received from partner - expenses paid by admin
+ * IMPORTANT: When possible, use stored `partnerTransferDue` from invoice_calculations
+ * table as the single source of truth. This function should only be used:
+ * - When creating new invoices (no stored value yet)
+ * - As fallback when stored value is unavailable
  * 
- * Agency 30%:
- *   Client pays 100%
- *   ├─ 70% = client budget for project expenses (stays with partner)
- *   └─ 30% = agency margin, split 50/50:
- *       ├─ 15% partner share (partner keeps this)
- *       └─ 15% admin share (partner OWES this to admin)
- *   
- *   debt = admin_share_from_margin (15% of client bill)
- *   doNotSpendAmount = 70% of client bill - executor expenses
- * 
+ * @param storedPartnerTransferDue - Use this if available from database
  * @param expensesPaidByPartner - expenses paid from client money (by partner)
  * @param expensesPaidByAdmin - expenses paid by admin from own funds
  */
@@ -230,7 +217,8 @@ export function calculatePartnerDebt(
   clientBill: number,
   partnerCommission: number,
   expensesPaidByPartner: number = 0,
-  expensesPaidByAdmin: number = 0
+  expensesPaidByAdmin: number = 0,
+  storedPartnerTransferDue?: number
 ): { debtToAdmin: number; doNotSpendAmount: number; adminNetAfterOwnExpenses: number } {
   const totalExpenses = expensesPaidByPartner + expensesPaidByAdmin;
   
@@ -243,10 +231,15 @@ export function calculatePartnerDebt(
     const clientBase = clientBill * 0.70;
     const doNotSpendAmount = Math.max(0, clientBase - totalExpenses);
     
+    // Use stored value if available, otherwise calculate
+    const debtToAdmin = storedPartnerTransferDue !== undefined 
+      ? Math.max(0, storedPartnerTransferDue) 
+      : adminShare;
+    
     return {
-      debtToAdmin: adminShare, // Partner owes admin their 15% share (fixed)
+      debtToAdmin,
       doNotSpendAmount,
-      adminNetAfterOwnExpenses: adminShare - expensesPaidByAdmin,
+      adminNetAfterOwnExpenses: debtToAdmin - expensesPaidByAdmin,
     };
   }
   
@@ -255,21 +248,27 @@ export function calculatePartnerDebt(
   // 2. Partner pays expenses from client money (unless admin paid)
   // 3. Partner transfers remainder to admin
   
-  let commissionRate: number;
-  if (scheme === 'partner_10') {
-    commissionRate = 10;
-  } else if (scheme === 'partner_15') {
-    commissionRate = 15;
+  let calculatedDebt: number;
+  
+  if (storedPartnerTransferDue !== undefined) {
+    // Use stored value from database (single source of truth)
+    calculatedDebt = storedPartnerTransferDue;
   } else {
-    // commission_based - use provided rate
-    commissionRate = (partnerCommission / clientBill) * 100 || 10;
+    // Calculate fresh (for new invoices or fallback)
+    let commissionRate: number;
+    if (scheme === 'partner_10') {
+      commissionRate = 10;
+    } else if (scheme === 'partner_15') {
+      commissionRate = 15;
+    } else {
+      commissionRate = (partnerCommission / clientBill) * 100 || 10;
+    }
+    const commissionAmount = clientBill * (commissionRate / 100);
+    calculatedDebt = clientBill - commissionAmount - expensesPaidByPartner;
   }
   
-  const commissionAmount = clientBill * (commissionRate / 100);
-  
-  // Partner's debt = client bill - partner's commission - expenses paid by partner
-  // If admin paid expenses, they are NOT deducted from partner's debt
-  const debtToAdmin = clientBill - commissionAmount - expensesPaidByPartner;
+  // Clamp debt to zero (cannot be negative)
+  const debtToAdmin = Math.max(0, calculatedDebt);
   
   // Admin's actual profit = what they receive - expenses they paid themselves
   const adminNetAfterOwnExpenses = debtToAdmin - expensesPaidByAdmin;

@@ -33,6 +33,15 @@ The system supports four primary commission schemes: `partner_10`, `partner_15`,
 - 30% is agency margin (15% partner + 15% admin)
 - **Formula: netProfitAdmin = 15% of clientBill (FIXED, expenses come from 70%)**
 
+### Unified Partner Debt Tracking (2025-11-29)
+
+The `invoice_calculations` table stores `partnerTransferDue` as the single source of truth for partner debt:
+- **partnerTransferDue** = amountToAdmin - expensesPaidByPartner (what partner must transfer to admin)
+- **For agency_30**: partnerTransferDue = 15% of clientBill (fixed)
+- This stored value is used by `getPartnerDebtSummaries()` to ensure consistent debt display across admin and partner dashboards
+- Frontend `calculatePartnerDebt()` accepts optional stored value and falls back to calculation when unavailable
+- All debt values are clamped to zero (negative debts not displayed)
+
 ## Security Architecture
 
 Security is implemented through XSS protection via input sanitization and React's auto-escaping, coupled with file upload validation. Rate limiting employs a token bucket algorithm. Input validation is handled by Zod schemas on both frontend and backend. Centralized error handling provides user feedback and logs critical errors. Authentication uses secure cookie-based sessions with CSRF protection and role-based access control.

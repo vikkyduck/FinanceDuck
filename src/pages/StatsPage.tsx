@@ -4,17 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AdminDashboardMetrics } from "@/components/invoices/admin/AdminDashboardMetrics";
 import { RevenueForecastTable } from "@/components/invoices/admin/RevenueForecastTable";
 import { MonthlyFinancialTable } from "@/components/invoices/admin/MonthlyFinancialTable";
-import { YearlyKeyIndicators } from "@/components/invoices/admin/YearlyKeyIndicators";
 import { OverduePaymentsAlert } from "@/components/invoices/admin/OverduePaymentsAlert";
-import { CurrentPeriodMetrics } from "@/components/invoices/admin/CurrentPeriodMetrics";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LazyMonthlySalesChart,
   LazyRevenueForecastChart,
-  LazyFinancialPlanningChart,
-  LazyProfitTrendChart,
   LazySalesStatistics,
 } from "./StatsPageLazy";
 
@@ -98,14 +94,8 @@ const StatsPage = () => {
           <OverduePaymentsAlert />
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-8 animate-fade-in" style={{ animationDelay: '300ms' }}>
+        <Tabs defaultValue="forecast" className="space-y-8 animate-fade-in" style={{ animationDelay: '300ms' }}>
           <TabsList className="glass-strong border border-primary/10 shadow-lg p-1.5 gap-1 h-auto">
-            <TabsTrigger 
-              value="overview"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
-            >
-              Текущий период
-            </TabsTrigger>
             <TabsTrigger 
               value="forecast"
               className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
@@ -122,31 +112,9 @@ const StatsPage = () => {
               value="planning"
               className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
             >
-              Планирование
+              План-факт
             </TabsTrigger>
           </TabsList>
-
-          <AnimatePresence mode="wait">
-            <TabsContent value="overview" className="space-y-8 mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="space-y-8"
-              >
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-xl font-semibold">С начала года (YTD)</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Только ОПЛАЧЕННЫЕ счета за {selectedYear} год. Сравнение с аналогичным периодом прошлого года.
-                    </p>
-                  </div>
-                  <CurrentPeriodMetrics selectedYear={selectedYear} />
-                </div>
-              </motion.div>
-            </TabsContent>
-          </AnimatePresence>
 
           <AnimatePresence mode="wait">
             <TabsContent value="forecast" className="space-y-8 mt-8">
@@ -184,13 +152,6 @@ const StatsPage = () => {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <YearlyKeyIndicators year={selectedYear} />
-
-                <div className="grid gap-8 md:grid-cols-2">
-                  <LazyFinancialPlanningChart year={selectedYear} />
-                  <LazyProfitTrendChart year={selectedYear} />
-                </div>
-
                 <MonthlyFinancialTable year={selectedYear} />
               </motion.div>
             </TabsContent>

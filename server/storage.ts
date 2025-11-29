@@ -758,15 +758,50 @@ export class DatabaseStorage implements IStorage {
   async createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense> {
     const [created] = await db.insert(invoiceExpenses).values(expense).returning();
     
-    // Recalculate with new total expenses
-    const expenses = await this.getInvoiceExpenses(expense.invoiceId);
-    const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    
-    await this.updateInvoiceCalculations(expense.invoiceId, {
-      executorExpensesTotal: total.toString()
-    });
+    // Recalculate with proper expense breakdown by payer
+    await this.recalculateInvoiceExpenses(expense.invoiceId);
     
     return created;
+  }
+  
+  private async recalculateInvoiceExpenses(invoiceId: string): Promise<void> {
+    const expenses = await this.getInvoiceExpenses(invoiceId);
+    const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const expensesPaidByPartner = expenses
+      .filter(e => e.paidByAdmin !== true)
+      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const expensesPaidByAdmin = expenses
+      .filter(e => e.paidByAdmin === true)
+      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    
+    // Get invoice to know scheme and commission rate
+    const invoice = await this.getInvoice(invoiceId);
+    if (!invoice) return;
+    
+    const [existing] = await db
+      .select()
+      .from(invoiceCalculations)
+      .where(eq(invoiceCalculations.invoiceId, invoiceId))
+      .limit(1);
+    
+    if (!existing) return;
+    
+    const clientBill = parseFloat(existing.clientBill || "0");
+    const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
+    
+    // Recalculate with correct expense breakdown
+    const computed = calculateInvoiceServer(
+      invoice.scheme as InvoiceScheme,
+      clientBill,
+      commissionRate,
+      total,
+      expensesPaidByPartner,
+      expensesPaidByAdmin
+    );
+    
+    await db.update(invoiceCalculations)
+      .set({ ...computed, updatedAt: new Date() })
+      .where(eq(invoiceCalculations.invoiceId, invoiceId));
   }
 
   async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null> {
@@ -783,13 +818,8 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoiceExpenses.id, id))
       .returning();
     
-    // Recalculate with updated total expenses
-    const expenses = await this.getInvoiceExpenses(expense.invoiceId);
-    const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    
-    await this.updateInvoiceCalculations(expense.invoiceId, {
-      executorExpensesTotal: total.toString()
-    });
+    // Recalculate with proper expense breakdown by payer
+    await this.recalculateInvoiceExpenses(expense.invoiceId);
     
     return updated || null;
   }
@@ -804,13 +834,8 @@ export class DatabaseStorage implements IStorage {
     if (expense) {
       await db.delete(invoiceExpenses).where(eq(invoiceExpenses.id, id));
       
-      // Recalculate with updated total expenses
-      const expenses = await this.getInvoiceExpenses(expense.invoiceId);
-      const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-      
-      await this.updateInvoiceCalculations(expense.invoiceId, {
-        executorExpensesTotal: total.toString()
-      });
+      // Recalculate with proper expense breakdown by payer
+      await this.recalculateInvoiceExpenses(expense.invoiceId);
     }
   }
 

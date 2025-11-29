@@ -955,6 +955,61 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Partner client stats with dynamic year - monthly breakdown by client
+  app.get("/api/partner/client-stats", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(400).json({ error: "Partner ID not found in session" });
+      }
+      
+      const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+      const stats = await storage.getPartnerClientStats(partnerId, year);
+      
+      // Get available years for the dropdown
+      const currentYear = new Date().getFullYear();
+      const availableYears = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+      
+      res.json({ stats, selectedYear: year, availableYears });
+    } catch (error) {
+      console.error("Get partner client stats error:", error);
+      res.status(500).json({ error: "Failed to get client stats" });
+    }
+  });
+
+  // Partner document risk - uses unified signed_acts table (same source as admin)
+  app.get("/api/partner/document-risk", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(400).json({ error: "Partner ID not found in session" });
+      }
+      
+      const risk = await storage.getPartnerDocumentRisk(partnerId);
+      res.json(risk);
+    } catch (error) {
+      console.error("Get partner document risk error:", error);
+      res.status(500).json({ error: "Failed to get document risk" });
+    }
+  });
+
+  // Partner agency 30% client funds tracker - shows untouchable client money
+  app.get("/api/partner/agency30-funds", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(400).json({ error: "Partner ID not found in session" });
+      }
+      
+      const funds = await storage.getPartnerAgency30Funds(partnerId);
+      const total = funds.reduce((sum, f) => sum + f.remaining, 0);
+      res.json({ clients: funds, totalRemaining: total });
+    } catch (error) {
+      console.error("Get partner agency30 funds error:", error);
+      res.status(500).json({ error: "Failed to get agency 30 funds" });
+    }
+  });
+
   app.get("/api/do-not-spend", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const data = await storage.getDoNotSpendData();

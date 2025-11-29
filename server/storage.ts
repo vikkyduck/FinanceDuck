@@ -208,6 +208,37 @@ export interface IStorage {
   createRecurringInvoice(data: any): Promise<any>;
   updateRecurringInvoice(id: string, data: any): Promise<any | null>;
   deleteRecurringInvoice(id: string): Promise<void>;
+  
+  // Partner-specific methods
+  getPartnerClientStats(partnerId: string, year: number): Promise<PartnerClientStatsData[]>;
+  getPartnerDocumentRisk(partnerId: string): Promise<PartnerDocumentRiskData>;
+  getPartnerAgency30Funds(partnerId: string): Promise<PartnerAgency30FundsData[]>;
+}
+
+export interface PartnerClientStatsData {
+  clientId: string;
+  clientName: string;
+  month: number;
+  monthName: string;
+  clientBill: number;
+  partnerCommission: number;
+  clientRemaining: number;
+  invoiceCount: number;
+}
+
+export interface PartnerDocumentRiskData {
+  status: 'green' | 'red';
+  missingActsCount: number;
+  missingActsInvoices: { id: string; invoiceNumber: string }[];
+}
+
+export interface PartnerAgency30FundsData {
+  clientId: string;
+  clientName: string;
+  totalBudget: number;
+  totalSpent: number;
+  remaining: number;
+  invoiceCount: number;
 }
 
 export interface MonthlyData {
@@ -2057,6 +2088,182 @@ export class DatabaseStorage implements IStorage {
   async deleteRecurringInvoice(id: string): Promise<void> {
     await db.delete(recurringInvoices)
       .where(eq(recurringInvoices.id, id));
+  }
+
+  async getPartnerClientStats(partnerId: string, year: number): Promise<PartnerClientStatsData[]> {
+    const monthNames = [
+      'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+    ];
+    
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+    
+    const partnerInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.status, 'paid'),
+        gte(invoices.actualPaymentDate, yearStart.toISOString().split('T')[0])
+      ));
+
+    // Group by client and month
+    const statsMap = new Map<string, PartnerClientStatsData>();
+    
+    for (const row of partnerInvoices) {
+      if (!row.invoice.clientId || !row.calculations) continue;
+      
+      const paymentDate = row.invoice.actualPaymentDate ? new Date(row.invoice.actualPaymentDate) : null;
+      if (!paymentDate || paymentDate.getFullYear() !== year) continue;
+      
+      const month = paymentDate.getMonth();
+      const key = `${row.invoice.clientId}-${month}`;
+      
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const scheme = row.invoice.scheme;
+      
+      let commission = 0;
+      let clientRemaining = 0;
+      
+      if (scheme === 'agency_30') {
+        commission = parseFloat(row.calculations.partnerShareFromMargin || "0");
+        const clientBase = clientBill * 0.70;
+        const expenses = parseFloat(row.calculations.executorExpensesTotal || "0");
+        clientRemaining = Math.max(0, clientBase - expenses);
+      } else {
+        commission = parseFloat(row.calculations.commissionAmount || "0");
+        clientRemaining = parseFloat(row.calculations.clientRemaining || "0");
+      }
+      
+      if (!statsMap.has(key)) {
+        statsMap.set(key, {
+          clientId: row.invoice.clientId,
+          clientName: row.clientName || 'Unknown',
+          month,
+          monthName: monthNames[month],
+          clientBill: 0,
+          partnerCommission: 0,
+          clientRemaining: 0,
+          invoiceCount: 0,
+        });
+      }
+      
+      const stats = statsMap.get(key)!;
+      stats.clientBill += clientBill;
+      stats.partnerCommission += commission;
+      stats.clientRemaining += Math.max(0, clientRemaining);
+      stats.invoiceCount += 1;
+    }
+    
+    return Array.from(statsMap.values()).sort((a, b) => {
+      if (a.month !== b.month) return a.month - b.month;
+      return a.clientName.localeCompare(b.clientName);
+    });
+  }
+
+  async getPartnerDocumentRisk(partnerId: string): Promise<PartnerDocumentRiskData> {
+    // Get paid invoices for this partner
+    const paidInvoices = await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+      })
+      .from(invoices)
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.status, 'paid')
+      ));
+    
+    if (paidInvoices.length === 0) {
+      return { status: 'green', missingActsCount: 0, missingActsInvoices: [] };
+    }
+    
+    const invoiceIds = paidInvoices.map(i => i.id);
+    
+    // Get all signed acts for these invoices (use the same source as admin)
+    const acts = await db
+      .select({
+        invoiceId: signedActs.invoiceId,
+      })
+      .from(signedActs)
+      .where(inArray(signedActs.invoiceId, invoiceIds));
+    
+    const invoicesWithActs = new Set(acts.map(a => a.invoiceId));
+    
+    // Find invoices without ANY acts (critical risk)
+    const missingActs = paidInvoices.filter(i => !invoicesWithActs.has(i.id));
+    
+    return {
+      status: missingActs.length > 0 ? 'red' : 'green',
+      missingActsCount: missingActs.length,
+      missingActsInvoices: missingActs.map(i => ({
+        id: i.id,
+        invoiceNumber: i.invoiceNumber || 'Unknown',
+      })),
+    };
+  }
+
+  async getPartnerAgency30Funds(partnerId: string): Promise<PartnerAgency30FundsData[]> {
+    // Get agency_30 invoices for this partner (same logic as admin DoNotSpend)
+    const agency30Invoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.scheme, 'agency_30'),
+        inArray(invoices.status, ['paid', 'sent'])
+      ));
+
+    const clientMap = new Map<string, PartnerAgency30FundsData>();
+
+    for (const row of agency30Invoices) {
+      if (!row.invoice.clientId || !row.calculations) continue;
+
+      const clientId = row.invoice.clientId;
+      const clientName = row.clientName || 'Unknown';
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const executorExpenses = parseFloat(row.calculations.executorExpensesTotal || "0");
+      
+      // 70% is client money that partner must not spend
+      const clientBase = clientBill * 0.7;
+      
+      if (!clientMap.has(clientId)) {
+        clientMap.set(clientId, {
+          clientId,
+          clientName,
+          totalBudget: 0,
+          totalSpent: 0,
+          remaining: 0,
+          invoiceCount: 0,
+        });
+      }
+
+      const summary = clientMap.get(clientId)!;
+      summary.totalBudget += clientBase;
+      summary.totalSpent += executorExpenses;
+      summary.invoiceCount += 1;
+    }
+
+    return Array.from(clientMap.values())
+      .map(s => ({
+        ...s,
+        remaining: Math.max(0, s.totalBudget - s.totalSpent),
+      }))
+      .filter(s => s.totalBudget > 0)
+      .sort((a, b) => b.remaining - a.remaining);
   }
 }
 

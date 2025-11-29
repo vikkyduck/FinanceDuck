@@ -1502,9 +1502,9 @@ export class DatabaseStorage implements IStorage {
           yearlyProfit += netProfit;
         }
         
-        // Monthly cash flow - based on payment date within selected month
+        // Monthly net profit - based on payment date within selected month
         if (paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
-          monthlyReceived += cashToAdmin;
+          monthlyReceived += netProfit;  // Now using netProfitAdmin instead of cashToAdmin
           monthlyProfit += netProfit;
           
           // Monthly leverage calculation
@@ -1516,9 +1516,9 @@ export class DatabaseStorage implements IStorage {
         }
       }
       
-      // Expected this month - sent invoices
-      if (status === 'sent' && createdAt && createdAt >= monthStart && createdAt <= monthEnd) {
-        monthlyExpected += cashToAdmin;
+      // Expected this month - unpaid invoices with planned payment date in selected month
+      if (status !== 'paid' && status !== 'cancelled' && paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
+        monthlyExpected += netProfit;
       }
     }
     

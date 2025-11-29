@@ -128,10 +128,10 @@ export const AdminCashFlowForecast = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            Прогноз Cash Flow
+            Прогноз чистой прибыли
           </CardTitle>
           <CardDescription>
-            Прогноз денежных потоков на следующие 6 месяцев
+            Прогноз чистой прибыли на следующие 6 месяцев
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

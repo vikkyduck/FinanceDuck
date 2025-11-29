@@ -201,12 +201,12 @@ export const AdminDashboardMetrics = () => {
 
       {/* Bottom Row - 3 Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Cash Flow Card */}
+        {/* Net Profit Card */}
         <Card data-testid="card-cashflow">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <Banknote className="h-4 w-4 text-green-600" />
-              Cash Flow ({MONTH_NAMES[selectedMonth]})
+              Чистая прибыль ({MONTH_NAMES[selectedMonth]})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">

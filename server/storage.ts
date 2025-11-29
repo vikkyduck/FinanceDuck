@@ -49,7 +49,9 @@ function calculateInvoiceServer(
       const adminShare = clientBill * 0.15;
       const clientBase = clientBill * 0.70;
       const clientRemaining = clientBase - executorExpenses;
-      // Для agency_30 админ получает фиксированные 15% - расходы идут из 70% клиента
+      // Для agency_30: партнёр должен перевести 15% (фиксировано)
+      const partnerTransferDue = adminShare;
+      // Чистая прибыль админа = то же самое (расходы из 70% клиента)
       const netProfitAdmin = adminShare;
       
       result.agencyMargin = agencyMargin.toString();
@@ -57,6 +59,7 @@ function calculateInvoiceServer(
       result.adminShareFromMargin = adminShare.toString();
       result.clientBaseAfterMargin = clientBase.toString();
       result.clientRemaining = clientRemaining.toString();
+      result.partnerTransferDue = partnerTransferDue.toString();
       result.netProfitAdmin = netProfitAdmin.toString();
       result.adminShare50 = (netProfitAdmin / 2).toString();
       result.catShare50 = (netProfitAdmin / 2).toString();
@@ -67,14 +70,15 @@ function calculateInvoiceServer(
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
-      // Фактическая прибыль админа = что получит от партнёра - свои расходы
-      // Партнёр переведёт: amountToAdmin - expensesPaidByPartner
-      // Админ получит и заплатит свои расходы
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      // Партнёр переведёт: amountToAdmin - expensesPaidByPartner (это ДОЛГ партнёра)
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
       result.amountToAdmin = amountToAdmin.toString();
+      result.partnerTransferDue = partnerTransferDue.toString();
       result.netProfitAdmin = netProfitAdmin.toString();
       result.adminShare50 = (netProfitAdmin / 2).toString();
       result.catShare50 = (netProfitAdmin / 2).toString();
@@ -85,12 +89,15 @@ function calculateInvoiceServer(
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
-      // Фактическая прибыль админа = что получит от партнёра - свои расходы
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      // Партнёр переведёт: amountToAdmin - expensesPaidByPartner (это ДОЛГ партнёра)
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
       result.amountToAdmin = amountToAdmin.toString();
+      result.partnerTransferDue = partnerTransferDue.toString();
       result.netProfitAdmin = netProfitAdmin.toString();
       result.adminShare50 = (netProfitAdmin / 2).toString();
       result.catShare50 = (netProfitAdmin / 2).toString();
@@ -102,12 +109,15 @@ function calculateInvoiceServer(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
-      // Фактическая прибыль админа = что получит от партнёра - свои расходы
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      // Партнёр переведёт: amountToAdmin - expensesPaidByPartner (это ДОЛГ партнёра)
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
       result.amountToAdmin = amountToAdmin.toString();
+      result.partnerTransferDue = partnerTransferDue.toString();
       result.netProfitAdmin = netProfitAdmin.toString();
       result.adminShare50 = (netProfitAdmin / 2).toString();
       result.catShare50 = (netProfitAdmin / 2).toString();
@@ -1066,6 +1076,7 @@ export class DatabaseStorage implements IStorage {
     remaining: number;
     invoiceCount: number;
   }[]> {
+    // Get all paid invoices with their stored partnerTransferDue values
     const paidInvoices = await db
       .select({
         invoice: invoices,
@@ -1078,23 +1089,6 @@ export class DatabaseStorage implements IStorage {
       .where(eq(invoices.status, 'paid'));
 
     const allPayments = await db.select().from(partnerPayments);
-    
-    // Get all expenses to calculate paidByAdmin vs paidByPartner
-    const allExpenses = await db.select().from(invoiceExpenses);
-    const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
-    
-    for (const exp of allExpenses) {
-      if (!expensesByInvoice.has(exp.invoiceId)) {
-        expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
-      }
-      const amounts = expensesByInvoice.get(exp.invoiceId)!;
-      const amount = parseFloat(exp.amount);
-      if (exp.paidByAdmin) {
-        amounts.byAdmin += amount;
-      } else {
-        amounts.byPartner += amount;
-      }
-    }
 
     const partnerMap = new Map<string, {
       partnerId: string;
@@ -1110,34 +1104,9 @@ export class DatabaseStorage implements IStorage {
       
       const pid = row.invoice.partnerId;
       const pName = row.partnerName || 'Unknown';
-      const scheme = row.invoice.scheme;
       
-      const cBill = parseFloat(row.calculations.clientBill || "0");
-      const expenses = expensesByInvoice.get(row.invoice.id) || { byPartner: 0, byAdmin: 0 };
-      let debt = 0;
-
-      if (scheme === 'agency_30') {
-        // Agency 30%: Partner owes admin 15% (admin's share), fixed regardless of expenses
-        // 70% stays with partner for client's external services
-        debt = cBill * 0.15; // Admin's share from margin
-      } else {
-        // Partner schemes (partner_10, partner_15, commission_based):
-        // Partner debt = clientBill - partnerCommission - expensesPaidByPartner
-        // If admin paid expenses, they don't reduce partner's debt
-        let commissionRate: number;
-        if (scheme === 'partner_10') {
-          commissionRate = 0.10;
-        } else if (scheme === 'partner_15') {
-          commissionRate = 0.15;
-        } else {
-          // commission_based - calculate from stored commission
-          const comm = parseFloat(row.calculations.commissionAmount || "0");
-          commissionRate = cBill > 0 ? comm / cBill : 0.10;
-        }
-        
-        const partnerCommission = cBill * commissionRate;
-        debt = cBill - partnerCommission - expenses.byPartner;
-      }
+      // Use stored partnerTransferDue from calculations - single source of truth
+      const debt = parseFloat(row.calculations.partnerTransferDue || "0");
 
       if (!partnerMap.has(pid)) {
         partnerMap.set(pid, {

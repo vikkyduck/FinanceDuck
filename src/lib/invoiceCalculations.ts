@@ -15,6 +15,7 @@ export interface InvoiceCalculations {
   client_spent?: number;
   client_remaining?: number;
   executor_expenses_total: number;
+  partner_transfer_due: number;
   net_profit_admin: number;
   admin_share_50: number;
   cat_share_50: number;
@@ -56,6 +57,7 @@ export function calculateInvoice(
   let calculations: InvoiceCalculations = {
     client_bill: clientBill,
     executor_expenses_total: executorExpenses,
+    partner_transfer_due: 0,
     net_profit_admin: 0,
     admin_share_50: 0,
     cat_share_50: 0,
@@ -69,15 +71,16 @@ export function calculateInvoice(
       //   ├─ Партнеру (15%): X × 0.15
       //   └─ Админу (15%): X × 0.15
       // Средства клиента для трат: X × 0.70 (расходы идут отсюда!)
-      // Чистая прибыль админа: X × 0.15 (ФИКСИРОВАННАЯ, расходы идут из 70% клиента)
+      // Долг партнёра = 15% (фиксировано)
+      // Чистая прибыль админа = 15% (ФИКСИРОВАННАЯ, расходы идут из 70% клиента)
       
       const agencyMargin = clientBill * 0.30;
       const partnerShare = clientBill * 0.15; // Партнеру 15%
       const adminShare = clientBill * 0.15;   // Админу 15%
       const clientBase = clientBill * 0.70;
       const clientRemaining = clientBase - executorExpenses;
-      // Для agency_30 расходы идут из клиентского бюджета (70%), не из доли админа
-      const netProfitAdmin = adminShare;
+      const partnerTransferDue = adminShare; // Долг партнёра = 15%
+      const netProfitAdmin = adminShare; // Прибыль = 15% (расходы из 70% клиента)
       
       calculations = {
         ...calculations,
@@ -87,6 +90,7 @@ export function calculateInvoice(
         client_base_after_margin: clientBase,
         client_spent: executorExpenses,
         client_remaining: clientRemaining,
+        partner_transfer_due: partnerTransferDue,
         net_profit_admin: netProfitAdmin,
         admin_share_50: netProfitAdmin / 2,
         cat_share_50: netProfitAdmin / 2,
@@ -98,20 +102,21 @@ export function calculateInvoice(
       // Схема: Комиссия партнера 10%
       // Клиент платит: X
       // Комиссия партнера: X × 0.10
-      // Партнер переводит админу: X × 0.90 - расходы (оплаченные партнёром)
-      // Админ получает: amountToAdmin - expensesPaidByPartner
-      // Чистая прибыль: минус ещё расходы оплаченные админом
+      // Долг партнёра = amountToAdmin - expensesPaidByPartner
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner; // Долг партнёра
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin; // Прибыль админа
       
       calculations = {
         ...calculations,
         commission_rate: commissionRate,
         commission_amount: commissionAmount,
         amount_to_admin: amountToAdmin,
+        partner_transfer_due: partnerTransferDue,
         net_profit_admin: netProfitAdmin,
         admin_share_50: netProfitAdmin / 2,
         cat_share_50: netProfitAdmin / 2,
@@ -123,20 +128,21 @@ export function calculateInvoice(
       // Схема: Комиссия партнера 15%
       // Клиент платит: X
       // Комиссия партнера: X × 0.15
-      // Партнер переводит админу: X × 0.85 - расходы (оплаченные партнёром)
-      // Админ получает: amountToAdmin - expensesPaidByPartner
-      // Чистая прибыль: минус ещё расходы оплаченные админом
+      // Долг партнёра = amountToAdmin - expensesPaidByPartner
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner; // Долг партнёра
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin; // Прибыль админа
       
       calculations = {
         ...calculations,
         commission_rate: commissionRate,
         commission_amount: commissionAmount,
         amount_to_admin: amountToAdmin,
+        partner_transfer_due: partnerTransferDue,
         net_profit_admin: netProfitAdmin,
         admin_share_50: netProfitAdmin / 2,
         cat_share_50: netProfitAdmin / 2,
@@ -148,20 +154,21 @@ export function calculateInvoice(
       // Универсальная схема с произвольной комиссией
       // Клиент платит: X
       // Комиссия партнера: X × (rate / 100)
-      // Партнер переводит админу: amountToAdmin - расходы (оплаченные партнёром)
-      // Админ получает: amountToAdmin - expensesPaidByPartner
-      // Чистая прибыль: минус ещё расходы оплаченные админом
+      // Долг партнёра = amountToAdmin - expensesPaidByPartner
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner; // Долг партнёра
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin; // Прибыль админа
       
       calculations = {
         ...calculations,
         commission_rate: commissionRate,
         commission_amount: commissionAmount,
         amount_to_admin: amountToAdmin,
+        partner_transfer_due: partnerTransferDue,
         net_profit_admin: netProfitAdmin,
         admin_share_50: netProfitAdmin / 2,
         cat_share_50: netProfitAdmin / 2,
@@ -174,13 +181,15 @@ export function calculateInvoice(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const netProfitAdmin = amountToAdmin - expensesPaidByPartner - expensesPaidByAdmin;
+      const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
         commission_rate: commissionRate,
         commission_amount: commissionAmount,
         amount_to_admin: amountToAdmin,
+        partner_transfer_due: partnerTransferDue,
         net_profit_admin: netProfitAdmin,
         admin_share_50: netProfitAdmin / 2,
         cat_share_50: netProfitAdmin / 2,

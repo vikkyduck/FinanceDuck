@@ -108,6 +108,7 @@ export const invoiceCalculations = pgTable("invoice_calculations", {
   clientSpent: numeric("client_spent", { precision: 15, scale: 2 }).default("0"),
   clientRemaining: numeric("client_remaining", { precision: 15, scale: 2 }),
   executorExpensesTotal: numeric("executor_expenses_total", { precision: 15, scale: 2 }).default("0"),
+  partnerTransferDue: numeric("partner_transfer_due", { precision: 15, scale: 2 }),
   netProfitAdmin: numeric("net_profit_admin", { precision: 15, scale: 2 }),
   adminShare50: numeric("admin_share_50", { precision: 15, scale: 2 }),
   catShare50: numeric("cat_share_50", { precision: 15, scale: 2 }),

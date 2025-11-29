@@ -11,6 +11,7 @@ import { useCookieSession } from "@/hooks/useCookieSession";
 import { useApiHealthCheck } from "@/hooks/useApiHealthCheck";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import InvoicesDashboard from "./pages/InvoicesDashboard";
 import AccessCodeLogin from "./pages/AccessCodeLogin";
@@ -122,7 +123,9 @@ const AppContent = () => {
               <SidebarTrigger />
             </header>
             <main className="flex-1">
-              <AnimatedRoutes />
+              <ErrorBoundary>
+                <AnimatedRoutes />
+              </ErrorBoundary>
             </main>
           </div>
         </div>

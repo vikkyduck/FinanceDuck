@@ -83,6 +83,9 @@ Optimizations include code splitting, TanStack Query for data caching and effici
 - **Reduced frequency**: 120-second intervals instead of 30s to reduce server load
 - **Smart refresh**: Data auto-refreshes when tab becomes visible via `visibilitychange` event
 - **Centralized hooks**: `useAdminDashboardRefresh`, `useDashboardStats`, `useRealtimeSubscription` handle polling consistently
+- **ErrorBoundary**: Prevents white screen on errors, shows user-friendly error messages with retry/reload options
+- **useVisibilityAwareInterval hook**: Single source of truth for all components using refetchInterval
+- **Unified cache invalidation**: `useInvalidateInvoices()` hook for consistent cache updates across all roles
 
 ### Unified Assistant Bonus System (2025-11-29)
 

@@ -840,6 +840,102 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Financial plans history with actuals for PlanHistoryComparison
+  // Fetches actual admin/cat shares from invoice_calculations for accurate comparison
+  app.get("/api/financial-plans/history", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const lastYear = currentYear - 1;
+      
+      // Get plans for current and last year
+      const currentYearPlans = await storage.getMonthlyPlans(currentYear);
+      const lastYearPlans = await storage.getMonthlyPlans(lastYear);
+      
+      const allPlans = [...currentYearPlans, ...lastYearPlans]
+        .sort((a, b) => {
+          if (a.year !== b.year) return parseInt(b.year) - parseInt(a.year);
+          return parseInt(b.month) - parseInt(a.month);
+        });
+      
+      // Get actual admin/cat shares for each year using dedicated method
+      const getActualsForYear = async (year: number) => {
+        const yearStart = new Date(year, 0, 1);
+        const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+        
+        // Use specialized method that returns raw calculation fields
+        const paidInvoices = await storage.getInvoicesWithCalculations();
+        const monthlyActuals: { [month: number]: { admin: number; cat: number } } = {};
+        
+        // Initialize all months
+        for (let m = 1; m <= 12; m++) {
+          monthlyActuals[m] = { admin: 0, cat: 0 };
+        }
+        
+        // Sum up actual shares by month from paid invoices
+        for (const invoice of paidInvoices) {
+          if (invoice.paymentDate) {
+            const paymentDate = new Date(invoice.paymentDate);
+            if (paymentDate >= yearStart && paymentDate <= yearEnd) {
+              const month = paymentDate.getMonth() + 1;
+              
+              // Parse string values to numbers - treat empty/null/very small as zero
+              const parseShare = (val: string | null): number => {
+                if (!val || val.trim() === '') return 0;
+                const num = parseFloat(val);
+                return isNaN(num) || Math.abs(num) < 0.01 ? 0 : num;
+              };
+              
+              let adminShare = parseShare(invoice.adminShare50);
+              let catShare = parseShare(invoice.catShare50);
+              
+              // Fallback: if shares are effectively zero but netProfitAdmin exists, compute 50/50 split
+              if (adminShare === 0 && catShare === 0 && invoice.netProfitAdmin) {
+                const netProfit = parseShare(invoice.netProfitAdmin);
+                if (netProfit > 0) {
+                  adminShare = netProfit / 2;
+                  catShare = netProfit / 2;
+                }
+              }
+              
+              monthlyActuals[month].admin += adminShare;
+              monthlyActuals[month].cat += catShare;
+            }
+          }
+        }
+        
+        return monthlyActuals;
+      };
+      
+      const currentYearActuals = await getActualsForYear(currentYear);
+      const lastYearActuals = await getActualsForYear(lastYear);
+      
+      const result = allPlans.map(plan => {
+        const year = parseInt(plan.year);
+        const month = parseInt(plan.month);
+        const actuals = year === currentYear ? currentYearActuals : lastYearActuals;
+        
+        // profitTarget is split 50/50 between admin and cat shares
+        const profitTarget = parseFloat(plan.profitTarget || "0");
+        const halfTarget = profitTarget / 2;
+        
+        return {
+          id: plan.id,
+          year,
+          month,
+          plannedAdminShare: halfTarget.toString(),
+          plannedCatShare: halfTarget.toString(),
+          actualAdminShare: actuals[month]?.admin || 0,
+          actualCatShare: actuals[month]?.cat || 0,
+        };
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Get financial plans history error:", error);
+      res.status(500).json({ error: "Failed to get plans history" });
+    }
+  });
+
   app.post("/api/admin/monthly-plans", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { year, month, salesTarget, profitTarget, receiptsTarget } = req.body;

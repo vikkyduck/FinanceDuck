@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/invoiceCalculations";
@@ -13,7 +13,6 @@ import {
   ArrowRight,
   Sparkles,
   BarChart3,
-  ShieldAlert,
   FileText
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,88 +29,40 @@ interface QuickStats {
 const Index = () => {
   const { role, loading: roleLoading } = useUserRole();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<QuickStats | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!roleLoading && (role === 'admin' || role === 'assistant')) {
       navigate('/invoices', { replace: true });
       return;
     }
-    if (!roleLoading && role) {
-      fetchQuickStats();
-    }
   }, [role, roleLoading, navigate]);
 
-  const fetchQuickStats = async () => {
-    try {
-      const now = new Date();
-      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-      const today = now.toISOString().split('T')[0];
+  interface DashboardStats {
+    invoiceStats?: {
+      totalReceived?: number;
+      overdueCount?: number;
+      overdueAmount?: number;
+      pendingCount?: number;
+    };
+  }
 
-      // Current month revenue - use status=paid since actual_payment_date may be null
-      const { data: currentRevenue } = await supabase
-        .from("invoices")
-        .select("invoice_calculations(client_bill)")
-        .eq('status', 'paid')
-        .gte('actual_payment_date', currentMonthStart.toISOString().split('T')[0]);
+  // Fetch dashboard stats from Express API
+  const { data: dashboardData, isLoading: statsLoading } = useQuery<DashboardStats>({
+    queryKey: ['/api/dashboard/stats'],
+    enabled: !roleLoading && !!role,
+  });
 
-      // Previous month revenue
-      const { data: previousRevenue } = await supabase
-        .from("invoices")
-        .select("invoice_calculations(client_bill)")
-        .eq('status', 'paid')
-        .gte('actual_payment_date', previousMonthStart.toISOString().split('T')[0])
-        .lte('actual_payment_date', previousMonthEnd.toISOString().split('T')[0]);
+  // Calculate quick stats from dashboard data
+  const stats: QuickStats | null = dashboardData ? {
+    revenue: dashboardData.invoiceStats?.totalReceived || 0,
+    revenueChange: 0,
+    overdueCount: dashboardData.invoiceStats?.overdueCount || 0,
+    overdueAmount: dashboardData.invoiceStats?.overdueAmount || 0,
+    pendingCount: dashboardData.invoiceStats?.pendingCount || 0,
+    criticalEvents: 0,
+  } : null;
 
-      // Overdue invoices
-      const { data: overdueInvoices } = await supabase
-        .from("invoices")
-        .select("id, invoice_calculations(client_bill)")
-        .eq('status', 'sent')
-        .is('actual_payment_date', null)
-        .lt('payment_date', today)
-        .not('payment_date', 'is', null);
-
-      // Pending invoices
-      const { data: pendingInvoices } = await supabase
-        .from("invoices")
-        .select("id")
-        .eq('status', 'sent')
-        .is('actual_payment_date', null);
-
-      // Critical security events
-      const { data: criticalEvents } = await supabase
-        .from("security_events")
-        .select("id")
-        .in('severity', ['high', 'critical'])
-        .eq('resolved', false);
-
-      const currentRev = currentRevenue?.reduce((sum, inv: any) => 
-        sum + Number(inv.invoice_calculations?.[0]?.client_bill || 0), 0) || 0;
-      const previousRev = previousRevenue?.reduce((sum, inv: any) => 
-        sum + Number(inv.invoice_calculations?.[0]?.client_bill || 0), 0) || 0;
-      const revChange = previousRev > 0 ? ((currentRev - previousRev) / previousRev) * 100 : 0;
-
-      const overdueAmount = overdueInvoices?.reduce((sum, inv: any) => 
-        sum + Number(inv.invoice_calculations?.[0]?.client_bill || 0), 0) || 0;
-
-      setStats({
-        revenue: currentRev,
-        revenueChange: revChange,
-        overdueCount: overdueInvoices?.length || 0,
-        overdueAmount,
-        pendingCount: pendingInvoices?.length || 0,
-        criticalEvents: criticalEvents?.length || 0,
-      });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const loading = statsLoading;
 
   if (roleLoading) {
     return (

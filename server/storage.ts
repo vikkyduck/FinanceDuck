@@ -154,6 +154,7 @@ export interface IStorage {
   
   getInvoices(role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client })[]>;
   getInvoice(id: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client }) | null>;
+  getInvoicesWithCalculations(): Promise<Array<{ id: string; status: string; paymentDate: string | null; adminShare50: string | null; catShare50: string | null; netProfitAdmin: string | null }>>;
   createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice>;
   updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | null>;
   updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>): Promise<InvoiceCalculation | null>;
@@ -678,6 +679,46 @@ export class DatabaseStorage implements IStorage {
       partner: result.partner || undefined,
       client: result.client || undefined,
     };
+  }
+
+  // Get raw invoice data with full calculations for internal use (plan-fact analysis)
+  // Includes ALL invoices with actualPaymentDate set (regardless of status) to match Supabase behavior
+  // Includes netProfitAdmin for fallback calculation when shares are null/zero
+  async getInvoicesWithCalculations(): Promise<Array<{
+    id: string;
+    status: string;
+    paymentDate: string | null;
+    adminShare50: string | null;
+    catShare50: string | null;
+    netProfitAdmin: string | null;
+  }>> {
+    const results = await db
+      .select({
+        id: invoices.id,
+        status: invoices.status,
+        actualPaymentDate: invoices.actualPaymentDate,
+        paymentDate: invoices.paymentDate,
+        adminShare50: invoiceCalculations.adminShare50,
+        catShare50: invoiceCalculations.catShare50,
+        netProfitAdmin: invoiceCalculations.netProfitAdmin,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(or(
+        eq(invoices.status, 'paid'),
+        // Include ANY invoice with actualPaymentDate set (regardless of current status)
+        isNotNull(invoices.actualPaymentDate)
+      ));
+    
+    // Use actualPaymentDate if available, fallback to paymentDate
+    return results.map(r => ({
+      id: r.id,
+      status: r.status,
+      paymentDate: r.actualPaymentDate || r.paymentDate || null,
+      adminShare50: r.adminShare50,
+      catShare50: r.catShare50,
+      netProfitAdmin: r.netProfitAdmin,
+    }));
   }
 
   async createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice> {

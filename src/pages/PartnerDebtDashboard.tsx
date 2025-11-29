@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, TrendingUp, DollarSign, Calendar, Calculator, FileText } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/invoiceCalculations";
@@ -12,175 +11,77 @@ import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
-interface DebtData {
-  totalDebt: number;
-  agency30Debt: number;
-  commissionBasedDebt: number;
-  totalPaid: number;
-  remainingDebt: number;
-}
-
-interface PaymentHistory {
-  id: string;
-  amount: number;
-  payment_date: string;
-  notes: string | null;
-  invoice_number: string | null;
-}
-
-interface InvoiceDetail {
-  id: string;
-  invoice_number: string;
-  scheme: string;
-  client_bill: number;
-  partner_share: number;
-  admin_share: number;
-  amount_to_admin: number;
-  admin_expenses: number;
+interface DebtDetailsResponse {
+  summary: {
+    totalDebt: number;
+    totalPaid: number;
+    remainingDebt: number;
+    invoiceCount: number;
+  };
+  invoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    scheme: string;
+    clientBill: number;
+    partnerCommission: number;
+    amountToAdmin: number;
+    expensesByPartner: number;
+    expensesByAdmin: number;
+  }>;
+  payments: Array<{
+    id: string;
+    amount: string;
+    paymentDate: string;
+    notes: string | null;
+    invoiceNumber: string | null;
+  }>;
 }
 
 const COLORS = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
 export default function PartnerDebtDashboard() {
   const { partnerId, loading: roleLoading } = useUserRole();
-  const [loading, setLoading] = useState(true);
-  const [debtData, setDebtData] = useState<DebtData | null>(null);
-  const [payments, setPayments] = useState<PaymentHistory[]>([]);
-  const [invoices, setInvoices] = useState<InvoiceDetail[]>([]);
 
-  useEffect(() => {
-    if (partnerId) {
-      fetchData();
-    }
-  }, [partnerId]);
+  // Fetch debt details from Express API - include partnerId in queryKey for proper refetch
+  const { data: debtResponse, isLoading: debtLoading } = useQuery<DebtDetailsResponse>({
+    queryKey: ['/api/my-debt', partnerId],
+    enabled: !!partnerId,
+  });
 
-  const fetchData = async () => {
-    if (!partnerId) return;
-    
-    setLoading(true);
-    try {
-      // Fetch invoices and calculations with full details
-      const { data: invoicesData, error: invoicesError } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          scheme,
-          status,
-          invoice_number,
-          invoice_calculations(
-            amount_to_admin,
-            client_bill,
-            partner_share_from_margin,
-            admin_share_from_margin,
-            commission_amount
-          )
-        `)
-        .eq("partner_id", partnerId)
-        .eq("status", "paid")
-        .order("invoice_number");
+  const loading = debtLoading;
 
-      if (invoicesError) throw invoicesError;
+  // Calculate derived data from API response
+  const debtData = debtResponse?.summary ? {
+    totalDebt: debtResponse.summary.totalDebt,
+    agency30Debt: debtResponse.invoices
+      .filter(inv => inv.scheme === 'agency_30')
+      .reduce((sum, inv) => sum + inv.amountToAdmin, 0),
+    commissionBasedDebt: debtResponse.invoices
+      .filter(inv => inv.scheme === 'commission_based')
+      .reduce((sum, inv) => sum + inv.amountToAdmin, 0),
+    totalPaid: debtResponse.summary.totalPaid,
+    remainingDebt: debtResponse.summary.remainingDebt,
+  } : null;
 
-      // Fetch partner payments
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from("partner_payments")
-        .select("id, amount, payment_date, notes, invoice_id")
-        .eq("partner_id", partnerId)
-        .order("payment_date", { ascending: false })
-        .limit(20);
+  const invoices = debtResponse?.invoices.map(inv => ({
+    id: inv.id,
+    invoice_number: inv.invoiceNumber,
+    scheme: inv.scheme === 'agency_30' ? 'Agency 30%' : 
+            inv.scheme === 'commission_based' ? 'Commission-based' : inv.scheme,
+    client_bill: inv.clientBill,
+    partner_share: inv.partnerCommission,
+    admin_share: inv.clientBill - inv.partnerCommission,
+    amount_to_admin: inv.amountToAdmin,
+    admin_expenses: inv.expensesByAdmin,
+  })) || [];
 
-      if (paymentsError) throw paymentsError;
-
-      // Calculate debt by scheme and prepare invoice details
-      let agency30Debt = 0;
-      let commissionBasedDebt = 0;
-      let totalPaid = 0;
-
-      const invoiceDetails: InvoiceDetail[] = [];
-
-      for (const inv of invoicesData || []) {
-        const calc = inv.invoice_calculations?.[0];
-        const amountToAdmin = calc?.amount_to_admin || 0;
-        
-        // Get admin expenses for this invoice
-        const { data: expenses } = await supabase
-          .from("executor_expenses")
-          .select("amount")
-          .eq("invoice_id", inv.id)
-          .eq("is_admin_expense", true);
-        
-        const adminExpenses = expenses?.reduce((sum, exp) => sum + exp.amount, 0) || 0;
-
-        if (inv.scheme === "agency_30") {
-          agency30Debt += amountToAdmin;
-          invoiceDetails.push({
-            id: inv.id,
-            invoice_number: inv.invoice_number,
-            scheme: "Agency 30%",
-            client_bill: calc?.client_bill || 0,
-            partner_share: calc?.partner_share_from_margin || 0,
-            admin_share: calc?.admin_share_from_margin || 0,
-            amount_to_admin: amountToAdmin,
-            admin_expenses: adminExpenses,
-          });
-        } else if (inv.scheme === "commission_based") {
-          commissionBasedDebt += amountToAdmin;
-          invoiceDetails.push({
-            id: inv.id,
-            invoice_number: inv.invoice_number,
-            scheme: "Commission-based",
-            client_bill: calc?.client_bill || 0,
-            partner_share: calc?.commission_amount || 0,
-            admin_share: (calc?.client_bill || 0) - (calc?.commission_amount || 0),
-            amount_to_admin: amountToAdmin,
-            admin_expenses: adminExpenses,
-          });
-        }
-      }
-
-      setInvoices(invoiceDetails);
-
-      paymentsData?.forEach((payment) => {
-        totalPaid += payment.amount;
-      });
-
-      const totalDebt = agency30Debt + commissionBasedDebt;
-      const remainingDebt = totalDebt - totalPaid;
-
-      setDebtData({
-        totalDebt,
-        agency30Debt,
-        commissionBasedDebt,
-        totalPaid,
-        remainingDebt,
-      });
-
-      // Map payments with invoice numbers
-      const mappedPayments: PaymentHistory[] = await Promise.all(
-        (paymentsData || []).map(async (payment) => {
-          let invoiceNumber = null;
-          if (payment.invoice_id) {
-            const { data: invoice } = await supabase
-              .from("invoices")
-              .select("invoice_number")
-              .eq("id", payment.invoice_id)
-              .single();
-            invoiceNumber = invoice?.invoice_number || null;
-          }
-          return {
-            ...payment,
-            invoice_number: invoiceNumber,
-          };
-        })
-      );
-
-      setPayments(mappedPayments);
-    } catch (error: any) {
-      console.error("Error fetching debt data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const payments = debtResponse?.payments.map(p => ({
+    id: p.id,
+    amount: parseFloat(p.amount),
+    payment_date: p.paymentDate,
+    notes: p.notes,
+    invoice_number: p.invoiceNumber,
+  })) || [];
 
   if (roleLoading || loading) {
     return (

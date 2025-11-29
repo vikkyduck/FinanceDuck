@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown, Check, X } from "lucide-react";
 
@@ -22,106 +21,60 @@ interface MonthlyPlanFact {
   catAchieved: boolean;
 }
 
+interface PlanHistoryEntry {
+  id: string;
+  year: number;
+  month: number;
+  plannedAdminShare: string;
+  plannedCatShare: string;
+  actualAdminShare?: number;
+  actualCatShare?: number;
+}
+
+const MONTH_NAMES = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
+];
+
 export const PlanHistoryComparison = () => {
-  const [history, setHistory] = useState<MonthlyPlanFact[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
 
+  // Fetch plans from Express API
+  const { data: plansData, isLoading: loading } = useQuery<PlanHistoryEntry[]>({
+    queryKey: ['/api/financial-plans/history'],
+  });
+
+  // Transform data to the expected format
+  const history: MonthlyPlanFact[] = (plansData || []).map(plan => {
+    const plannedAdmin = parseFloat(plan.plannedAdminShare || "0");
+    const plannedCat = parseFloat(plan.plannedCatShare || "0");
+    const actualAdmin = plan.actualAdminShare || 0;
+    const actualCat = plan.actualCatShare || 0;
+    const adminDiff = plannedAdmin > 0 ? ((actualAdmin - plannedAdmin) / plannedAdmin) * 100 : 0;
+    const catDiff = plannedCat > 0 ? ((actualCat - plannedCat) / plannedCat) * 100 : 0;
+
+    return {
+      year: plan.year,
+      month: plan.month,
+      monthName: `${MONTH_NAMES[plan.month - 1]} ${plan.year}`,
+      plannedAdmin,
+      plannedCat,
+      actualAdmin,
+      actualCat,
+      adminDiff,
+      catDiff,
+      adminAchieved: actualAdmin >= plannedAdmin,
+      catAchieved: actualCat >= plannedCat,
+    };
+  });
+
+  // Auto-select last 3 months on data load
   useEffect(() => {
-    fetchPlanHistory();
-  }, []);
-
-  const fetchPlanHistory = async () => {
-    setLoading(true);
-    try {
-      await ensureSessionContext();
-
-      // Fetch all plans for the last 12 months
-      const currentDate = new Date();
-      const twelveMonthsAgo = new Date();
-      twelveMonthsAgo.setMonth(currentDate.getMonth() - 12);
-
-      const { data: plans } = await supabase
-        .from("monthly_financial_plans")
-        .select("*")
-        .gte('created_at', twelveMonthsAgo.toISOString())
-        .order('year', { ascending: false })
-        .order('month', { ascending: false });
-
-      if (!plans || plans.length === 0) {
-        setHistory([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch actual data for each month with a plan
-      const historyData: MonthlyPlanFact[] = [];
-
-      for (const plan of plans) {
-        const startOfMonth = new Date(plan.year, plan.month - 1, 1).toISOString();
-        const endOfMonth = new Date(plan.year, plan.month, 0, 23, 59, 59).toISOString();
-
-        const { data: invoices } = await supabase
-          .from("invoices")
-          .select(`
-            invoice_calculations (
-              admin_share_50,
-              cat_share_50
-            )
-          `)
-          .gte('payment_date', startOfMonth)
-          .lte('payment_date', endOfMonth)
-          .not('payment_date', 'is', null);
-
-        let actualAdmin = 0;
-        let actualCat = 0;
-
-        invoices?.forEach((invoice: any) => {
-          const calc = invoice.invoice_calculations?.[0];
-          if (calc) {
-            actualAdmin += Number(calc.admin_share_50 || 0);
-            actualCat += Number(calc.cat_share_50 || 0);
-          }
-        });
-
-        const plannedAdmin = Number(plan.planned_admin_share);
-        const plannedCat = Number(plan.planned_cat_share);
-        const adminDiff = plannedAdmin > 0 ? ((actualAdmin - plannedAdmin) / plannedAdmin) * 100 : 0;
-        const catDiff = plannedCat > 0 ? ((actualCat - plannedCat) / plannedCat) * 100 : 0;
-
-        const monthNames = [
-          "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
-          "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
-        ];
-
-        historyData.push({
-          year: plan.year,
-          month: plan.month,
-          monthName: `${monthNames[plan.month - 1]} ${plan.year}`,
-          plannedAdmin,
-          plannedCat,
-          actualAdmin,
-          actualCat,
-          adminDiff,
-          catDiff,
-          adminAchieved: actualAdmin >= plannedAdmin,
-          catAchieved: actualCat >= plannedCat,
-        });
-      }
-
-      setHistory(historyData);
-      
-      // Auto-select last 3 months
-      if (historyData.length > 0) {
-        const lastThree = historyData.slice(0, Math.min(3, historyData.length)).map(h => `${h.year}-${h.month}`);
-        setSelectedMonths(lastThree);
-      }
-    } catch (error) {
-      console.error("Error fetching plan history:", error);
-    } finally {
-      setLoading(false);
+    if (history.length > 0 && selectedMonths.length === 0) {
+      const lastThree = history.slice(0, Math.min(3, history.length)).map(h => `${h.year}-${h.month}`);
+      setSelectedMonths(lastThree);
     }
-  };
+  }, [history.length]);
 
   const toggleMonth = (year: number, month: number) => {
     const key = `${year}-${month}`;

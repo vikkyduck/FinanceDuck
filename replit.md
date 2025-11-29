@@ -80,6 +80,17 @@ Security is implemented through XSS protection via input sanitization and React'
 
 Optimizations include code splitting, TanStack Query for data caching and efficient fetching, and rendering optimizations like skeleton components and debounced inputs. Real-time data synchronization for critical components like signed acts, bonus stats, and payment history is achieved through 30-second polling and visibility-based cache invalidation, automatically refreshing data when the tab regains focus.
 
+### Unified Assistant Bonus System (2025-11-29)
+
+Admin and Assistant dashboards now share the same data source for bonus calculations:
+- **Single API endpoint**: `/api/assistant/stats` provides unified bonus data for both roles
+- **Bonus calculation**: Based on signed acts (executor acts × 1000 ₽ + company acts × 2000 ₽)
+- **Admin-only features**: Payout button via `/api/admin/bonus-payout` and payment history
+- **Components**:
+  - `AssistantBonusCard` - for assistant dashboard (view only)
+  - `AssistantBonusManager` - for admin dashboard (with payout button)
+- Both components display identical bonus data with identical UI layout
+
 # External Dependencies
 
 ## Primary Services

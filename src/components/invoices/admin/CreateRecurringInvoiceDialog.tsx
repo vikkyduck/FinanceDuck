@@ -37,8 +37,12 @@ export function CreateRecurringInvoiceDialog({
     partnerId: "",
     scheme: "agency_30" as "agency_30" | "commission_based" | "partner_10" | "partner_15",
     partnerCommissionRate: "",
+    amount: "",
+    description: "",
     frequency: "monthly",
     dayOfMonth: "1",
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: "",
     notes: "",
   });
 
@@ -55,12 +59,28 @@ export function CreateRecurringInvoiceDialog({
   });
 
   const calculateNextInvoiceDate = () => {
-    const today = new Date();
+    const startDate = new Date(formData.startDate);
     const dayOfMonth = parseInt(formData.dayOfMonth);
-    let nextDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+    const today = new Date();
     
-    if (nextDate <= today) {
-      nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
+    let nextDate = new Date(startDate.getFullYear(), startDate.getMonth(), dayOfMonth);
+    
+    if (nextDate < startDate) {
+      nextDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, dayOfMonth);
+    }
+    
+    while (nextDate < today) {
+      switch (formData.frequency) {
+        case 'monthly':
+          nextDate.setMonth(nextDate.getMonth() + 1);
+          break;
+        case 'quarterly':
+          nextDate.setMonth(nextDate.getMonth() + 3);
+          break;
+        case 'yearly':
+          nextDate.setFullYear(nextDate.getFullYear() + 1);
+          break;
+      }
     }
     
     return nextDate.toISOString().split('T')[0];
@@ -78,8 +98,12 @@ export function CreateRecurringInvoiceDialog({
         partnerCommissionRate: formData.scheme === "commission_based" 
           ? parseFloat(formData.partnerCommissionRate) 
           : null,
+        amount: parseFloat(formData.amount) || 0,
+        description: formData.description || null,
         frequency: formData.frequency,
         dayOfMonth: parseInt(formData.dayOfMonth),
+        startDate: formData.startDate,
+        endDate: formData.endDate || null,
         nextInvoiceDate: calculateNextInvoiceDate(),
         notes: formData.notes || null,
       });
@@ -92,8 +116,12 @@ export function CreateRecurringInvoiceDialog({
         partnerId: "",
         scheme: "agency_30",
         partnerCommissionRate: "",
+        amount: "",
+        description: "",
         frequency: "monthly",
         dayOfMonth: "1",
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: "",
         notes: "",
       });
     } catch (error: any) {
@@ -105,7 +133,7 @@ export function CreateRecurringInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Новое расписание счетов</DialogTitle>
         </DialogHeader>
@@ -142,6 +170,30 @@ export function CreateRecurringInvoiceDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div>
+            <Label>Сумма счёта</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="50000"
+              value={formData.amount}
+              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              required
+              data-testid="input-amount"
+            />
+          </div>
+
+          <div>
+            <Label>Описание услуги</Label>
+            <Input
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Ежемесячное обслуживание"
+              data-testid="input-description"
+            />
           </div>
 
           <div>
@@ -208,6 +260,28 @@ export function CreateRecurringInvoiceDialog({
             />
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Начало</Label>
+              <Input
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                required
+                data-testid="input-start-date"
+              />
+            </div>
+            <div>
+              <Label>Окончание (опц.)</Label>
+              <Input
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                data-testid="input-end-date"
+              />
+            </div>
+          </div>
+
           <div>
             <Label>Примечание</Label>
             <Textarea
@@ -229,7 +303,7 @@ export function CreateRecurringInvoiceDialog({
             </Button>
             <Button 
               type="submit" 
-              disabled={loading || !formData.clientId || !formData.partnerId}
+              disabled={loading || !formData.clientId || !formData.partnerId || !formData.amount}
               data-testid="button-create"
             >
               {loading ? "Создание..." : "Создать"}

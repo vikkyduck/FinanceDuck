@@ -1341,16 +1341,20 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/recurring-invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { clientId, partnerId, scheme, partnerCommissionRate, frequency, dayOfMonth, nextInvoiceDate, notes } = req.body;
+      const { clientId, partnerId, scheme, partnerCommissionRate, amount, description, frequency, dayOfMonth, startDate, endDate, nextInvoiceDate, notes } = req.body;
       
       const created = await storage.createRecurringInvoice({
         clientId,
         partnerId,
         scheme,
         partnerCommissionRate: partnerCommissionRate ? partnerCommissionRate.toString() : null,
+        amount: amount?.toString() || '0',
+        description,
         frequency: frequency || 'monthly',
         dayOfMonth: dayOfMonth?.toString() || '1',
-        nextInvoiceDate,
+        startDate: startDate || new Date().toISOString().split('T')[0],
+        endDate: endDate || null,
+        nextInvoiceDate: nextInvoiceDate || startDate,
         notes,
         createdBy: req.user!.token.id,
       });
@@ -1359,6 +1363,63 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Create recurring invoice error:", error);
       res.status(500).json({ error: "Failed to create recurring invoice" });
+    }
+  });
+
+  app.get("/api/recurring-invoices/due", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const due = await storage.getDueRecurringInvoices();
+      res.json(due);
+    } catch (error) {
+      console.error("Get due recurring invoices error:", error);
+      res.status(500).json({ error: "Failed to get due recurring invoices" });
+    }
+  });
+
+  app.post("/api/recurring-invoices/process", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const result = await storage.processAllDueRecurringInvoices();
+      res.json(result);
+    } catch (error) {
+      console.error("Process recurring invoices error:", error);
+      res.status(500).json({ error: "Failed to process recurring invoices" });
+    }
+  });
+
+  app.post("/api/recurring-invoices/:id/create-draft", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { invoiceDate } = req.body;
+      const invoice = await storage.createDraftFromRecurring(id, invoiceDate);
+      res.status(201).json(invoice);
+    } catch (error: any) {
+      console.error("Create draft from recurring error:", error);
+      res.status(500).json({ error: error.message || "Failed to create draft" });
+    }
+  });
+
+  app.post("/api/recurring-invoices/:id/backdate", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { fromDate } = req.body;
+      if (!fromDate) {
+        return res.status(400).json({ error: "fromDate is required" });
+      }
+      const result = await storage.generateBackdatedInvoices(id, fromDate);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Generate backdated invoices error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate backdated invoices" });
+    }
+  });
+
+  app.get("/api/recurring-invoices/cashflow", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const recurring = await storage.getActiveRecurringInvoicesForCashFlow();
+      res.json(recurring);
+    } catch (error) {
+      console.error("Get recurring for cashflow error:", error);
+      res.status(500).json({ error: "Failed to get recurring invoices for cashflow" });
     }
   });
 

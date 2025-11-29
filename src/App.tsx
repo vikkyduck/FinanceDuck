@@ -19,7 +19,6 @@ import ClientsPage from "./pages/ClientsPage";
 import PartnersPage from "./pages/PartnersPage";
 import AccessCodesPage from "./pages/AccessCodesPage";
 import StatsPage from "./pages/StatsPage";
-import SecurityMonitoring from "./pages/SecurityMonitoring";
 import PartnerDebtDashboard from "./pages/PartnerDebtDashboard";
 
 const queryClient = new QueryClient();
@@ -75,14 +74,6 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute>
               <StatsPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/security" 
-          element={
-            <ProtectedRoute>
-              <SecurityMonitoring />
             </ProtectedRoute>
           } 
         />

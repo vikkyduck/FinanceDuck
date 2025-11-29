@@ -5,9 +5,7 @@ import {
   Key, 
   BarChart3, 
   LogOut, 
-  Shield, 
   Home,
-  AlertCircle,
   TrendingDown
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -120,13 +118,6 @@ export function AppSidebar() {
       groups.push({
         label: "Система",
         items: [
-          { 
-            title: "Безопасность", 
-            url: "/security", 
-            icon: Shield,
-            badge: alertCounts.unresolvedSecurityEvents > 0 ? alertCounts.unresolvedSecurityEvents : undefined,
-            badgeVariant: "destructive" as const
-          },
           { title: "Коды доступа", url: "/access-codes", icon: Key },
         ]
       });
@@ -138,7 +129,7 @@ export function AppSidebar() {
   const menuGroups = getMenuGroups();
   const isActive = (path: string) => location.pathname === path;
   
-  const totalAlerts = alertCounts.overdueInvoices + alertCounts.unresolvedSecurityEvents;
+  const totalAlerts = alertCounts.overdueInvoices;
 
   const getRoleLabel = () => {
     const labels = {

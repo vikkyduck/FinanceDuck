@@ -1341,7 +1341,7 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/recurring-invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { clientId, partnerId, scheme, partnerCommissionRate, amount, description, frequency, dayOfMonth, startDate, endDate, nextInvoiceDate, notes } = req.body;
+      const { clientId, partnerId, scheme, partnerCommissionRate, amount, description, frequency, dayOfMonth, startDate, endDate, nextInvoiceDate, notes, hideFromAssistant } = req.body;
       
       const created = await storage.createRecurringInvoice({
         clientId,
@@ -1356,6 +1356,7 @@ export function registerRoutes(app: Express): void {
         endDate: endDate || null,
         nextInvoiceDate: nextInvoiceDate || startDate,
         notes,
+        hideFromAssistant: hideFromAssistant ?? false,
         createdBy: req.user!.token.id,
       });
       

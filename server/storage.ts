@@ -2380,6 +2380,7 @@ export class DatabaseStorage implements IStorage {
         endDate: data.endDate || null,
         nextInvoiceDate: data.nextInvoiceDate,
         notes: data.notes,
+        hideFromAssistant: data.hideFromAssistant ?? false,
         createdBy: data.createdBy,
       })
       .returning();

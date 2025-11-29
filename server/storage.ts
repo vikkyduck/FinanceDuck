@@ -1269,8 +1269,12 @@ export class DatabaseStorage implements IStorage {
     });
     const withdrawnThisMonth = monthlyPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
     
-    // Total withdrawn (all time)
-    const totalWithdrawn = allPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    // Total withdrawn (this year only - to match yearly profit)
+    const yearlyPayments = allPayments.filter(p => {
+      const paymentDate = new Date(p.paymentDate);
+      return paymentDate >= yearStart;
+    });
+    const totalWithdrawn = yearlyPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
     
     // Leverage ratio
     const leverageRatio = vikaProfit > 0 ? othersProfit / vikaProfit : 0;

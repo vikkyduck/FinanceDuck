@@ -1,44 +1,43 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calculator, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { showSuccess, handleSupabaseError } from "@/lib/errorHandler";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const RecalculateInvoicesButton = () => {
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const handleRecalculate = async () => {
     setIsRecalculating(true);
     try {
-      await ensureSessionContext();
+      const response = await fetch('/api/admin/recalculate-invoices', {
+        method: 'POST',
+        credentials: 'include',
+      });
       
-      const { data, error } = await supabase.rpc('recalculate_all_invoices');
-      
-      if (error) {
-        handleSupabaseError(error, {
-          operation: "Пересчёт счетов",
-          details: { function: 'recalculate_all_invoices' }
-        });
-        return;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to recalculate');
       }
       
-      if (data) {
-        const result = data as { success: boolean; message: string; recalculated_count: number };
-        if (result.success) {
-          showSuccess("Пересчёт завершён", result.message);
-          // Refresh the page to show updated data
-          setTimeout(() => window.location.reload(), 1000);
-        } else {
-          handleSupabaseError(new Error(result.message || "Неизвестная ошибка"), {
-            operation: "Пересчёт счетов"
-          });
-        }
-      }
+      const result = await response.json();
+      
+      toast({
+        title: "Пересчёт завершён",
+        description: result.message || `Пересчитано счетов: ${result.updated || 0}`,
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/financial-summary'] });
+      
     } catch (error: any) {
-      handleSupabaseError(error, {
-        operation: "Пересчёт счетов",
-        details: { error: error.message }
+      toast({
+        title: "Ошибка пересчёта",
+        description: error.message || "Не удалось пересчитать счета",
+        variant: "destructive",
       });
     } finally {
       setIsRecalculating(false);
@@ -51,7 +50,8 @@ export const RecalculateInvoicesButton = () => {
       size="lg"
       onClick={handleRecalculate}
       disabled={isRecalculating}
-      className="border-primary/20 hover:bg-primary/5"
+      className="border-primary/20"
+      data-testid="button-recalculate"
     >
       {isRecalculating ? (
         <Loader2 className="h-5 w-5 mr-2 animate-spin" />

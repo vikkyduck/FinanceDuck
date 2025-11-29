@@ -10,6 +10,7 @@ import { InvoicesList } from "./assistant/InvoicesList";
 import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
 import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
 import { AssistantBonusCard } from "./assistant/AssistantBonusCard";
+import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
@@ -57,6 +58,8 @@ export const AssistantDashboard = () => {
         </div>
 
         <AssistantBonusCard />
+
+        <DoNotSpendDashboard />
 
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4 flex flex-row items-center justify-between gap-4">

@@ -8,7 +8,7 @@ import { PartnerTerms } from "./partner/PartnerTerms";
 import { OverduePaymentsAlert } from "./shared/OverduePaymentsAlert";
 import { PartnerClientStats } from "./partner/PartnerClientStats";
 import { PartnerDocumentRiskLight } from "./partner/PartnerDocumentRiskLight";
-import { Agency30ClientFundsTracker } from "./partner/Agency30ClientFundsTracker";
+import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 import { PartnerPaymentHistory } from "./partner/PartnerPaymentHistory";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
@@ -47,10 +47,9 @@ export const PartnerDashboard = () => {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <PartnerClientStats />
-          <Agency30ClientFundsTracker />
-        </div>
+        <PartnerClientStats />
+        
+        <DoNotSpendDashboard />
 
         <PartnerPaymentHistory showTitle={true} />
 

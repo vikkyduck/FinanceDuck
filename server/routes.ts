@@ -1301,9 +1301,12 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/do-not-spend", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/do-not-spend", authMiddleware, requireRole("admin", "assistant", "partner"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const data = await storage.getDoNotSpendData();
+      const role = req.user?.role;
+      const partnerId = req.user?.partnerId;
+      
+      const data = await storage.getDoNotSpendData(role === 'partner' ? partnerId : undefined);
       res.json(data);
     } catch (error) {
       console.error("Get do-not-spend error:", error);

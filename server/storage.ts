@@ -1326,14 +1326,32 @@ export class DatabaseStorage implements IStorage {
       });
   }
 
-  async getDoNotSpendData(): Promise<{
+  async getDoNotSpendData(partnerId?: string): Promise<{
     clientId: string;
     clientName: string;
     totalBudget: number;
     totalSpent: number;
     remaining: number;
     invoiceCount: number;
+    invoices: {
+      id: string;
+      number: string;
+      description: string | null;
+      budget: number;
+      spent: number;
+      remaining: number;
+      createdAt: Date | null;
+    }[];
   }[]> {
+    const conditions = [
+      eq(invoices.scheme, 'agency_30'),
+      inArray(invoices.status, ['paid', 'sent'])
+    ];
+    
+    if (partnerId) {
+      conditions.push(eq(invoices.partnerId, partnerId));
+    }
+    
     const agency30Invoices = await db
       .select({
         invoice: invoices,
@@ -1343,10 +1361,7 @@ export class DatabaseStorage implements IStorage {
       .from(invoices)
       .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
       .leftJoin(clients, eq(invoices.clientId, clients.id))
-      .where(and(
-        eq(invoices.scheme, 'agency_30'),
-        inArray(invoices.status, ['paid', 'sent'])
-      ));
+      .where(and(...conditions));
 
     const clientMap = new Map<string, {
       clientId: string;
@@ -1355,6 +1370,15 @@ export class DatabaseStorage implements IStorage {
       totalSpent: number;
       remaining: number;
       invoiceCount: number;
+      invoices: {
+        id: string;
+        number: string;
+        description: string | null;
+        budget: number;
+        spent: number;
+        remaining: number;
+        createdAt: Date | null;
+      }[];
     }>();
 
     for (const row of agency30Invoices) {
@@ -1367,6 +1391,7 @@ export class DatabaseStorage implements IStorage {
       
       const clientBase = clientBill * 0.7;
       const doNotSpendBudget = clientBase;
+      const invoiceRemaining = Math.max(0, doNotSpendBudget - executorExpenses);
       
       if (!clientMap.has(clientId)) {
         clientMap.set(clientId, {
@@ -1376,6 +1401,7 @@ export class DatabaseStorage implements IStorage {
           totalSpent: 0,
           remaining: 0,
           invoiceCount: 0,
+          invoices: [],
         });
       }
 
@@ -1383,12 +1409,25 @@ export class DatabaseStorage implements IStorage {
       summary.totalBudget += doNotSpendBudget;
       summary.totalSpent += executorExpenses;
       summary.invoiceCount += 1;
+      summary.invoices.push({
+        id: row.invoice.id,
+        number: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+        description: row.invoice.description,
+        budget: doNotSpendBudget,
+        spent: executorExpenses,
+        remaining: invoiceRemaining,
+        createdAt: row.invoice.createdAt,
+      });
     }
 
     return Array.from(clientMap.values())
       .map(s => ({
         ...s,
         remaining: Math.max(0, s.totalBudget - s.totalSpent),
+        invoices: s.invoices.sort((a, b) => {
+          if (!a.createdAt || !b.createdAt) return 0;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }),
       }))
       .filter(s => s.totalBudget > 0)
       .sort((a, b) => b.remaining - a.remaining);

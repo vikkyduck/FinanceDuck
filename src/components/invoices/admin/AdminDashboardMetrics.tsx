@@ -24,6 +24,7 @@ interface DashboardStats {
   monthlyCashFlow: {
     received: number;
     expected: number;
+    recurring?: number;
   };
   monthlyProfit: number;
   ownerShares: {
@@ -40,6 +41,10 @@ interface DashboardStats {
     othersProfit: number;
     vikaProfit: number;
     ratio: number;
+  };
+  recurringExpected?: {
+    monthlyAmount: number;
+    yearlyTotal: number;
   };
   selectedYear: number;
   selectedMonth: number;
@@ -213,11 +218,19 @@ export const AdminDashboardMetrics = () => {
                 {formatCurrency(stats.monthlyCashFlow.expected)}
               </span>
             </div>
+            {(stats.monthlyCashFlow.recurring || 0) > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Recurring</span>
+                <span className="font-semibold text-blue-600" data-testid="text-cashflow-recurring">
+                  {formatCurrency(stats.monthlyCashFlow.recurring || 0)}
+                </span>
+              </div>
+            )}
             <div className="pt-2 border-t">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Итого</span>
                 <span className="font-bold" data-testid="text-cashflow-total">
-                  {formatCurrency(stats.monthlyCashFlow.received + stats.monthlyCashFlow.expected)}
+                  {formatCurrency(stats.monthlyCashFlow.received + stats.monthlyCashFlow.expected + (stats.monthlyCashFlow.recurring || 0))}
                 </span>
               </div>
             </div>

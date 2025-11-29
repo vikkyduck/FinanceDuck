@@ -255,6 +255,7 @@ export interface ForecastData {
   yearNum: number;
   expectedAmount: number;
   receivedAmount: number;
+  recurringAmount?: number;
 }
 
 export interface OverdueInvoice {
@@ -306,6 +307,8 @@ export interface DashboardStats {
   totalNetProfit?: number;
   partnerDebt?: number;
   clientRemaining?: number;
+  recurringExpectedMonthly?: number;
+  recurringExpectedYearly?: number;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1012,6 +1015,11 @@ export class DatabaseStorage implements IStorage {
       stats.totalAdminShare = totalAdminShare;
       stats.totalNetProfit = totalNetProfit;
       stats.clientRemaining = clientRemaining;
+      
+      // Calculate recurring expected amounts for admin
+      const recurringStats = await this.getRecurringExpectedAmounts();
+      stats.recurringExpectedMonthly = recurringStats.monthly;
+      stats.recurringExpectedYearly = recurringStats.yearly;
     } else if (role === 'partner') {
       stats.totalPartnerCommission = totalPartnerCommission;
       stats.partnerDebt = partnerDebt;
@@ -1021,6 +1029,100 @@ export class DatabaseStorage implements IStorage {
     }
     
     return stats;
+  }
+  
+  async getRecurringExpectedAmounts(): Promise<{ monthly: number; yearly: number }> {
+    const activeRecurring = await db
+      .select()
+      .from(recurringInvoices)
+      .where(eq(recurringInvoices.isActive, true));
+    
+    let monthlyTotal = 0;
+    let yearlyTotal = 0;
+    const now = new Date();
+    const yearEnd = new Date(now.getFullYear(), 11, 31);
+    
+    for (const recurring of activeRecurring) {
+      const amount = parseFloat(recurring.amount || "0");
+      if (amount <= 0) continue;
+      
+      const scheme = recurring.scheme as InvoiceScheme;
+      const partnerCommissionRate = recurring.partnerCommissionRate 
+        ? parseFloat(recurring.partnerCommissionRate) 
+        : undefined;
+      
+      // Calculate expected admin profit
+      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0);
+      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      
+      if (expectedProfit <= 0) continue;
+      
+      const frequency = recurring.frequency as 'monthly' | 'quarterly' | 'yearly';
+      const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
+      
+      // Calculate monthly expected (for next month)
+      if (!endDateValue || endDateValue >= now) {
+        switch (frequency) {
+          case 'monthly':
+            monthlyTotal += expectedProfit;
+            break;
+          case 'quarterly':
+            monthlyTotal += expectedProfit / 3;
+            break;
+          case 'yearly':
+            monthlyTotal += expectedProfit / 12;
+            break;
+        }
+      }
+      
+      // Calculate yearly expected (remaining occurrences this year)
+      const dayOfMonth = parseInt(recurring.dayOfMonth || "1");
+      let checkDate = recurring.nextInvoiceDate 
+        ? new Date(recurring.nextInvoiceDate) 
+        : new Date(now.getFullYear(), now.getMonth(), dayOfMonth);
+      
+      if (checkDate < now) {
+        switch (frequency) {
+          case 'monthly':
+            checkDate = new Date(now.getFullYear(), now.getMonth() + 1, dayOfMonth);
+            break;
+          case 'quarterly':
+            checkDate.setMonth(checkDate.getMonth() + 3);
+            break;
+          case 'yearly':
+            checkDate.setFullYear(checkDate.getFullYear() + 1);
+            break;
+        }
+      }
+      
+      let iterations = 0;
+      const maxIterations = 50;
+      
+      while (checkDate <= yearEnd && iterations < maxIterations) {
+        iterations++;
+        
+        if (endDateValue && checkDate > endDateValue) break;
+        
+        yearlyTotal += expectedProfit;
+        
+        const nextYear = checkDate.getFullYear();
+        const nextMonth = checkDate.getMonth();
+        
+        switch (frequency) {
+          case 'monthly':
+            checkDate = new Date(nextYear, nextMonth + 1, dayOfMonth);
+            break;
+          case 'quarterly':
+            checkDate = new Date(nextYear, nextMonth + 3, dayOfMonth);
+            break;
+          case 'yearly':
+            checkDate = new Date(nextYear + 1, nextMonth, dayOfMonth);
+            break;
+        }
+      }
+    }
+    
+    return { monthly: monthlyTotal, yearly: yearlyTotal };
   }
 
   async getPartnerDebtSummaries(): Promise<{
@@ -1341,6 +1443,9 @@ export class DatabaseStorage implements IStorage {
     const yearlyOwnerShare = yearlyProfit / 2;
     const monthlyOwnerShare = monthlyProfit / 2;
     
+    // Get recurring expected for selected month
+    const recurringStats = await this.getRecurringExpectedForMonth(selectedYear, selectedMonth);
+    
     return {
       yearlySummary: {
         totalRevenue: yearlyRevenue,
@@ -1350,6 +1455,7 @@ export class DatabaseStorage implements IStorage {
       monthlyCashFlow: {
         received: monthlyReceived,
         expected: monthlyExpected,
+        recurring: recurringStats.monthlyAmount,
       },
       monthlyProfit,
       ownerShares: {
@@ -1367,10 +1473,118 @@ export class DatabaseStorage implements IStorage {
         vikaProfit: monthlyVikaProfit,
         ratio: leverageRatio,
       },
+      recurringExpected: recurringStats,
       selectedYear,
       selectedMonth,
       availableYears,
     };
+  }
+  
+  async getRecurringExpectedForMonth(year: number, month: number): Promise<{ monthlyAmount: number; yearlyTotal: number }> {
+    const activeRecurring = await db
+      .select()
+      .from(recurringInvoices)
+      .where(eq(recurringInvoices.isActive, true));
+    
+    let monthlyAmount = 0;
+    let yearlyTotal = 0;
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31);
+    const now = new Date();
+    
+    // Helper to advance date by frequency
+    const advanceByFrequency = (date: Date, freq: 'monthly' | 'quarterly' | 'yearly', day: number): Date => {
+      switch (freq) {
+        case 'monthly':
+          return new Date(date.getFullYear(), date.getMonth() + 1, day);
+        case 'quarterly':
+          return new Date(date.getFullYear(), date.getMonth() + 3, day);
+        case 'yearly':
+          return new Date(date.getFullYear() + 1, date.getMonth(), day);
+      }
+    };
+    
+    // Generator: yields all occurrences in [rangeStart, rangeEnd]
+    // CRITICAL: Always iterate from scheduleStart anchor to preserve frequency alignment
+    const generateOccurrences = function*(
+      scheduleStart: Date,
+      frequency: 'monthly' | 'quarterly' | 'yearly',
+      dayOfMonth: number,
+      rangeStart: Date,
+      rangeEnd: Date,
+      scheduleEnd: Date | null
+    ): Generator<Date> {
+      // ALWAYS start from schedule anchor to preserve frequency alignment
+      // e.g., quarterly starting May 10 → May, Aug, Nov, Feb, May...
+      let cursor = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth(), dayOfMonth);
+      
+      // If cursor is before scheduleStart, set to scheduleStart's month
+      if (cursor < scheduleStart) {
+        cursor = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth(), dayOfMonth);
+      }
+      
+      let iterations = 0;
+      while (cursor <= rangeEnd && iterations < 500) {
+        iterations++;
+        
+        // Stop if past schedule end
+        if (scheduleEnd && cursor > scheduleEnd) break;
+        
+        // Yield occurrence only if:
+        // 1. cursor >= scheduleStart (schedule has begun)
+        // 2. cursor >= rangeStart (within query range)
+        // 3. cursor <= rangeEnd (within query range)
+        if (cursor >= scheduleStart && cursor >= rangeStart && cursor <= rangeEnd) {
+          yield cursor;
+        }
+        
+        cursor = advanceByFrequency(cursor, frequency, dayOfMonth);
+      }
+    };
+    
+    for (const recurring of activeRecurring) {
+      const amount = parseFloat(recurring.amount || "0");
+      if (amount <= 0) continue;
+      
+      const scheme = recurring.scheme as InvoiceScheme;
+      const partnerCommissionRate = recurring.partnerCommissionRate 
+        ? parseFloat(recurring.partnerCommissionRate) 
+        : undefined;
+      
+      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0);
+      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      
+      if (expectedProfit <= 0) continue;
+      
+      const dayOfMonth = parseInt(recurring.dayOfMonth || "1");
+      const frequency = recurring.frequency as 'monthly' | 'quarterly' | 'yearly';
+      const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
+      const startDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
+      
+      // Check if schedule is active for this year
+      if (startDate > yearEnd) continue;
+      if (endDateValue && endDateValue < yearStart) continue;
+      
+      // For current year, count from now; for other years, count from yearStart
+      const countFromDate = year === now.getFullYear() 
+        ? (now > yearStart ? now : yearStart) 
+        : yearStart;
+      
+      // 1. Calculate monthlyAmount - occurrences in selected month that are >= countFromDate
+      const monthRangeStart = monthStart > countFromDate ? monthStart : countFromDate;
+      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, monthRangeStart, monthEnd, endDateValue)) {
+        monthlyAmount += expectedProfit;
+      }
+      
+      // 2. Calculate yearlyTotal - all future occurrences from countFromDate to yearEnd
+      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, countFromDate, yearEnd, endDateValue)) {
+        yearlyTotal += expectedProfit;
+      }
+    }
+    
+    return { monthlyAmount, yearlyTotal };
   }
   
   async getAdminMonthlyData(year: number): Promise<MonthlyData[]> {
@@ -1459,6 +1673,7 @@ export class DatabaseStorage implements IStorage {
         yearNum: targetYear,
         expectedAmount: 0,
         receivedAmount: 0,
+        recurringAmount: 0,
       });
     }
     
@@ -1497,6 +1712,94 @@ export class DatabaseStorage implements IStorage {
         forecastData[forecastIndex].receivedAmount += profit;
       } else if (row.invoice.status === 'sent') {
         forecastData[forecastIndex].expectedAmount += profit;
+      }
+    }
+    
+    // Add recurring invoices expected amounts to forecast
+    const activeRecurring = await db
+      .select()
+      .from(recurringInvoices)
+      .where(eq(recurringInvoices.isActive, true));
+    
+    for (const recurring of activeRecurring) {
+      const amount = parseFloat(recurring.amount || "0");
+      if (amount <= 0) continue;
+      
+      const scheme = recurring.scheme as InvoiceScheme;
+      const partnerCommissionRate = recurring.partnerCommissionRate 
+        ? parseFloat(recurring.partnerCommissionRate) 
+        : undefined;
+      
+      // Calculate expected admin profit for this recurring invoice
+      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0);
+      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      
+      if (expectedProfit <= 0) continue;
+      
+      // Validate dates before processing
+      const startDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
+      const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
+      const nextInvoiceDateValue = recurring.nextInvoiceDate 
+        ? new Date(recurring.nextInvoiceDate) 
+        : null;
+      
+      // Calculate end of forecast period
+      const lastForecast = forecastData[forecastData.length - 1];
+      const forecastEndDate = new Date(lastForecast.yearNum, lastForecast.monthIndex, 0);
+      
+      // Start from nextInvoiceDate if valid, otherwise calculate from startDate
+      const dayOfMonth = parseInt(recurring.dayOfMonth || "1");
+      const frequency = recurring.frequency as 'monthly' | 'quarterly' | 'yearly';
+      
+      let checkDate: Date;
+      if (nextInvoiceDateValue && !isNaN(nextInvoiceDateValue.getTime())) {
+        checkDate = new Date(nextInvoiceDateValue.getTime());
+      } else {
+        // Calculate first occurrence from startDate
+        checkDate = new Date(startDate.getFullYear(), startDate.getMonth(), dayOfMonth);
+        if (checkDate < startDate) {
+          checkDate.setMonth(checkDate.getMonth() + 1);
+        }
+      }
+      
+      // Iterate through forecast periods
+      let iterations = 0;
+      const maxIterations = 100; // Safety limit
+      
+      while (checkDate <= forecastEndDate && iterations < maxIterations) {
+        iterations++;
+        
+        // Check if within endDate (if set)
+        if (endDateValue && checkDate > endDateValue) break;
+        
+        const checkMonth = checkDate.getMonth();
+        const checkYear = checkDate.getFullYear();
+        
+        // Find matching forecast period
+        const forecastIndex = forecastData.findIndex(f => 
+          f.monthIndex === checkMonth + 1 && f.yearNum === checkYear
+        );
+        
+        if (forecastIndex !== -1) {
+          forecastData[forecastIndex].recurringAmount = 
+            (forecastData[forecastIndex].recurringAmount || 0) + expectedProfit;
+        }
+        
+        // Move to next occurrence - create new Date to avoid mutation issues
+        const nextYear = checkDate.getFullYear();
+        const nextMonth = checkDate.getMonth();
+        
+        switch (frequency) {
+          case 'monthly':
+            checkDate = new Date(nextYear, nextMonth + 1, dayOfMonth);
+            break;
+          case 'quarterly':
+            checkDate = new Date(nextYear, nextMonth + 3, dayOfMonth);
+            break;
+          case 'yearly':
+            checkDate = new Date(nextYear + 1, nextMonth, dayOfMonth);
+            break;
+        }
       }
     }
     

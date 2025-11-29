@@ -24,12 +24,15 @@ interface ForecastData {
   yearNum: number;
   expectedAmount: number;
   receivedAmount: number;
+  recurringAmount?: number;
 }
 
 interface MonthlyForecast {
   month: string;
   expectedIncome: number;
   expectedExpenses: number;
+  recurringIncome: number;
+  totalExpected: number;
   netFlow: number;
   cumulativeBalance: number;
 }
@@ -64,13 +67,17 @@ export const AdminCashFlowForecast = () => {
   const loading = loadingForecast || loadingStats;
 
   const forecast: MonthlyForecast[] = (forecastData || []).map(f => {
+    const recurringIncome = f.recurringAmount || 0;
     const expectedIncome = f.expectedAmount + f.receivedAmount;
-    const expectedExpenses = expectedIncome * 0.3;
-    const netFlow = expectedIncome - expectedExpenses;
+    const totalExpected = expectedIncome + recurringIncome;
+    const expectedExpenses = totalExpected * 0.3;
+    const netFlow = totalExpected - expectedExpenses;
     return {
       month: f.monthName,
       expectedIncome,
       expectedExpenses,
+      recurringIncome,
+      totalExpected,
       netFlow,
       cumulativeBalance: 0,
     };
@@ -121,7 +128,7 @@ export const AdminCashFlowForecast = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                 <DollarSign className="h-4 w-4" />
@@ -140,7 +147,21 @@ export const AdminCashFlowForecast = () => {
               <p className="text-2xl font-bold text-green-600 dark:text-green-400">
                 {formatCurrency(
                   forecast.length > 0 
-                    ? forecast.reduce((sum, m) => sum + m.expectedIncome, 0) / forecast.length
+                    ? forecast.reduce((sum, m) => sum + m.totalExpected, 0) / forecast.length
+                    : 0
+                )}
+              </p>
+            </div>
+            
+            <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                <Calendar className="h-4 w-4" />
+                Recurring/мес
+              </div>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {formatCurrency(
+                  forecast.length > 0 
+                    ? forecast.reduce((sum, m) => sum + m.recurringIncome, 0) / forecast.length
                     : 0
                 )}
               </p>
@@ -206,11 +227,23 @@ export const AdminCashFlowForecast = () => {
                 <Area
                   type="monotone"
                   dataKey="expectedIncome"
-                  name="Ожидаемый приход"
+                  name="Разовые счета"
                   fill="hsl(var(--chart-2))"
                   fillOpacity={0.3}
                   stroke="hsl(var(--chart-2))"
                   strokeWidth={2}
+                  stackId="income"
+                />
+                
+                <Area
+                  type="monotone"
+                  dataKey="recurringIncome"
+                  name="Регулярные счета"
+                  fill="hsl(var(--chart-4))"
+                  fillOpacity={0.5}
+                  stroke="hsl(var(--chart-4))"
+                  strokeWidth={2}
+                  stackId="income"
                 />
                 
                 <Area
@@ -259,6 +292,11 @@ export const AdminCashFlowForecast = () => {
                       <span className="text-green-600 dark:text-green-400">
                         +{formatCurrency(month.expectedIncome)}
                       </span>
+                      {month.recurringIncome > 0 && (
+                        <span className="text-blue-600 dark:text-blue-400">
+                          +{formatCurrency(month.recurringIncome)} (recurring)
+                        </span>
+                      )}
                       <span className="text-orange-600 dark:text-orange-400">
                         -{formatCurrency(month.expectedExpenses)}
                       </span>

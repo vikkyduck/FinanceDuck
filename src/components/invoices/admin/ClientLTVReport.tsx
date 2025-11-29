@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { querySupabase, ensureSessionContext } from "@/lib/supabaseHelpers";
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { TrendingUp, Users, DollarSign, AlertCircle } from "lucide-react";
+import { TrendingUp, Users, AlertCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -25,90 +26,15 @@ interface ClientLTV {
 }
 
 export const ClientLTVReport = () => {
-  const [clients, setClients] = useState<ClientLTV[]>([]);
-  const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'total_billed' | 'total_paid' | 'outstanding_debt'>('total_billed');
 
-  const fetchClientLTV = async () => {
-    try {
-      setLoading(true);
-      await ensureSessionContext();
+  const { data: clients = [], isLoading, error } = useQuery<ClientLTV[]>({
+    queryKey: ["/api/admin/client-ltv"],
+    queryFn: () => apiGet<ClientLTV[]>("/admin/client-ltv"),
+    retry: 1,
+  });
 
-      // Получаем все счета с расчетами
-      const invoices = await querySupabase<any>(
-        'invoices',
-        '*, clients!inner(name), invoice_calculations!inner(client_bill)'
-      );
-
-      if (!invoices) {
-        setClients([]);
-        return;
-      }
-
-      // Группируем по клиентам
-      const clientMap = new Map<string, ClientLTV>();
-
-      invoices.forEach((invoice) => {
-        const clientId = invoice.client_id;
-        const clientName = invoice.clients?.name || 'Неизвестный клиент';
-        const clientBill = invoice.invoice_calculations?.[0]?.client_bill || 0;
-        const isPaid = invoice.status === 'paid';
-
-        if (!clientMap.has(clientId)) {
-          clientMap.set(clientId, {
-            client_id: clientId,
-            client_name: clientName,
-            total_invoices: 0,
-            total_billed: 0,
-            total_paid: 0,
-            outstanding_debt: 0,
-            payment_rate: 0,
-          });
-        }
-
-        const client = clientMap.get(clientId)!;
-        client.total_invoices += 1;
-        client.total_billed += clientBill;
-
-        if (isPaid) {
-          client.total_paid += clientBill;
-        } else if (invoice.status === 'sent') {
-          client.outstanding_debt += clientBill;
-        }
-      });
-
-      // Рассчитываем payment rate
-      const clientsArray = Array.from(clientMap.values()).map(client => ({
-        ...client,
-        payment_rate: client.total_billed > 0 
-          ? (client.total_paid / client.total_billed) * 100 
-          : 0,
-      }));
-
-      setClients(clientsArray);
-    } catch (error) {
-      console.error('Error fetching client LTV:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchClientLTV();
-  }, []);
-
-  const sortedClients = [...clients].sort((a, b) => b[sortBy] - a[sortBy]);
-
-  const totals = clients.reduce(
-    (acc, client) => ({
-      total_billed: acc.total_billed + client.total_billed,
-      total_paid: acc.total_paid + client.total_paid,
-      outstanding_debt: acc.outstanding_debt + client.outstanding_debt,
-    }),
-    { total_billed: 0, total_paid: 0, outstanding_debt: 0 }
-  );
-
-  if (loading) {
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -122,10 +48,40 @@ export const ClientLTVReport = () => {
     );
   }
 
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-muted-foreground" />
+            LTV Драконов (Клиентов)
+          </CardTitle>
+          <CardDescription>Данные недоступны</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Не удалось загрузить данные LTV. Попробуйте обновить страницу.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const sortedClients = [...clients].sort((a, b) => b[sortBy] - a[sortBy]);
+
+  const totals = clients.reduce(
+    (acc, client) => ({
+      total_billed: acc.total_billed + client.total_billed,
+      total_paid: acc.total_paid + client.total_paid,
+      outstanding_debt: acc.outstanding_debt + client.outstanding_debt,
+    }),
+    { total_billed: 0, total_paid: 0, outstanding_debt: 0 }
+  );
+
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
@@ -135,7 +91,7 @@ export const ClientLTVReport = () => {
               Пожизненная ценность каждого клиента
             </CardDescription>
           </div>
-          <div className="flex gap-4 text-sm">
+          <div className="flex gap-4 text-sm flex-wrap">
             <div className="text-center">
               <div className="text-muted-foreground">Всего выставлено</div>
               <div className="text-lg font-semibold">{formatCurrency(totals.total_billed)}</div>
@@ -214,7 +170,7 @@ export const ClientLTVReport = () => {
                           {formatCurrency(client.outstanding_debt)}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">

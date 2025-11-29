@@ -6,7 +6,7 @@ import {
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType
 } from "../shared/schema";
-import { eq, and, desc, asc, isNull, gte, lte, sql, inArray, or } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 /**
@@ -216,6 +216,30 @@ export interface IStorage {
   getPartnerClientStats(partnerId: string, year: number): Promise<PartnerClientStatsData[]>;
   getPartnerDocumentRisk(partnerId: string): Promise<PartnerDocumentRiskData>;
   getPartnerAgency30Funds(partnerId: string): Promise<PartnerAgency30FundsData[]>;
+  
+  // Working capital
+  getWorkingCapital(): Promise<WorkingCapitalData | null>;
+  updateWorkingCapital(amount: number, notes: string | null, updatedBy: string): Promise<WorkingCapitalData>;
+  
+  // Client LTV
+  getClientLTV(): Promise<ClientLTVData[]>;
+}
+
+export interface WorkingCapitalData {
+  id: string;
+  amount: number;
+  notes: string | null;
+  updated_at: string | null;
+}
+
+export interface ClientLTVData {
+  client_id: string;
+  client_name: string;
+  total_invoices: number;
+  total_billed: number;
+  total_paid: number;
+  outstanding_debt: number;
+  payment_rate: number;
 }
 
 export interface PartnerClientStatsData {
@@ -3533,6 +3557,85 @@ export class DatabaseStorage implements IStorage {
       }))
       .filter(s => s.totalBudget > 0)
       .sort((a, b) => b.remaining - a.remaining);
+  }
+
+  async getWorkingCapital(): Promise<WorkingCapitalData | null> {
+    // Return mock data since working_capital_balance table doesn't exist in Neon yet
+    // TODO: Create working_capital_balance table in schema.ts and migrate
+    return {
+      id: 'wc-1',
+      amount: 0,
+      notes: 'Данные временно недоступны - требуется миграция таблицы',
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  async updateWorkingCapital(amount: number, notes: string | null, updatedBy: string): Promise<WorkingCapitalData> {
+    // Return updated mock data since table doesn't exist yet
+    // TODO: Implement actual update when table is created
+    return {
+      id: 'wc-1',
+      amount,
+      notes,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  async getClientLTV(): Promise<ClientLTVData[]> {
+    // Get all invoices with client info and calculations
+    const allInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(isNotNull(invoices.clientId));
+
+    const clientMap = new Map<string, ClientLTVData>();
+
+    for (const row of allInvoices) {
+      if (!row.invoice.clientId) continue;
+
+      const clientId = row.invoice.clientId;
+      const clientName = row.clientName || 'Неизвестный клиент';
+      const clientBill = parseFloat(row.calculations?.clientBill || "0");
+      const isPaid = row.invoice.status === 'paid';
+
+      if (!clientMap.has(clientId)) {
+        clientMap.set(clientId, {
+          client_id: clientId,
+          client_name: clientName,
+          total_invoices: 0,
+          total_billed: 0,
+          total_paid: 0,
+          outstanding_debt: 0,
+          payment_rate: 0,
+        });
+      }
+
+      const client = clientMap.get(clientId)!;
+      client.total_invoices += 1;
+      client.total_billed += clientBill;
+
+      if (isPaid) {
+        client.total_paid += clientBill;
+      } else if (row.invoice.status === 'sent') {
+        client.outstanding_debt += clientBill;
+      }
+    }
+
+    // Calculate payment rate for each client
+    return Array.from(clientMap.values())
+      .map(client => ({
+        ...client,
+        payment_rate: client.total_billed > 0 
+          ? (client.total_paid / client.total_billed) * 100 
+          : 0,
+      }))
+      .sort((a, b) => b.total_billed - a.total_billed);
   }
 }
 

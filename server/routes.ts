@@ -784,6 +784,40 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Admin: Working capital balance
+  app.get("/api/admin/working-capital", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getWorkingCapital();
+      res.json(data);
+    } catch (error) {
+      console.error("Get working capital error:", error);
+      res.status(500).json({ error: "Failed to get working capital" });
+    }
+  });
+
+  app.patch("/api/admin/working-capital", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { amount, notes } = req.body;
+      const updatedBy = req.user!.token.id;
+      const data = await storage.updateWorkingCapital(amount, notes, updatedBy);
+      res.json(data);
+    } catch (error) {
+      console.error("Update working capital error:", error);
+      res.status(500).json({ error: "Failed to update working capital" });
+    }
+  });
+
+  // Admin: Client LTV report
+  app.get("/api/admin/client-ltv", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getClientLTV();
+      res.json(data);
+    } catch (error) {
+      console.error("Get client LTV error:", error);
+      res.status(500).json({ error: "Failed to get client LTV" });
+    }
+  });
+
   app.get("/api/admin/plan-fact", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const year = parseInt(req.query.year as string) || new Date().getFullYear();

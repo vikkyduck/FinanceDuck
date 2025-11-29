@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Calculator, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { apiPost } from "@/lib/api";
 
 export const RecalculateInvoicesButton = () => {
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -12,17 +13,9 @@ export const RecalculateInvoicesButton = () => {
   const handleRecalculate = async () => {
     setIsRecalculating(true);
     try {
-      const response = await fetch('/api/admin/recalculate-invoices', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to recalculate');
-      }
-      
-      const result = await response.json();
+      const result = await apiPost<{ success: boolean; message: string; updated: number; errors: number }>(
+        '/admin/recalculate-invoices'
+      );
       
       toast({
         title: "Пересчёт завершён",
@@ -34,6 +27,7 @@ export const RecalculateInvoicesButton = () => {
       queryClient.invalidateQueries({ queryKey: ['/api/financial-summary'] });
       
     } catch (error: any) {
+      console.error('[RecalculateButton] Error:', error);
       toast({
         title: "Ошибка пересчёта",
         description: error.message || "Не удалось пересчитать счета",

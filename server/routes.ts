@@ -712,6 +712,36 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Partner terms - schemes and commission rates for current partner
+  app.get("/api/partner/terms", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(403).json({ error: "No partner ID found" });
+      }
+      const terms = await storage.getPartnerTerms(partnerId);
+      res.json(terms);
+    } catch (error) {
+      console.error("Get partner terms error:", error);
+      res.status(500).json({ error: "Failed to get partner terms" });
+    }
+  });
+
+  // Partner payments list
+  app.get("/api/partner/payments", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(403).json({ error: "No partner ID found" });
+      }
+      const payments = await storage.getPartnerPayments(partnerId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Get partner payments error:", error);
+      res.status(500).json({ error: "Failed to get partner payments" });
+    }
+  });
+
   app.get("/api/admin/plan-fact", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const year = parseInt(req.query.year as string) || new Date().getFullYear();

@@ -1,88 +1,35 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { getSchemeLabel } from "@/lib/invoiceCalculations";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface PartnerTerm {
   scheme: string;
-  partner_commission_rate: number | null;
+  partnerCommissionRate: number | null;
 }
 
 export const PartnerTerms = () => {
   const { partnerId, isLoading: authLoading } = useAuth();
-  const [terms, setTerms] = useState<PartnerTerm[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { setRef } = useStaggerAnimation(terms.length, 50);
 
-  const fetchTerms = async () => {
-    try {
-      setLoading(true);
-
-      // Ensure session context so RLS works for partner
-      await ensureSessionContext();
-
-      const { data, error } = await supabase
-        .from("invoices")
-        .select("scheme, partner_commission_rate")
-        .eq("partner_id", partnerId);
-
-      if (error) {
-        console.error("Error fetching partner terms:", error);
-        setTerms([]);
-        return;
-      }
-
-      if (data) {
-        // Get unique combinations of scheme and commission rate
-        const uniqueTerms = data.reduce((acc: PartnerTerm[], curr) => {
-          const exists = acc.find(
-            (t) => t.scheme === curr.scheme && t.partner_commission_rate === curr.partner_commission_rate
-          );
-          if (!exists) {
-            acc.push({
-              scheme: curr.scheme,
-              partner_commission_rate: curr.partner_commission_rate,
-            });
-          }
-          return acc;
-        }, []);
-
-        setTerms(uniqueTerms.sort((a, b) => a.scheme.localeCompare(b.scheme)));
-      }
-    } catch (error) {
-      console.error("Unexpected error fetching partner terms:", error);
-      setTerms([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (authLoading) return;
-
-    if (!partnerId) {
-      setLoading(false);
-      return;
-    }
-
-    fetchTerms();
-  }, [authLoading, partnerId]);
-
-  // Realtime subscription for automatic updates when invoices change
-  useRealtimeSubscription({
-    channelName: 'partner_terms_invoices',
-    table: 'invoices',
-    filter: partnerId ? `partner_id=eq.${partnerId}` : undefined,
-    onUpdate: fetchTerms,
-    enabled: !!partnerId,
+  const { data: terms = [], isLoading } = useQuery<PartnerTerm[]>({
+    queryKey: ["/api/partner/terms"],
+    queryFn: () => apiGet<PartnerTerm[]>("/partner/terms"),
+    enabled: !authLoading && !!partnerId,
   });
 
-  if (loading) {
-    return <div className="text-center py-4">Загрузка условий...</div>;
+  const { setRef } = useStaggerAnimation(terms.length, 50);
+
+  if (isLoading || authLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
   }
 
   if (terms.length === 0) {
@@ -119,16 +66,18 @@ export const PartnerTerms = () => {
             ref={setRef(index)}
             className="table-row-hover"
           >
-            <TableCell className="font-medium table-cell-highlight">{getSchemeLabel(term.scheme as any, 'partner', term.partner_commission_rate ?? undefined)}</TableCell>
+            <TableCell className="font-medium table-cell-highlight">
+              {getSchemeLabel(term.scheme as any, 'partner', term.partnerCommissionRate ?? undefined)}
+            </TableCell>
             <TableCell className="text-primary font-semibold table-cell-highlight">
               {term.scheme === 'agency_30' 
                 ? '15% от счета' 
-                : term.partner_commission_rate 
-                  ? `${term.partner_commission_rate}%` 
+                : term.partnerCommissionRate 
+                  ? `${term.partnerCommissionRate}%` 
                   : 'Не установлен'}
             </TableCell>
             <TableCell className="text-sm text-muted-foreground table-cell-highlight">
-              {getSchemeDescription(term.scheme, term.partner_commission_rate)}
+              {getSchemeDescription(term.scheme, term.partnerCommissionRate)}
             </TableCell>
           </TableRow>
         ))}

@@ -1,9 +1,8 @@
 import { FileText, Send, CheckCircle2, XCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
-import { Database } from "@/integrations/supabase/types";
 
-type InvoiceStatus = Database["public"]["Enums"]["invoice_status"];
+type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
 
 interface InvoiceProgressBadgeProps {
   status: InvoiceStatus;

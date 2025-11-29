@@ -2030,6 +2030,108 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async getPartnerTerms(partnerId: string): Promise<Array<{
+    scheme: string;
+    partnerCommissionRate: number | null;
+  }>> {
+    const invoicesData = await db
+      .select({
+        scheme: invoices.scheme,
+        partnerCommissionRate: invoices.partnerCommissionRate,
+      })
+      .from(invoices)
+      .where(eq(invoices.partnerId, partnerId));
+
+    // Get unique combinations
+    const termsMap = new Map<string, { scheme: string; partnerCommissionRate: number | null }>();
+    for (const inv of invoicesData) {
+      const key = `${inv.scheme}-${inv.partnerCommissionRate}`;
+      if (!termsMap.has(key)) {
+        termsMap.set(key, {
+          scheme: inv.scheme,
+          partnerCommissionRate: inv.partnerCommissionRate,
+        });
+      }
+    }
+
+    return Array.from(termsMap.values()).sort((a, b) => a.scheme.localeCompare(b.scheme));
+  }
+
+  async getPartnerPayments(partnerId: string): Promise<Array<{
+    id: string;
+    amount: number;
+    paymentDate: string;
+    notes: string | null;
+    invoiceId: string | null;
+    invoiceNumber: string | null;
+  }>> {
+    // Get invoice IDs for the partner
+    const partnerInvoices = await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+      })
+      .from(invoices)
+      .where(eq(invoices.partnerId, partnerId));
+
+    const invoiceMap = new Map<string, string>();
+    for (const inv of partnerInvoices) {
+      invoiceMap.set(inv.id, inv.invoiceNumber || '');
+    }
+    const invoiceIds = Array.from(invoiceMap.keys());
+
+    // Get payments - always query by partnerId, optionally also by invoiceId
+    let paymentsData: typeof partnerPayments.$inferSelect[] = [];
+    
+    if (invoiceIds.length > 0) {
+      // Partner has invoices - get payments by invoice OR partner
+      paymentsData = await db
+        .select()
+        .from(partnerPayments)
+        .where(
+          or(
+            inArray(partnerPayments.invoiceId, invoiceIds),
+            eq(partnerPayments.partnerId, partnerId)
+          )
+        )
+        .orderBy(desc(partnerPayments.paymentDate));
+    } else {
+      // Partner has no invoices - only get payments by partnerId
+      paymentsData = await db
+        .select()
+        .from(partnerPayments)
+        .where(eq(partnerPayments.partnerId, partnerId))
+        .orderBy(desc(partnerPayments.paymentDate));
+    }
+
+    // Deduplicate and merge
+    const paymentsMap = new Map<string, {
+      id: string;
+      amount: number;
+      paymentDate: string;
+      notes: string | null;
+      invoiceId: string | null;
+      invoiceNumber: string | null;
+    }>();
+
+    for (const p of paymentsData) {
+      if (!paymentsMap.has(p.id)) {
+        paymentsMap.set(p.id, {
+          id: p.id,
+          amount: parseFloat(p.amount),
+          paymentDate: p.paymentDate,
+          notes: p.notes,
+          invoiceId: p.invoiceId,
+          invoiceNumber: p.invoiceId ? invoiceMap.get(p.invoiceId) || null : null,
+        });
+      }
+    }
+
+    return Array.from(paymentsMap.values()).sort(
+      (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+    );
+  }
+
   async getAdminMonthlyData(year: number): Promise<MonthlyData[]> {
     const monthNames = [
       "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",

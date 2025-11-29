@@ -7,9 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { InvoiceProgressBadge } from "./InvoiceProgressBadge";
 import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
 import { Eye, CheckCircle2, Send, Trash2, EyeOff, Clock } from "lucide-react";
-import type { Database } from "@/integrations/supabase/types";
 
-type InvoiceStatus = Database["public"]["Enums"]["invoice_status"];
+type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
 
 interface InvoiceCardProps {
   invoice: any;

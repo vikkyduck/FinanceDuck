@@ -102,11 +102,12 @@ Key components migrated from Supabase RPC to Express API:
 ### Recurring Invoices System (2025-11-29)
 
 Fully functional recurring invoice management with automatic draft generation:
-- **Database table**: `recurring_invoices` stores templates with frequency, amount, scheme, client, partner info
-- **UI components**: `RecurringInvoicesManager` lists all recurring templates with "Create Now" and "Backdate" actions
-- **Create dialog**: `CreateRecurringInvoiceDialog` supports amount, description, startDate, endDate, frequency (monthly/quarterly/yearly)
-- **Manual creation**: Admin clicks "Create Now" to generate draft invoice from template
-- **Backdating**: Creates all missing historical invoices from startDate to today
+- **Database table**: `recurring_invoices` stores templates with frequency, amount, scheme, client, partner, hideFromAssistant info
+- **UI components**: `RecurringInvoicesManager` lists all recurring templates with "Create Now" and "Backdate" actions, shows EyeOff badge for hidden templates
+- **Create dialog**: `CreateRecurringInvoiceDialog` supports amount, description, startDate, endDate, frequency, and hideFromAssistant checkbox
+- **Manual creation**: Admin clicks "Create Now" to generate draft invoice from template (inherits hideFromAssistant)
+- **Backdating**: Creates all missing historical invoices from startDate to today (inherits hideFromAssistant)
+- **hideFromAssistant inheritance**: Created invoices automatically inherit hideFromAssistant setting from recurring template
 - **Cash Flow integration**: 
   - `AdminCashFlowForecast` shows recurring amounts as separate visualization per month
   - `AdminDashboardMetrics` includes recurring amounts in Cash Flow card (received + expected + recurring)

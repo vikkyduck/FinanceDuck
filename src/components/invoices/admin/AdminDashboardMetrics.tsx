@@ -71,11 +71,12 @@ export const AdminDashboardMetrics = () => {
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const refetchInterval = useVisibilityAwareInterval();
 
-  const { data: stats, isLoading } = useQuery<DashboardStats>({
+  const { data: stats, isLoading, isError } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard-stats", selectedYear, selectedMonth],
     queryFn: () => apiGet<DashboardStats>(`/admin/dashboard-stats?year=${selectedYear}&month=${selectedMonth}`),
     refetchInterval,
     staleTime: 10000,
+    retry: 2,
   });
 
   if (isLoading) {
@@ -113,7 +114,8 @@ export const AdminDashboardMetrics = () => {
     );
   }
 
-  if (!stats) return null;
+  // Handle error or no data gracefully - don't crash the whole page
+  if (isError || !stats) return null;
 
   const availableYears = stats.availableYears.length > 0 ? stats.availableYears : [new Date().getFullYear()];
 

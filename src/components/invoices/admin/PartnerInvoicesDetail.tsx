@@ -38,10 +38,11 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: invoices = [], isLoading, refetch } = useQuery<PartnerInvoice[]>({
+  const { data: invoices = [], isLoading, isError, refetch } = useQuery<PartnerInvoice[]>({
     queryKey: ["/api/admin/partner-invoices", partnerId],
     queryFn: () => apiGet<PartnerInvoice[]>(`/admin/partner-invoices/${partnerId}`),
     enabled: !!partnerId,
+    retry: 2,
   });
 
   const recordPaymentMutation = useMutation({
@@ -96,6 +97,11 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
 
   if (isLoading) {
     return <div className="text-center py-4 text-sm text-muted-foreground">Загрузка счетов...</div>;
+  }
+
+  // Handle error gracefully
+  if (isError) {
+    return <div className="text-center py-4 text-sm text-muted-foreground">Ошибка загрузки счетов</div>;
   }
 
   if (invoices.length === 0) {

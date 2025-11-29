@@ -37,12 +37,16 @@ export const CriticalAlertsSection = () => {
   const queryClient = useQueryClient();
   const refetchInterval = useVisibilityAwareInterval();
 
-  const { data: alertsData = [], isLoading } = useQuery<CriticalAlertData[]>({
+  const { data: alertsData = [], isLoading, isError } = useQuery<CriticalAlertData[]>({
     queryKey: ["/api/admin/critical-alerts"],
     queryFn: () => apiGet<CriticalAlertData[]>("/admin/critical-alerts"),
     refetchInterval,
     staleTime: 30000,
+    retry: 2,
   });
+  
+  // Handle error gracefully - don't crash the dashboard
+  if (isError) return null;
 
   const handleMarkAsPaid = useCallback(async (invoiceId: string) => {
     try {

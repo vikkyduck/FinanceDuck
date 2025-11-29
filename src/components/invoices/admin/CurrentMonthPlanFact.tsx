@@ -31,11 +31,15 @@ export const CurrentMonthPlanFact = () => {
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
   ];
 
-  const { data: planFactData, isLoading } = useQuery<PlanFactData[]>({
+  const { data: planFactData, isLoading, isError } = useQuery<PlanFactData[]>({
     queryKey: ['/api/admin/plan-fact', currentYear],
     queryFn: () => apiGet(`/api/admin/plan-fact?year=${currentYear}`),
     staleTime: 30000,
+    retry: 2,
   });
+
+  // Handle errors gracefully
+  if (isError) return null;
 
   const currentMonthData = planFactData?.find(d => d.monthNumber === currentMonth);
 

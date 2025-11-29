@@ -57,25 +57,28 @@ export const AssistantBonusManager = () => {
   }, [queryClient]);
 
   // Use the same API as AssistantBonusCard for unified data source
-  const { data: stats, isLoading: loadingStats, isFetching: fetchingStats } = useQuery<AssistantStats>({
+  const { data: stats, isLoading: loadingStats, isFetching: fetchingStats, isError: errorStats } = useQuery<AssistantStats>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
     refetchInterval,
     staleTime: 10000,
+    retry: 2,
   });
 
-  const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
+  const { data: unpaidBonus, isLoading: loadingUnpaid, isError: errorUnpaid } = useQuery<UnpaidBonusData>({
     queryKey: ['/api/admin/unpaid-bonus'],
     queryFn: () => apiGet('/admin/unpaid-bonus'),
     refetchInterval,
     staleTime: 10000,
+    retry: 2,
   });
 
-  const { data: paymentHistory = [], isLoading: loadingHistory } = useQuery<AssistantBonusPayment[]>({
+  const { data: paymentHistory = [], isLoading: loadingHistory, isError: errorHistory } = useQuery<AssistantBonusPayment[]>({
     queryKey: ['/api/admin/bonus-payments'],
     queryFn: () => apiGet('/admin/bonus-payments'),
     enabled: historyDialogOpen,
     refetchInterval: historyDialogOpen ? refetchInterval : false,
+    retry: 2,
   });
 
   const payoutMutation = useMutation({
@@ -117,6 +120,9 @@ export const AssistantBonusManager = () => {
   const calculatedTotal = stats?.assistantBonus || (executorActsAmount + companyActsAmount);
 
   const loading = loadingUnpaid || loadingStats;
+  
+  // Handle errors gracefully
+  if (errorStats || errorUnpaid) return null;
   
   // Progress calculations (same as AssistantBonusCard)
   const progressPercent = Math.min((calculatedTotal / 50000) * 100, 100);

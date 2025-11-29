@@ -52,21 +52,26 @@ export const AdminCashFlowForecast = () => {
   const { isAuthenticated } = useAuth();
   const refetchInterval = useVisibilityAwareInterval();
 
-  const { data: forecastData, isLoading: loadingForecast } = useQuery<ForecastData[]>({
+  const { data: forecastData, isLoading: loadingForecast, isError: errorForecast } = useQuery<ForecastData[]>({
     queryKey: ['/api/admin/forecast'],
     queryFn: () => apiGet('/admin/forecast?months=6'),
     enabled: isAuthenticated,
     refetchInterval,
+    retry: 2,
   });
 
-  const { data: stats, isLoading: loadingStats } = useQuery<{ totalNetProfit?: number; totalClientBill?: number }>({
+  const { data: stats, isLoading: loadingStats, isError: errorStats } = useQuery<{ totalNetProfit?: number; totalClientBill?: number }>({
     queryKey: ['/api/dashboard/stats'],
     queryFn: () => apiGet('/dashboard/stats'),
     enabled: isAuthenticated,
     refetchInterval,
+    retry: 2,
   });
 
   const loading = loadingForecast || loadingStats;
+  
+  // Handle errors gracefully
+  if (errorForecast || errorStats) return null;
 
   const forecast: MonthlyForecast[] = (forecastData || []).map(f => {
     const recurringIncome = f.recurringAmount || 0;

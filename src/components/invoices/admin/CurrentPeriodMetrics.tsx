@@ -24,17 +24,22 @@ interface Metric {
 }
 
 export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number }) => {
-  const { data: currentYearData, isLoading: loadingCurrent } = useQuery<MonthlyData[]>({
+  const { data: currentYearData, isLoading: loadingCurrent, isError: errorCurrent } = useQuery<MonthlyData[]>({
     queryKey: ['admin-monthly-data', selectedYear],
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${selectedYear}`),
+    retry: 2,
   });
 
-  const { data: lastYearData, isLoading: loadingLast } = useQuery<MonthlyData[]>({
+  const { data: lastYearData, isLoading: loadingLast, isError: errorLast } = useQuery<MonthlyData[]>({
     queryKey: ['admin-monthly-data', selectedYear - 1],
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${selectedYear - 1}`),
+    retry: 2,
   });
 
   const loading = loadingCurrent || loadingLast;
+  
+  // Handle errors gracefully
+  if (errorCurrent || errorLast) return null;
 
   if (loading) {
     return (

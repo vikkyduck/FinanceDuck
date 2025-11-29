@@ -99,6 +99,15 @@ Key components migrated from Supabase RPC to Express API:
 - **RecalculateInvoicesButton**: Uses `/api/admin/recalculate-invoices`
 - **SecurityMonitoring**: Simplified to static security info (security_events table not in Neon)
 
+### Production Deployment Fixes (2025-11-29)
+
+Critical fixes for production deployment:
+- **Cookie security**: Fixed `isSecure` detection using `x-forwarded-proto` header and `req.secure` for proper HTTPS proxy support
+- **Cookie path**: Added explicit `path: "/"` to ensure cookies work across all routes
+- **Health check**: Added `/health` and `/api/health` endpoints, plus root `/` handler for deployment health checks
+- **Deployment config**: Uses `NODE_ENV=production` with frozen lockfile to prevent dependency re-optimization
+- **Recurring scheduler**: Lazy initialization 60 seconds after server start to not block health checks
+
 ### Recurring Invoices System (2025-11-29)
 
 Fully functional recurring invoice management with automatic draft generation:

@@ -265,12 +265,14 @@ export function registerRoutes(app: Express): void {
         req.headers["user-agent"]
       );
       
-      const isSecure = process.env.NODE_ENV === "production" || req.headers['x-forwarded-proto'] === 'https';
+      const isProxied = req.headers['x-forwarded-proto'] === 'https';
+      const isSecure = isProxied || req.secure;
       res.cookie(SESSION_COOKIE, session.sessionId, {
         httpOnly: true,
         secure: isSecure,
         sameSite: isSecure ? "none" : "lax",
         maxAge: 30 * 60 * 1000,
+        path: "/",
       });
       
       res.json({
@@ -339,12 +341,14 @@ export function registerRoutes(app: Express): void {
       return res.status(401).json({ error: "Session expired" });
     }
     
-    const isSecure = process.env.NODE_ENV === "production" || req.headers['x-forwarded-proto'] === 'https';
+    const isProxied = req.headers['x-forwarded-proto'] === 'https';
+    const isSecure = isProxied || req.secure;
     res.cookie(SESSION_COOKIE, sessionId, {
       httpOnly: true,
       secure: isSecure,
       sameSite: isSecure ? "none" : "lax",
       maxAge: 30 * 60 * 1000,
+      path: "/",
     });
     
     res.json({ success: true, expiresAt: newExpiresAt });

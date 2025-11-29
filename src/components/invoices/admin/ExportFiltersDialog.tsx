@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { showSuccess } from "@/lib/errorHandler";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { apiGet } from "@/lib/api";
 
 interface ExportFiltersDialogProps {
   open: boolean;
@@ -33,9 +34,11 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
   });
 
   // Fetch partners list from Express API
-  const { data: partners } = useQuery<Array<{id: string, name: string}>>({
+  const { data: partners, isError } = useQuery<Array<{id: string, name: string}>>({
     queryKey: ['/api/partners'],
+    queryFn: () => apiGet("/partners"),
     enabled: open,
+    retry: 2,
   });
 
   const statusOptions = [

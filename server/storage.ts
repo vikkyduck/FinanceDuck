@@ -992,53 +992,16 @@ export class DatabaseStorage implements IStorage {
       const payments = await this.getPartnerPayments(partnerId);
       const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
       
-      // Get expenses by invoice to calculate partner-paid expenses
-      const allExpenses = await db.select().from(invoiceExpenses);
-      const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
-      for (const exp of allExpenses) {
-        if (!expensesByInvoice.has(exp.invoiceId)) {
-          expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
-        }
-        const amounts = expensesByInvoice.get(exp.invoiceId)!;
-        const amount = parseFloat(exp.amount);
-        if (exp.paidByAdmin) {
-          amounts.byAdmin += amount;
-        } else {
-          amounts.byPartner += amount;
-        }
-      }
-      
-      let debtToAdmin = 0;
+      // Use stored partnerTransferDue as single source of truth
+      let totalDebtToAdmin = 0;
       for (const r of results) {
         if (r.invoice.status === 'paid' && r.calculations) {
-          const scheme = r.invoice.scheme;
-          const clientBill = parseFloat(r.calculations.clientBill || "0");
-          const expenses = expensesByInvoice.get(r.invoice.id) || { byPartner: 0, byAdmin: 0 };
-          
-          if (scheme === 'agency_30') {
-            // Agency 30%: Partner owes admin their 15% share (fixed)
-            // Expenses come from client's 70% budget, don't affect partner's debt
-            debtToAdmin += clientBill * 0.15;
-          } else {
-            // partner_10, partner_15, commission_based:
-            // Partner debt = clientBill - commission - expensesPaidByPartner
-            // Expenses paid by admin do NOT reduce partner's debt
-            let commissionRate: number;
-            if (scheme === 'partner_10') {
-              commissionRate = 0.10;
-            } else if (scheme === 'partner_15') {
-              commissionRate = 0.15;
-            } else {
-              // commission_based - calculate from stored commission
-              const comm = parseFloat(r.calculations.commissionAmount || "0");
-              commissionRate = clientBill > 0 ? comm / clientBill : 0.10;
-            }
-            const partnerCommission = clientBill * commissionRate;
-            debtToAdmin += clientBill - partnerCommission - expenses.byPartner;
-          }
+          // Read stored value instead of recalculating
+          const storedDebt = parseFloat(r.calculations.partnerTransferDue || "0");
+          totalDebtToAdmin += Math.max(0, storedDebt);
         }
       }
-      partnerDebt = debtToAdmin - totalPaid;
+      partnerDebt = Math.max(0, totalDebtToAdmin - totalPaid);
     }
     
     const stats: DashboardStats = {

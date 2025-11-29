@@ -11,33 +11,98 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-const ASSISTANT_ALLOWED_INVOICE_FIELDS = [
-  'id',
-  'invoiceNumber',
-  'clientId',
-  'status',
-  'description',
-  'clientBill',
-  'createdAt',
-  'updatedAt',
-  'createdBy',
-  'dueDate',
-  'paidDate',
-  'notes',
-  'scheme',
-] as const;
+/**
+ * UNIFIED SOURCE OF TRUTH: Role-based field visibility rules
+ * 
+ * All roles get data from the SAME stored values in invoice_calculations table.
+ * This configuration determines what each role can SEE, not what is calculated.
+ * 
+ * BUSINESS RULES:
+ * - Admin: sees everything (full financial transparency)
+ * - Partner: sees their commission, debt, client remaining
+ * - Client: sees their bill and remaining budget
+ * - Assistant: sees ONLY basic invoice info + client bill + expenses (NO financials)
+ */
+const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
+  admin: [
+    'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
+    'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy', 'dueDate',
+    'paidDate', 'paymentDueDate', 'notes', 'hideFromAssistant',
+  ],
+  partner: [
+    'id', 'invoiceNumber', 'clientId', 'status', 'description',
+    'clientBill', 'scheme', 'createdAt', 'updatedAt', 'dueDate',
+    'paidDate', 'paymentDueDate', 'notes',
+  ],
+  client: [
+    'id', 'invoiceNumber', 'status', 'description', 'clientBill',
+    'scheme', 'createdAt', 'updatedAt', 'dueDate', 'paidDate', 'notes',
+  ],
+  assistant: [
+    'id', 'invoiceNumber', 'clientId', 'status', 'description',
+    'clientBill', 'createdAt', 'updatedAt', 'createdBy', 'dueDate',
+    'paidDate', 'notes', 'scheme',
+  ],
+};
 
-const ASSISTANT_ALLOWED_CALCULATION_FIELDS = [
-  'id',
-  'invoiceId',
-  'clientBill',
-  'executorExpensesTotal',
-] as const;
+const ROLE_CALCULATION_PERMISSIONS: Record<UserRole, readonly string[]> = {
+  admin: [
+    'id', 'invoiceId', 'clientBill', 'commissionRate', 'commissionAmount',
+    'amountToAdmin', 'agencyMargin', 'partnerShareFromMargin', 'adminShareFromMargin',
+    'clientBaseAfterMargin', 'clientSpent', 'clientRemaining', 'executorExpensesTotal',
+    'partnerTransferDue', 'netProfitAdmin', 'adminShare50', 'catShare50',
+    'assistantBonusActs', 'assistantBonusPaid',
+  ],
+  partner: [
+    'id', 'invoiceId', 'clientBill', 'commissionRate', 'commissionAmount',
+    'amountToAdmin', 'agencyMargin', 'partnerShareFromMargin', 'adminShareFromMargin',
+    'clientBaseAfterMargin', 'clientSpent', 'clientRemaining', 'executorExpensesTotal',
+    'partnerTransferDue',
+  ],
+  client: [
+    'id', 'invoiceId', 'clientBill', 'clientBaseAfterMargin',
+    'clientSpent', 'clientRemaining', 'executorExpensesTotal',
+  ],
+  assistant: [
+    'id', 'invoiceId', 'clientBill', 'executorExpensesTotal',
+  ],
+};
 
-function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<string, any> {
+const ROLE_STATS_PERMISSIONS: Record<UserRole, readonly string[]> = {
+  admin: [
+    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
+    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
+    'totalPartnerCommission', 'totalAdminShare', 'totalNetProfit', 'clientRemaining',
+  ],
+  partner: [
+    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
+    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
+    'totalPartnerCommission', 'partnerDebt', 'clientRemaining',
+  ],
+  client: [
+    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
+    'totalClientBill', 'totalExpenses', 'clientRemaining',
+  ],
+  assistant: [
+    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
+    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
+  ],
+};
+
+const ASSISTANT_ALLOWED_INVOICE_FIELDS = ROLE_INVOICE_PERMISSIONS.assistant;
+const ASSISTANT_ALLOWED_CALCULATION_FIELDS = ROLE_CALCULATION_PERMISSIONS.assistant;
+
+/**
+ * Project invoice data based on role permissions
+ * Uses ROLE_INVOICE_PERMISSIONS and ROLE_CALCULATION_PERMISSIONS as single source of truth
+ */
+function projectInvoiceForRole(invoice: Record<string, any>, role: UserRole): Record<string, any> {
+  const allowedInvoiceFields = ROLE_INVOICE_PERMISSIONS[role];
+  const allowedCalcFields = ROLE_CALCULATION_PERMISSIONS[role];
+  
   const result: Record<string, any> = {};
   
-  for (const field of ASSISTANT_ALLOWED_INVOICE_FIELDS) {
+  for (const field of allowedInvoiceFields) {
     if (field in invoice) {
       result[field] = invoice[field];
     }
@@ -45,7 +110,7 @@ function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<
   
   if (invoice.calculations && typeof invoice.calculations === 'object') {
     const calc: Record<string, any> = {};
-    for (const field of ASSISTANT_ALLOWED_CALCULATION_FIELDS) {
+    for (const field of allowedCalcFields) {
       if (field in invoice.calculations) {
         calc[field] = invoice.calculations[field];
       }
@@ -53,21 +118,50 @@ function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<
     result.calculations = calc;
   }
   
+  if (invoice.partner && role === 'admin') {
+    result.partner = invoice.partner;
+  } else if (invoice.partner && role === 'partner') {
+    result.partner = { id: invoice.partner.id, name: invoice.partner.name };
+  }
+  
   if (invoice.client) {
-    result.client = { id: invoice.client.id, name: invoice.client.name };
+    if (role === 'assistant') {
+      result.client = { id: invoice.client.id, name: invoice.client.name };
+    } else {
+      result.client = invoice.client;
+    }
   }
   
   return result;
 }
 
+function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<string, any> {
+  return projectInvoiceForRole(invoice, 'assistant');
+}
+
 function stripSensitiveFieldsForRole<T extends Record<string, any>>(data: T, role: UserRole): T {
-  if (role !== 'assistant') return data;
-  return createAssistantInvoiceProjection(data) as T;
+  return projectInvoiceForRole(data, role) as T;
 }
 
 function stripSensitiveFieldsFromList<T extends Record<string, any>>(data: T[], role: UserRole): T[] {
-  if (role !== 'assistant') return data;
-  return data.map(item => createAssistantInvoiceProjection(item)) as T[];
+  return data.map(item => projectInvoiceForRole(item, role)) as T[];
+}
+
+/**
+ * Project stats data based on role permissions
+ * Uses ROLE_STATS_PERMISSIONS as single source of truth
+ */
+function projectStatsForRole(stats: Record<string, any>, role: UserRole): Record<string, any> {
+  const allowedFields = ROLE_STATS_PERMISSIONS[role];
+  const result: Record<string, any> = {};
+  
+  for (const field of allowedFields) {
+    if (field in stats) {
+      result[field] = stats[field];
+    }
+  }
+  
+  return result;
 }
 
 function stripPartnerInfoFromClient<T extends Record<string, any>>(client: T, role: UserRole): T {
@@ -489,14 +583,12 @@ export function registerRoutes(app: Express): void {
       const partnerId = req.user?.partnerId;
       const clientId = req.user?.clientId;
       
+      // Get stats from storage (single source of truth)
       const stats = await storage.getDashboardStats(role, partnerId, clientId);
       
-      if (role === "assistant") {
-        const { totalPartnerCommission, totalAdminShare, totalNetProfit, partnerDebt, clientRemaining, ...safeStats } = stats;
-        return res.json(safeStats);
-      }
-      
-      res.json(stats);
+      // Filter stats based on role permissions (uses ROLE_STATS_PERMISSIONS)
+      const filteredStats = projectStatsForRole(stats, role);
+      res.json(filteredStats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);
       res.status(500).json({ error: "Failed to get dashboard stats" });
@@ -870,6 +962,54 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Get do-not-spend error:", error);
       res.status(500).json({ error: "Failed to get do-not-spend data" });
+    }
+  });
+
+  /**
+   * UNIFIED FINANCIAL SUMMARY ENDPOINT
+   * Single source of truth for all financial data across all roles.
+   * Data comes from stored values in invoice_calculations table.
+   * Filtering is done based on ROLE_*_PERMISSIONS constants.
+   */
+  app.get("/api/financial-summary", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role || "client";
+      const partnerId = req.user?.partnerId;
+      const clientId = req.user?.clientId;
+      
+      // Get dashboard stats (uses stored values)
+      const stats = await storage.getDashboardStats(role, partnerId, clientId);
+      const filteredStats = projectStatsForRole(stats, role);
+      
+      // Get invoices filtered by role
+      const invoices = await storage.getInvoices(role, partnerId, clientId);
+      const filteredInvoices = invoices.map(inv => projectInvoiceForRole(inv as Record<string, any>, role));
+      
+      // Role-specific additional data
+      const summary: Record<string, any> = {
+        stats: filteredStats,
+        invoices: filteredInvoices,
+        role,
+        dataSource: 'invoice_calculations', // Indicates all data comes from stored values
+      };
+      
+      // Admin gets partner debt summaries
+      if (role === 'admin') {
+        const partnerDebts = await storage.getPartnerDebtSummaries();
+        summary.partnerDebts = partnerDebts;
+      }
+      
+      // Partner gets their own debt
+      if (role === 'partner' && partnerId) {
+        const partnerDebts = await storage.getPartnerDebtSummaries();
+        const myDebt = partnerDebts.find(d => d.partnerId === partnerId);
+        summary.myDebt = myDebt || { totalToTransfer: 0, totalPaid: 0, remaining: 0 };
+      }
+      
+      res.json(summary);
+    } catch (error) {
+      console.error("Get financial summary error:", error);
+      res.status(500).json({ error: "Failed to get financial summary" });
     }
   });
   

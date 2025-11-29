@@ -42,6 +42,36 @@ The `invoice_calculations` table stores `partnerTransferDue` as the single sourc
 - Frontend `calculatePartnerDebt()` accepts optional stored value and falls back to calculation when unavailable
 - All debt values are clamped to zero (negative debts not displayed)
 
+### Role-Based Data Access (2025-11-29)
+
+All roles receive data from the SAME stored values in `invoice_calculations` table. Filtering is controlled by centralized permission constants in `server/routes.ts`:
+
+**Admin sees:**
+- All invoice fields including `partnerId`, `hideFromAssistant`
+- All calculation fields including `netProfitAdmin`, `adminShare50`, `catShare50`, `partnerTransferDue`
+- All stats including `totalNetProfit`, `totalAdminShare`
+- Partner debt summaries for all partners
+
+**Partner sees:**
+- Invoice fields (excluding `partnerId`, `hideFromAssistant`)
+- Calculation fields: commission, expenses, `clientRemaining`, `partnerTransferDue`
+- Stats: commission totals, debt, client remaining
+- Only their own debt summary
+
+**Client sees:**
+- Basic invoice fields
+- Calculation fields: `clientBill`, `clientBaseAfterMargin`, `clientSpent`, `clientRemaining`, expenses
+- Stats: invoice counts, `totalClientBill`, `clientRemaining`
+
+**Assistant sees (RESTRICTED):**
+- Basic invoice fields: id, number, client, status, description, dates, scheme
+- Calculation fields: `clientBill`, `executorExpensesTotal` ONLY
+- Stats: invoice counts, totals (NO commission, profit, debt, remaining)
+- NO partner-client relationships
+- NO financial analytics
+
+**Unified API endpoint:** `/api/financial-summary` returns all data filtered by role from single source of truth.
+
 ## Security Architecture
 
 Security is implemented through XSS protection via input sanitization and React's auto-escaping, coupled with file upload validation. Rate limiting employs a token bucket algorithm. Input validation is handled by Zod schemas on both frontend and backend. Centralized error handling provides user feedback and logs critical errors. Authentication uses secure cookie-based sessions with CSRF protection and role-based access control.

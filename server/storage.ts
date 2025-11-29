@@ -1301,6 +1301,7 @@ export class DatabaseStorage implements IStorage {
     monthlyCashFlow: {
       received: number;
       expected: number;
+      recurring: number;
     };
     monthlyProfit: number;
     ownerShares: {
@@ -1317,6 +1318,10 @@ export class DatabaseStorage implements IStorage {
       othersProfit: number;
       vikaProfit: number;
       ratio: number;
+    };
+    recurringExpected: {
+      monthlyAmount: number;
+      yearlyTotal: number;
     };
     selectedYear: number;
     selectedMonth: number;
@@ -2468,7 +2473,7 @@ export class DatabaseStorage implements IStorage {
         description: recurring.description || `Recurring invoice for ${targetDate}`,
         issueDate: targetDate,
         status: 'draft',
-        hideFromAssistant: false,
+        hideFromAssistant: recurring.hideFromAssistant ?? false,
         recurringInvoiceId: recurring.id,
         createdBy: recurring.createdBy,
       },
@@ -2540,7 +2545,7 @@ export class DatabaseStorage implements IStorage {
           description: recurring.description || `Backdated invoice for ${invoiceDate}`,
           issueDate: invoiceDate,
           status: 'draft',
-          hideFromAssistant: false,
+          hideFromAssistant: recurring.hideFromAssistant ?? false,
           recurringInvoiceId: recurring.id,
           createdBy: recurring.createdBy,
         },

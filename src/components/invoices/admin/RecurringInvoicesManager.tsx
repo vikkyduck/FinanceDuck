@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, Repeat, Pause, Play, Trash2, FileText, History, RefreshCcw, AlertCircle } from "lucide-react";
+import { Plus, Calendar, Repeat, Pause, Play, Trash2, FileText, History, RefreshCcw, AlertCircle, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatCurrency } from "@/lib/invoiceCalculations";
 import { CreateRecurringInvoiceDialog } from "./CreateRecurringInvoiceDialog";
@@ -37,6 +37,7 @@ interface RecurringInvoice {
   isActive: boolean;
   nextInvoiceDate: string;
   notes: string | null;
+  hideFromAssistant: boolean;
   clients: { name: string };
   partners: { name: string };
 }
@@ -231,6 +232,12 @@ export function RecurringInvoicesManager() {
                         <Badge variant="outline" className="ml-2">
                           {getSchemeLabel(recurring.scheme)}
                         </Badge>
+                        {recurring.hideFromAssistant && (
+                          <Badge variant="secondary" className="ml-1">
+                            <EyeOff className="h-3 w-3 mr-1" />
+                            Скрыто от ассистента
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 text-sm flex-wrap">
                         <span className="font-medium text-lg">

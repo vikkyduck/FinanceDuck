@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiGet, apiPost } from "@/lib/api";
@@ -44,6 +45,7 @@ export function CreateRecurringInvoiceDialog({
     startDate: new Date().toISOString().split('T')[0],
     endDate: "",
     notes: "",
+    hideFromAssistant: false,
   });
 
   const { data: clients = [] } = useQuery<Client[]>({
@@ -106,6 +108,7 @@ export function CreateRecurringInvoiceDialog({
         endDate: formData.endDate || null,
         nextInvoiceDate: calculateNextInvoiceDate(),
         notes: formData.notes || null,
+        hideFromAssistant: formData.hideFromAssistant,
       });
 
       toast.success("Расписание создано");
@@ -123,6 +126,7 @@ export function CreateRecurringInvoiceDialog({
         startDate: new Date().toISOString().split('T')[0],
         endDate: "",
         notes: "",
+        hideFromAssistant: false,
       });
     } catch (error: any) {
       toast.error("Ошибка", { description: error.message });
@@ -290,6 +294,20 @@ export function CreateRecurringInvoiceDialog({
               rows={2}
               data-testid="input-notes"
             />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="hideFromAssistant"
+              checked={formData.hideFromAssistant}
+              onCheckedChange={(checked) => 
+                setFormData({ ...formData, hideFromAssistant: checked === true })
+              }
+              data-testid="checkbox-hide-from-assistant"
+            />
+            <Label htmlFor="hideFromAssistant" className="text-sm text-muted-foreground cursor-pointer">
+              Скрыть от ассистента
+            </Label>
           </div>
 
           <div className="flex gap-2 justify-end flex-wrap">

@@ -189,6 +189,7 @@ export const recurringInvoices = pgTable("recurring_invoices", {
   endDate: date("end_date"),
   nextInvoiceDate: date("next_invoice_date").notNull(),
   notes: text("notes"),
+  hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

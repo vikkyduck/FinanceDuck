@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
-import { AdminStats } from "@/components/invoices/admin/AdminStats";
 import { AdminDashboardMetrics } from "@/components/invoices/admin/AdminDashboardMetrics";
 import { RevenueForecastTable } from "@/components/invoices/admin/RevenueForecastTable";
 import { MonthlyFinancialTable } from "@/components/invoices/admin/MonthlyFinancialTable";
 import { YearlyKeyIndicators } from "@/components/invoices/admin/YearlyKeyIndicators";
-import { PlanHistoryComparison } from "@/components/invoices/admin/PlanHistoryComparison";
 import { OverduePaymentsAlert } from "@/components/invoices/admin/OverduePaymentsAlert";
-import { CurrentMonthPlanFact } from "@/components/invoices/admin/CurrentMonthPlanFact";
 import { CurrentPeriodMetrics } from "@/components/invoices/admin/CurrentPeriodMetrics";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
@@ -127,12 +124,6 @@ const StatsPage = () => {
             >
               Планирование
             </TabsTrigger>
-            <TabsTrigger 
-              value="history"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
-            >
-              История
-            </TabsTrigger>
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -152,18 +143,6 @@ const StatsPage = () => {
                     </p>
                   </div>
                   <CurrentPeriodMetrics selectedYear={selectedYear} />
-                </div>
-                
-                <CurrentMonthPlanFact />
-                
-                <div className="space-y-4">
-                  <div>
-                    <h2 className="text-xl font-semibold">Все счета за всё время</h2>
-                    <p className="text-sm text-muted-foreground">
-                      ВСЕ счета независимо от статуса (оплаченные + ожидающие). Накопительный итог.
-                    </p>
-                  </div>
-                  <AdminStats />
                 </div>
               </motion.div>
             </TabsContent>
@@ -217,18 +196,6 @@ const StatsPage = () => {
             </TabsContent>
           </AnimatePresence>
 
-          <AnimatePresence mode="wait">
-            <TabsContent value="history" className="space-y-8 mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <PlanHistoryComparison />
-              </motion.div>
-            </TabsContent>
-          </AnimatePresence>
         </Tabs>
       </div>
     </DashboardLayout>

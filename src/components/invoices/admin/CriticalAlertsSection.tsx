@@ -1,18 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronDown, ChevronUp, Clock, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from "@/integrations/supabase/client";
-import { differenceInDays } from "date-fns";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
+import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { apiGet, apiPost } from "@/lib/api";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { LucideIcon } from "lucide-react";
 
-interface CriticalAlert {
+interface CriticalAlertData {
   id: string;
   type: "overdue" | "draft" | "long_sent";
   severity: "critical" | "high" | "medium";
@@ -20,158 +21,76 @@ interface CriticalAlert {
   description: string;
   amount?: number;
   daysCount?: number;
-  icon: any;
+  invoiceNumber: string;
+  clientName: string;
+}
+
+interface CriticalAlert extends CriticalAlertData {
+  icon: LucideIcon;
   action: () => void;
   actionLabel: string;
 }
 
 export const CriticalAlertsSection = () => {
-  const [alerts, setAlerts] = useState<CriticalAlert[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const refetchInterval = useVisibilityAwareInterval();
 
-  const fetchAlerts = async () => {
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0];
-
-      const criticalAlerts: CriticalAlert[] = [];
-
-      // Просроченные платежи
-      const { data: overdueInvoices } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          invoice_number,
-          payment_date,
-          clients(name),
-          partners(name),
-          invoice_calculations(client_bill)
-        `)
-        .eq("status", "sent")
-        .is("actual_payment_date", null)
-        .lt("payment_date", today);
-
-      overdueInvoices?.forEach((invoice: any) => {
-        const daysOverdue = differenceInDays(new Date(), new Date(invoice.payment_date));
-        const severity = daysOverdue > 30 ? "critical" : daysOverdue > 14 ? "high" : "medium";
-        
-        criticalAlerts.push({
-          id: invoice.id,
-          type: "overdue",
-          severity,
-          title: `Просрочка ${daysOverdue} ${daysOverdue === 1 ? "день" : "дней"}`,
-          description: `${invoice.invoice_number} • ${invoice.clients?.name} → ${invoice.partners?.name}`,
-          amount: invoice.invoice_calculations?.[0]?.client_bill,
-          daysCount: daysOverdue,
-          icon: AlertCircle,
-          action: () => handleMarkAsPaid(invoice.id),
-          actionLabel: "Отметить оплату",
-        });
-      });
-
-      // Черновики без даты
-      const { data: draftInvoices } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          invoice_number,
-          clients(name),
-          invoice_calculations(client_bill)
-        `)
-        .eq("status", "draft")
-        .is("payment_date", null);
-
-      draftInvoices?.forEach((invoice: any) => {
-        criticalAlerts.push({
-          id: invoice.id,
-          type: "draft",
-          severity: "medium",
-          title: "Нет даты оплаты",
-          description: `${invoice.invoice_number} • ${invoice.clients?.name}`,
-          amount: invoice.invoice_calculations?.[0]?.client_bill,
-          icon: FileText,
-          action: () => navigate(`/?open=${invoice.id}`),
-          actionLabel: "Заполнить",
-        });
-      });
-
-      // Долго отправленные (>30 дней)
-      const { data: longSentInvoices } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          invoice_number,
-          created_at,
-          clients(name),
-          invoice_calculations(client_bill)
-        `)
-        .eq("status", "sent")
-        .is("actual_payment_date", null)
-        .lt("created_at", thirtyDaysAgo);
-
-      longSentInvoices?.forEach((invoice: any) => {
-        const daysWaiting = differenceInDays(new Date(), new Date(invoice.created_at));
-        criticalAlerts.push({
-          id: invoice.id,
-          type: "long_sent",
-          severity: "medium",
-          title: `В ожидании ${daysWaiting} дней`,
-          description: `${invoice.invoice_number} • ${invoice.clients?.name}`,
-          amount: invoice.invoice_calculations?.[0]?.client_bill,
-          daysCount: daysWaiting,
-          icon: Clock,
-          action: () => toast.success(`Напоминание отправлено для ${invoice.invoice_number}`),
-          actionLabel: "Напомнить",
-        });
-      });
-
-      // Сортировка: critical -> high -> medium, внутри по дням
-      criticalAlerts.sort((a, b) => {
-        const severityOrder = { critical: 0, high: 1, medium: 2 };
-        if (severityOrder[a.severity] !== severityOrder[b.severity]) {
-          return severityOrder[a.severity] - severityOrder[b.severity];
-        }
-        return (b.daysCount || 0) - (a.daysCount || 0);
-      });
-
-      setAlerts(criticalAlerts);
-    } catch (error) {
-      console.error("Error fetching alerts:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAlerts();
-  }, []);
-
-  useRealtimeSubscription({
-    channelName: "critical-alerts-channel",
-    table: "invoices",
-    onUpdate: fetchAlerts,
+  const { data: alertsData = [], isLoading } = useQuery<CriticalAlertData[]>({
+    queryKey: ["/api/admin/critical-alerts"],
+    queryFn: () => apiGet<CriticalAlertData[]>("/admin/critical-alerts"),
+    refetchInterval,
+    staleTime: 30000,
   });
 
-  const handleMarkAsPaid = async (invoiceId: string) => {
+  const handleMarkAsPaid = useCallback(async (invoiceId: string) => {
     try {
-      const { error } = await supabase
-        .from("invoices")
-        .update({ actual_payment_date: new Date().toISOString(), status: "paid" })
-        .eq("id", invoiceId);
-
-      if (error) throw error;
+      await apiPost(`/invoices/${invoiceId}/mark-paid`, {});
       toast.success("Счет отмечен как оплаченный");
-      fetchAlerts();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/critical-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     } catch (error) {
       toast.error("Ошибка при обновлении счета");
     }
-  };
+  }, [queryClient]);
 
-  if (loading) {
+  const alerts: CriticalAlert[] = alertsData.map(alert => {
+    let icon: LucideIcon;
+    let action: () => void;
+    let actionLabel: string;
+
+    switch (alert.type) {
+      case "overdue":
+        icon = AlertCircle;
+        action = () => handleMarkAsPaid(alert.id);
+        actionLabel = "Отметить оплату";
+        break;
+      case "draft":
+        icon = FileText;
+        action = () => navigate(`/?open=${alert.id}`);
+        actionLabel = "Заполнить";
+        break;
+      case "long_sent":
+        icon = Clock;
+        action = () => toast.success(`Напоминание отправлено для ${alert.invoiceNumber}`);
+        actionLabel = "Напомнить";
+        break;
+      default:
+        icon = AlertCircle;
+        action = () => {};
+        actionLabel = "";
+    }
+
+    return {
+      ...alert,
+      icon,
+      action,
+      actionLabel,
+    };
+  });
+
+  if (isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -237,6 +156,7 @@ export const CriticalAlertsSection = () => {
               size="sm"
               onClick={() => setExpanded(!expanded)}
               className="h-8 w-8 p-0"
+              data-testid="button-toggle-alerts"
             >
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
@@ -267,6 +187,7 @@ export const CriticalAlertsSection = () => {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
                     className={`flex items-center justify-between p-3 rounded-lg border ${severityColors[alert.severity]} hover:shadow-sm transition-all`}
+                    data-testid={`alert-${alert.type}-${alert.id}`}
                   >
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <div className={`p-2 rounded-full ${
@@ -276,27 +197,24 @@ export const CriticalAlertsSection = () => {
                       }`}>
                         <Icon className={`w-4 h-4 ${
                           alert.severity === "critical" ? "text-destructive" :
-                          alert.severity === "high" ? "text-orange-600" :
+                          alert.severity === "high" ? "text-orange-500" :
                           "text-yellow-600"
                         }`} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm">{alert.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {alert.description}
-                        </p>
-                        {alert.amount && (
-                          <p className="text-sm font-semibold mt-1">
-                            {formatCurrency(alert.amount)}
-                          </p>
+                        <p className="font-medium text-sm">{alert.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">{alert.description}</p>
+                        {alert.amount && alert.amount > 0 && (
+                          <p className="text-xs font-medium mt-0.5">{formatCurrency(alert.amount)}</p>
                         )}
                       </div>
                     </div>
                     <Button
+                      variant="ghost"
                       size="sm"
-                      variant={alert.severity === "critical" ? "destructive" : "outline"}
                       onClick={alert.action}
-                      className="ml-2 shrink-0"
+                      className="shrink-0 ml-2"
+                      data-testid={`button-action-${alert.id}`}
                     >
                       {alert.actionLabel}
                     </Button>

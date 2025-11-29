@@ -1629,6 +1629,116 @@ export class DatabaseStorage implements IStorage {
     return { monthlyAmount, yearlyTotal };
   }
   
+  async getCriticalAlerts(): Promise<Array<{
+    id: string;
+    type: 'overdue' | 'draft' | 'long_sent';
+    severity: 'critical' | 'high' | 'medium';
+    title: string;
+    description: string;
+    amount?: number;
+    daysCount?: number;
+    invoiceNumber: string;
+    clientName: string;
+  }>> {
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const alerts: Array<{
+      id: string;
+      type: 'overdue' | 'draft' | 'long_sent';
+      severity: 'critical' | 'high' | 'medium';
+      title: string;
+      description: string;
+      amount?: number;
+      daysCount?: number;
+      invoiceNumber: string;
+      clientName: string;
+    }> = [];
+
+    // Get all relevant invoices
+    const allInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+        partnerName: partners.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id));
+
+    for (const row of allInvoices) {
+      const { invoice, calculations, clientName, partnerName } = row;
+      const clientBill = calculations ? parseFloat(calculations.clientBill || "0") : 0;
+
+      // 1. Overdue payments - sent but not paid, past due date
+      if (invoice.status === 'sent' && !invoice.actualPaymentDate && invoice.paymentDate) {
+        const dueDate = new Date(invoice.paymentDate);
+        if (dueDate < today) {
+          const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (24 * 60 * 60 * 1000));
+          const severity = daysOverdue > 30 ? 'critical' : daysOverdue > 14 ? 'high' : 'medium';
+          
+          alerts.push({
+            id: invoice.id,
+            type: 'overdue',
+            severity,
+            title: `Просрочка ${daysOverdue} ${daysOverdue === 1 ? "день" : "дней"}`,
+            description: `${invoice.invoiceNumber} • ${clientName || 'N/A'} → ${partnerName || 'N/A'}`,
+            amount: clientBill,
+            daysCount: daysOverdue,
+            invoiceNumber: invoice.invoiceNumber || '',
+            clientName: clientName || '',
+          });
+        }
+      }
+
+      // 2. Drafts without payment date
+      if (invoice.status === 'draft' && !invoice.paymentDate) {
+        alerts.push({
+          id: invoice.id,
+          type: 'draft',
+          severity: 'medium',
+          title: "Нет даты оплаты",
+          description: `${invoice.invoiceNumber} • ${clientName || 'N/A'}`,
+          amount: clientBill,
+          invoiceNumber: invoice.invoiceNumber || '',
+          clientName: clientName || '',
+        });
+      }
+
+      // 3. Long sent invoices (>30 days without payment)
+      if (invoice.status === 'sent' && !invoice.actualPaymentDate && invoice.createdAt) {
+        const createdAt = new Date(invoice.createdAt);
+        if (createdAt < thirtyDaysAgo) {
+          const daysWaiting = Math.floor((today.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
+          
+          alerts.push({
+            id: invoice.id,
+            type: 'long_sent',
+            severity: 'medium',
+            title: `В ожидании ${daysWaiting} дней`,
+            description: `${invoice.invoiceNumber} • ${clientName || 'N/A'}`,
+            amount: clientBill,
+            daysCount: daysWaiting,
+            invoiceNumber: invoice.invoiceNumber || '',
+            clientName: clientName || '',
+          });
+        }
+      }
+    }
+
+    // Sort: critical -> high -> medium, within by days
+    alerts.sort((a, b) => {
+      const severityOrder = { critical: 0, high: 1, medium: 2 };
+      if (severityOrder[a.severity] !== severityOrder[b.severity]) {
+        return severityOrder[a.severity] - severityOrder[b.severity];
+      }
+      return (b.daysCount || 0) - (a.daysCount || 0);
+    });
+
+    return alerts;
+  }
+
   async getAdminMonthlyData(year: number): Promise<MonthlyData[]> {
     const monthNames = [
       "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",

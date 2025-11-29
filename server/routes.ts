@@ -1117,6 +1117,17 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Critical alerts for admin dashboard
+  app.get("/api/admin/critical-alerts", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const alerts = await storage.getCriticalAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error("Get critical alerts error:", error);
+      res.status(500).json({ error: "Failed to get critical alerts" });
+    }
+  });
+
   // Assistant Bonus Payments
   app.get("/api/admin/bonus-payments", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {

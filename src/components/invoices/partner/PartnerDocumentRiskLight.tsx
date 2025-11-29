@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle, Shield, Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface DocumentRiskResponse {
   status: "green" | "red";
@@ -9,9 +10,11 @@ interface DocumentRiskResponse {
 }
 
 export const PartnerDocumentRiskLight = () => {
+  const refetchInterval = useVisibilityAwareInterval();
+  
   const { data: riskStatus, isLoading } = useQuery<DocumentRiskResponse>({
     queryKey: ['/api/partner/document-risk'],
-    refetchInterval: 120000,
+    refetchInterval,
     refetchOnWindowFocus: true,
   });
 

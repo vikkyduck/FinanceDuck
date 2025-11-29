@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { formatDate, formatCurrency } from "@/lib/invoiceCalculations";
 import { CreateRecurringInvoiceDialog } from "./CreateRecurringInvoiceDialog";
 import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
@@ -48,17 +49,18 @@ export function RecurringInvoicesManager() {
   const [selectedRecurring, setSelectedRecurring] = useState<RecurringInvoice | null>(null);
   const [backdateFrom, setBackdateFrom] = useState("");
   const queryClient = useQueryClient();
+  const refetchInterval = useVisibilityAwareInterval();
 
   const { data: recurringInvoices = [], isLoading } = useQuery<RecurringInvoice[]>({
     queryKey: ["/api/recurring-invoices"],
     queryFn: () => apiGet("/recurring-invoices"),
-    refetchInterval: 120000,
+    refetchInterval,
   });
 
   const { data: dueInvoices = [] } = useQuery<RecurringInvoice[]>({
     queryKey: ["/api/recurring-invoices/due"],
     queryFn: () => apiGet("/recurring-invoices/due"),
-    refetchInterval: 120000,
+    refetchInterval,
   });
 
   const toggleMutation = useMutation({

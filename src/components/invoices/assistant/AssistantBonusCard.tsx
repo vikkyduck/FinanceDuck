@@ -12,6 +12,7 @@ import { apiGet } from "@/lib/api";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { AssistantBonusPayment } from "@shared/schema";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface AssistantStats {
   paidInvoicesCount: number;
@@ -24,6 +25,7 @@ interface AssistantStats {
 export const AssistantBonusCard = () => {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const queryClient = useQueryClient();
+  const refetchInterval = useVisibilityAwareInterval();
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -42,7 +44,7 @@ export const AssistantBonusCard = () => {
   const { data: stats, isLoading, isFetching } = useQuery<AssistantStats>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
-    refetchInterval: 120000,
+    refetchInterval,
     staleTime: 10000,
   });
 
@@ -50,7 +52,7 @@ export const AssistantBonusCard = () => {
     queryKey: ['/api/my-bonus-payments'],
     queryFn: () => apiGet('/my-bonus-payments'),
     enabled: historyDialogOpen,
-    refetchInterval: historyDialogOpen ? 30000 : false,
+    refetchInterval: historyDialogOpen ? refetchInterval : false,
   });
 
   if (isLoading) {

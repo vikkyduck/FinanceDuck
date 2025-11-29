@@ -7,6 +7,7 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 import { History, TrendingDown, Check, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface PaymentHistoryEntry {
   id: string;
@@ -29,6 +30,7 @@ export function PartnerPaymentHistory({
   className,
   compact = false 
 }: PartnerPaymentHistoryProps) {
+  const refetchInterval = useVisibilityAwareInterval();
   const apiUrl = partnerId 
     ? `/api/partners/${partnerId}/payment-history` 
     : "/api/my-payment-history";
@@ -41,7 +43,7 @@ export function PartnerPaymentHistory({
       return response.json();
     },
     staleTime: 30000,
-    refetchInterval: 120000,
+    refetchInterval,
   });
 
   if (isLoading) {

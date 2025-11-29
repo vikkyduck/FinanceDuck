@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DollarSign, CheckCircle, History, FileCheck2, FileText, Calendar, CreditCard, RefreshCw, User, Building2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,6 +36,7 @@ interface AssistantStats {
 export const AssistantBonusManager = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const refetchInterval = useVisibilityAwareInterval();
   const [payoutDialogOpen, setPayoutDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [notes, setNotes] = useState("");
@@ -58,14 +60,14 @@ export const AssistantBonusManager = () => {
   const { data: stats, isLoading: loadingStats, isFetching: fetchingStats } = useQuery<AssistantStats>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
-    refetchInterval: 120000,
+    refetchInterval,
     staleTime: 10000,
   });
 
   const { data: unpaidBonus, isLoading: loadingUnpaid } = useQuery<UnpaidBonusData>({
     queryKey: ['/api/admin/unpaid-bonus'],
     queryFn: () => apiGet('/admin/unpaid-bonus'),
-    refetchInterval: 120000,
+    refetchInterval,
     staleTime: 10000,
   });
 
@@ -73,7 +75,7 @@ export const AssistantBonusManager = () => {
     queryKey: ['/api/admin/bonus-payments'],
     queryFn: () => apiGet('/admin/bonus-payments'),
     enabled: historyDialogOpen,
-    refetchInterval: historyDialogOpen ? 30000 : false,
+    refetchInterval: historyDialogOpen ? refetchInterval : false,
   });
 
   const payoutMutation = useMutation({

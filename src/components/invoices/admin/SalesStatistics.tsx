@@ -3,6 +3,7 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 import { StatsGrid, StatConfig } from "@/components/ui/stats-grid";
 import { TrendingUp, ShoppingCart, FileText, Repeat } from "lucide-react";
 import { apiGet } from "@/lib/api";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface MonthlyData {
   monthNumber: number;
@@ -26,6 +27,8 @@ interface SalesStatisticsProps {
 }
 
 export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
+  const refetchInterval = useVisibilityAwareInterval();
+  
   const { data, isLoading } = useQuery<MonthlyData[]>({
     queryKey: ['admin-monthly-data', year],
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
@@ -34,7 +37,7 @@ export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
   const { data: draftsStats, isLoading: draftsLoading } = useQuery<DraftsStats>({
     queryKey: ['admin-drafts-stats'],
     queryFn: () => apiGet<DraftsStats>('/admin/drafts-stats'),
-    refetchInterval: 120000,
+    refetchInterval,
   });
 
   const currentMonth = new Date().getMonth() + 1;

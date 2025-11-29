@@ -6,6 +6,7 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Loader2, Users, Calendar, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface ClientMonthStats {
   clientId: string;
@@ -26,10 +27,11 @@ interface ClientStatsResponse {
 
 export const PartnerClientStats = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const refetchInterval = useVisibilityAwareInterval();
 
   const { data, isLoading, error } = useQuery<ClientStatsResponse>({
     queryKey: ['/api/partner/client-stats', selectedYear],
-    refetchInterval: 120000,
+    refetchInterval,
     refetchOnWindowFocus: true,
   });
 

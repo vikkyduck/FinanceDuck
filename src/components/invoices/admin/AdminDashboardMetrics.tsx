@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiGet } from "@/lib/api";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { 
   TrendingUp, 
   Scale,
@@ -68,11 +69,12 @@ const formatCurrency = (amount: number) => {
 export const AdminDashboardMetrics = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const refetchInterval = useVisibilityAwareInterval();
 
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard-stats", selectedYear, selectedMonth],
     queryFn: () => apiGet<DashboardStats>(`/admin/dashboard-stats?year=${selectedYear}&month=${selectedMonth}`),
-    refetchInterval: 120000,
+    refetchInterval,
     staleTime: 10000,
   });
 

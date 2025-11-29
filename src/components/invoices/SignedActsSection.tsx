@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiGet, apiPost, apiDelete } from "@/lib/api";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { Upload, FileText, Download, Trash2, Loader2, Building2, User, Link as LinkIcon, ExternalLink, Plus } from "lucide-react";
 import { formatDate } from "@/lib/invoiceCalculations";
 import {
@@ -51,6 +52,7 @@ interface SignedActsSectionProps {
 export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: SignedActsSectionProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const refetchInterval = useVisibilityAwareInterval();
   
   const [uploadingType, setUploadingType] = useState<ActType | null>(null);
   const [deleteAct, setDeleteAct] = useState<{ id: string; fileName: string } | null>(null);
@@ -62,7 +64,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     queryKey: ['/api/invoices', invoiceId, 'acts'],
     queryFn: () => apiGet(`/invoices/${invoiceId}/acts`),
     enabled: !!invoiceId,
-    refetchInterval: 120000,
+    refetchInterval,
     staleTime: 10000,
   });
 

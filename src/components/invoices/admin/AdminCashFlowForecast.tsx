@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { TrendingUp, TrendingDown, Calendar, DollarSign, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import {
   XAxis,
   YAxis,
@@ -49,19 +50,20 @@ const apiGet = async (path: string) => {
 
 export const AdminCashFlowForecast = () => {
   const { isAuthenticated } = useAuth();
+  const refetchInterval = useVisibilityAwareInterval();
 
   const { data: forecastData, isLoading: loadingForecast } = useQuery<ForecastData[]>({
     queryKey: ['/api/admin/forecast'],
     queryFn: () => apiGet('/admin/forecast?months=6'),
     enabled: isAuthenticated,
-    refetchInterval: 60000,
+    refetchInterval,
   });
 
   const { data: stats, isLoading: loadingStats } = useQuery<{ totalNetProfit?: number; totalClientBill?: number }>({
     queryKey: ['/api/dashboard/stats'],
     queryFn: () => apiGet('/dashboard/stats'),
     enabled: isAuthenticated,
-    refetchInterval: 60000,
+    refetchInterval,
   });
 
   const loading = loadingForecast || loadingStats;

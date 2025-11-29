@@ -3,6 +3,7 @@ import { Progress } from "@/components/ui/progress";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Loader2, Wallet, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface ClientFunds {
   clientId: string;
@@ -19,9 +20,11 @@ interface Agency30FundsResponse {
 }
 
 export const Agency30ClientFundsTracker = () => {
+  const refetchInterval = useVisibilityAwareInterval();
+  
   const { data, isLoading, error } = useQuery<Agency30FundsResponse>({
     queryKey: ['/api/partner/agency30-funds'],
-    refetchInterval: 120000,
+    refetchInterval,
     refetchOnWindowFocus: true,
   });
 

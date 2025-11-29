@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { ensureSessionContext } from "@/lib/supabaseHelpers";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost } from "@/lib/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Check, FileText } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
+import { formatCurrency } from "@/lib/invoiceCalculations";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,97 +32,43 @@ interface PartnerInvoicesDetailProps {
 }
 
 export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorded }: PartnerInvoicesDetailProps) {
-  const [invoices, setInvoices] = useState<PartnerInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<PartnerInvoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchInvoices = useCallback(async () => {
-    setLoading(true);
-    try {
-      await ensureSessionContext();
+  const { data: invoices = [], isLoading, refetch } = useQuery<PartnerInvoice[]>({
+    queryKey: ["/api/admin/partner-invoices", partnerId],
+    queryFn: () => apiGet<PartnerInvoice[]>(`/admin/partner-invoices/${partnerId}`),
+    enabled: !!partnerId,
+  });
 
-      const { data: invoicesData, error: invoicesError } = await supabase
-        .from("invoices")
-        .select(`
-          id,
-          invoice_number,
-          status,
-          created_at,
-          scheme,
-          clients(name),
-          invoice_calculations(
-            client_bill,
-            partner_share_from_margin,
-            commission_amount,
-            executor_expenses_total,
-            partner_transfer_due
-          )
-        `)
-        .eq("partner_id", partnerId)
-        .order("created_at", { ascending: false });
-
-      if (invoicesError) {
-        console.error("Error fetching invoices:", invoicesError);
-        setLoading(false);
-        return;
-      }
-
-      const { data: payments, error: paymentsError } = await supabase
-        .from("partner_payments")
-        .select("invoice_id, amount")
-        .eq("partner_id", partnerId);
-
-      if (paymentsError) {
-        console.error("Error fetching payments:", paymentsError);
-      }
-
-      const paymentsByInvoice = new Map<string, number>();
-      payments?.forEach((p: any) => {
-        if (p.invoice_id) {
-          paymentsByInvoice.set(p.invoice_id, (paymentsByInvoice.get(p.invoice_id) || 0) + Number(p.amount));
-        }
+  const recordPaymentMutation = useMutation({
+    mutationFn: async (data: { invoiceId: string; amount: number }) => {
+      return apiPost("/partner-payments", {
+        partnerId,
+        invoiceId: data.invoiceId,
+        amount: data.amount,
+        paymentDate: new Date().toISOString().split('T')[0],
+        notes: `Приход по счёту ${selectedInvoice?.invoice_number || data.invoiceId.slice(0, 8)}`,
       });
-
-      const formattedInvoices: PartnerInvoice[] = (invoicesData || []).map((inv: any) => {
-        const calc = inv.invoice_calculations?.[0];
-        const clientBill = Number(calc?.client_bill) || 0;
-        let partnerCommission = Number(calc?.commission_amount) || Number(calc?.partner_share_from_margin) || 0;
-
-        // Use stored partnerTransferDue as single source of truth
-        const storedDebt = Number(calc?.partner_transfer_due) || 0;
-        const debtToAdmin = Math.max(0, storedDebt);
-        const paidAmount = paymentsByInvoice.get(inv.id) || 0;
-        const remaining = Math.max(0, debtToAdmin - paidAmount);
-
-        return {
-          id: inv.id,
-          invoice_number: inv.invoice_number,
-          client_name: inv.clients?.name || "Клиент",
-          client_bill: clientBill,
-          partner_commission: partnerCommission,
-          debt_to_admin: debtToAdmin,
-          paid_amount: paidAmount,
-          remaining,
-          status: inv.status,
-          created_at: inv.created_at,
-        };
-      });
-
-      setInvoices(formattedInvoices.filter(inv => inv.remaining > 0));
-    } catch (error) {
-      console.error("Error fetching partner invoices:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [partnerId]);
-
-  useEffect(() => {
-    fetchInvoices();
-  }, [fetchInvoices]);
+    },
+    onSuccess: () => {
+      showSuccess("Готово", `Приход записан`);
+      setPaymentDialogOpen(false);
+      setSelectedInvoice(null);
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/partner-invoices", partnerId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner/payments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/partner/debt"] });
+      onPaymentRecorded?.();
+    },
+    onError: (error) => {
+      toast({ title: "Ошибка", description: "Не удалось записать приход", variant: "destructive" });
+      console.error("Error recording payment:", error);
+    },
+  });
 
   const handleRecordPayment = (invoice: PartnerInvoice) => {
     setSelectedInvoice(invoice);
@@ -130,7 +76,7 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
     setPaymentDialogOpen(true);
   };
 
-  const handleSavePayment = async () => {
+  const handleSavePayment = () => {
     if (!selectedInvoice) return;
     
     const amount = parseFloat(paymentAmount);
@@ -144,51 +90,17 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
       return;
     }
 
-    setSaving(true);
-    try {
-      await ensureSessionContext();
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id || "system";
-      
-      const { error } = await supabase
-        .from("partner_payments")
-        .insert({
-          partner_id: partnerId,
-          invoice_id: selectedInvoice.id,
-          amount: amount,
-          payment_date: new Date().toISOString(),
-          notes: `Приход по счёту ${selectedInvoice.invoice_number || selectedInvoice.id.slice(0, 8)}`,
-          created_by: userId,
-        });
-
-      if (error) {
-        toast({ title: "Ошибка", description: "Не удалось записать приход", variant: "destructive" });
-        console.error("Error recording payment:", error);
-        return;
-      }
-
-      showSuccess("Готово", `Приход ${formatCurrency(amount)} записан`);
-      setPaymentDialogOpen(false);
-      setSelectedInvoice(null);
-      fetchInvoices();
-      onPaymentRecorded?.();
-    } catch (error) {
-      toast({ title: "Ошибка", description: "Не удалось записать приход", variant: "destructive" });
-      console.error("Error recording payment:", error);
-    } finally {
-      setSaving(false);
-    }
+    recordPaymentMutation.mutate({ invoiceId: selectedInvoice.id, amount });
   };
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-center py-4 text-sm text-muted-foreground">Загрузка счетов...</div>;
   }
 
   if (invoices.length === 0) {
     return (
       <div className="text-center py-4 text-sm text-muted-foreground">
-        Нет оплаченных счетов
+        Нет неоплаченных счетов
       </div>
     );
   }
@@ -199,7 +111,7 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
 
   return (
     <div className="space-y-3 bg-muted/30 p-4 rounded-lg" data-testid={`partner-invoices-${partnerId}`}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h4 className="font-medium text-sm">Счета партнёра {partnerName}</h4>
         <div className="text-xs text-muted-foreground">
           Долг: {formatCurrency(totalDebt)} | Оплачено: {formatCurrency(totalPaid)} | Остаток: <span className="font-semibold text-red-600">{formatCurrency(totalRemaining)}</span>
@@ -267,15 +179,15 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between gap-2 text-sm">
               <span className="text-muted-foreground">Долг по счёту:</span>
               <span>{formatCurrency(selectedInvoice?.debt_to_admin || 0)}</span>
             </div>
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between gap-2 text-sm">
               <span className="text-muted-foreground">Уже оплачено:</span>
               <span className="text-green-600">{formatCurrency(selectedInvoice?.paid_amount || 0)}</span>
             </div>
-            <div className="flex justify-between text-sm font-medium">
+            <div className="flex justify-between gap-2 text-sm font-medium">
               <span>Остаток:</span>
               <span className="text-red-600">{formatCurrency(selectedInvoice?.remaining || 0)}</span>
             </div>
@@ -297,8 +209,8 @@ export function PartnerInvoicesDetail({ partnerId, partnerName, onPaymentRecorde
             <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
               Отмена
             </Button>
-            <Button onClick={handleSavePayment} disabled={saving}>
-              {saving ? "Сохранение..." : "Записать приход"}
+            <Button onClick={handleSavePayment} disabled={recordPaymentMutation.isPending}>
+              {recordPaymentMutation.isPending ? "Сохранение..." : "Записать приход"}
             </Button>
           </DialogFooter>
         </DialogContent>

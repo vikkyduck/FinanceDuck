@@ -2198,6 +2198,75 @@ export class DatabaseStorage implements IStorage {
       }));
   }
 
+  async getPartnerInvoicesDetail(partnerId: string): Promise<Array<{
+    id: string;
+    invoice_number: string | null;
+    client_name: string;
+    client_bill: number;
+    partner_commission: number;
+    debt_to_admin: number;
+    paid_amount: number;
+    remaining: number;
+    status: string;
+    created_at: string;
+  }>> {
+    // Get invoices with calculations for this partner
+    const partnerInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(eq(invoices.partnerId, partnerId))
+      .orderBy(desc(invoices.createdAt));
+
+    // Get client names
+    const clientIds = [...new Set(partnerInvoices.map(i => i.invoice.clientId).filter(Boolean))];
+    const clientData = clientIds.length > 0
+      ? await db.select().from(clients).where(inArray(clients.id, clientIds as string[]))
+      : [];
+    const clientMap = new Map(clientData.map(c => [c.id, c.name]));
+
+    // Get payments by invoice
+    const invoiceIds = partnerInvoices.map(i => i.invoice.id);
+    const paymentsData = invoiceIds.length > 0
+      ? await db.select().from(partnerPayments).where(inArray(partnerPayments.invoiceId, invoiceIds))
+      : [];
+    const paymentsByInvoice = new Map<string, number>();
+    for (const p of paymentsData) {
+      if (p.invoiceId) {
+        const current = paymentsByInvoice.get(p.invoiceId) || 0;
+        paymentsByInvoice.set(p.invoiceId, current + parseFloat(p.amount));
+      }
+    }
+
+    return partnerInvoices
+      .map(row => {
+        const calc = row.calculations;
+        const clientBill = parseFloat(calc?.clientBill || '0');
+        const partnerCommission = parseFloat(calc?.commissionAmount || '0') || parseFloat(calc?.partnerShareFromMargin || '0');
+        const storedDebt = parseFloat(calc?.partnerTransferDue || '0');
+        const debtToAdmin = Math.max(0, storedDebt);
+        const paidAmount = paymentsByInvoice.get(row.invoice.id) || 0;
+        const remaining = Math.max(0, debtToAdmin - paidAmount);
+
+        return {
+          id: row.invoice.id,
+          invoice_number: row.invoice.invoiceNumber,
+          client_name: row.invoice.clientId ? clientMap.get(row.invoice.clientId) || 'Клиент' : 'Клиент',
+          client_bill: clientBill,
+          partner_commission: partnerCommission,
+          debt_to_admin: debtToAdmin,
+          paid_amount: paidAmount,
+          remaining,
+          status: row.invoice.status,
+          created_at: row.invoice.createdAt || '',
+        };
+      })
+      .filter(inv => inv.remaining > 0);
+  }
+
   async getClientAgency30Report(clientId: string): Promise<{
     total_paid: number;
     agency_margin: number;

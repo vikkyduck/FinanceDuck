@@ -772,6 +772,18 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Admin: Partner invoices detail with debt tracking
+  app.get("/api/admin/partner-invoices/:partnerId", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { partnerId } = req.params;
+      const data = await storage.getPartnerInvoicesDetail(partnerId);
+      res.json(data);
+    } catch (error) {
+      console.error("Get partner invoices detail error:", error);
+      res.status(500).json({ error: "Failed to get partner invoices" });
+    }
+  });
+
   app.get("/api/admin/plan-fact", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const year = parseInt(req.query.year as string) || new Date().getFullYear();

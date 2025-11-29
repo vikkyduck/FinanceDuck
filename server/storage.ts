@@ -2150,11 +2150,13 @@ export class DatabaseStorage implements IStorage {
   }
   
   async recalculateAllInvoices(): Promise<{ updated: number; errors: number }> {
+    console.log('[recalculateAllInvoices] Starting recalculation...');
     let updated = 0;
     let errors = 0;
     
     // Get all invoices
     const allInvoices = await db.select().from(invoices);
+    console.log(`[recalculateAllInvoices] Found ${allInvoices.length} invoices to process`);
     
     for (const invoice of allInvoices) {
       try {
@@ -2202,6 +2204,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
+    console.log(`[recalculateAllInvoices] Completed: ${updated} updated, ${errors} errors`);
     return { updated, errors };
   }
 

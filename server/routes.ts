@@ -702,15 +702,17 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/admin/recalculate-invoices", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    console.log('[API] Recalculate invoices request received');
     try {
       const result = await storage.recalculateAllInvoices();
+      console.log('[API] Recalculate invoices result:', result);
       res.json({ 
         success: true, 
         message: `Recalculated ${result.updated} invoices with ${result.errors} errors`,
         ...result 
       });
     } catch (error) {
-      console.error("Recalculate invoices error:", error);
+      console.error("[API] Recalculate invoices error:", error);
       res.status(500).json({ error: "Failed to recalculate invoices" });
     }
   });

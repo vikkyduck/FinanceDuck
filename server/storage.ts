@@ -1607,7 +1607,8 @@ export class DatabaseStorage implements IStorage {
 
       const summary = partnerMap.get(pId)!;
       summary.totalPlannedExpenses += plannedExpenses;
-      summary.totalCommission += commission;
+      // Only add commission to totals for non-assistant roles
+      summary.totalCommission += role === 'assistant' ? 0 : commission;
       summary.totalDoNotSpend += doNotSpend;
       summary.invoiceCount += 1;
       summary.invoices.push({
@@ -1623,9 +1624,12 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
+    // Filter and sort results, zero out commission fields for assistant
     return Array.from(partnerMap.values())
       .map(s => ({
         ...s,
+        // Ensure assistant never sees any commission data
+        totalCommission: role === 'assistant' ? 0 : s.totalCommission,
         invoices: s.invoices.sort((a, b) => {
           if (!a.createdAt || !b.createdAt) return 0;
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();

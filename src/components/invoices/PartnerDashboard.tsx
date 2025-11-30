@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { UnifiedInvoicesList } from "./UnifiedInvoicesList";
+import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
-import { apiGet } from "@/lib/api";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
 import { 
   ArrowUpRight, 
   Wallet, 
@@ -20,22 +22,39 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  CreditCard
 } from "lucide-react";
+import { useState } from "react";
 
-interface InvoiceData {
+interface DebtInvoice {
   id: string;
-  invoice_number: string;
-  status: string;
+  invoiceNumber: string;
   scheme: string;
-  payment_date: string | null;
-  created_at: string;
-  calculations?: {
-    partnerTransferDue?: string;
-    plannedExpenses?: string;
-    expensesPaidByPartner?: string;
-    partnerCommission?: string;
+  clientBill: number;
+  partnerCommission: number;
+  amountToAdmin: number;
+  expensesByPartner: number;
+  expensesByAdmin: number;
+}
+
+interface DebtPayment {
+  id: string;
+  amount: string;
+  paymentDate: string;
+  notes: string | null;
+  invoiceNumber: string | null;
+}
+
+interface DebtDetails {
+  summary: {
+    totalDebt: number;
+    totalPaid: number;
+    remainingDebt: number;
+    invoiceCount: number;
   };
+  invoices: DebtInvoice[];
+  payments: DebtPayment[];
 }
 
 interface DocumentRiskData {
@@ -44,102 +63,56 @@ interface DocumentRiskData {
   missingActsInvoices: Array<{ id: string; invoiceNumber: string }>;
 }
 
-interface PartnerMetrics {
-  debtToAdmin: number;
-  reservedForExpenses: number;
-  yearlyCommission: number;
-  signedActsCount: number;
-  totalPaidInvoices: number;
-  invoicesWithDebt: Array<{ id: string; number: string; amount: number }>;
-}
-
-const calculatePartnerMetrics = (invoices: InvoiceData[], documentRisk: DocumentRiskData | null): PartnerMetrics => {
-  const currentYear = new Date().getFullYear();
-  
-  let debtToAdmin = 0;
-  let reservedForExpenses = 0;
-  let yearlyCommission = 0;
-  let totalPaidInvoices = 0;
-  const invoicesWithDebt: Array<{ id: string; number: string; amount: number }> = [];
-
-  for (const inv of invoices) {
-    if (inv.status !== 'paid') continue;
-    
-    totalPaidInvoices++;
-    
-    const calc = inv.calculations || {};
-    const partnerTransferDue = parseFloat(calc.partnerTransferDue || "0");
-    const plannedExpenses = parseFloat(calc.plannedExpenses || "0");
-    const expensesPaidByPartner = parseFloat(calc.expensesPaidByPartner || "0");
-    const partnerCommission = parseFloat(calc.partnerCommission || "0");
-    
-    // Debt to admin
-    if (partnerTransferDue > 0) {
-      debtToAdmin += partnerTransferDue;
-      invoicesWithDebt.push({
-        id: inv.id,
-        number: inv.invoice_number || `INV-${inv.id.slice(0, 8)}`,
-        amount: partnerTransferDue,
-      });
-    }
-    
-    // Reserved for expenses (plannedExpenses - already spent)
-    if (plannedExpenses > 0) {
-      const reserved = Math.max(0, plannedExpenses - expensesPaidByPartner);
-      reservedForExpenses += reserved;
-    }
-    
-    // Yearly commission - check if invoice is from current year
-    const invoiceYear = inv.payment_date 
-      ? new Date(inv.payment_date).getFullYear()
-      : new Date(inv.created_at).getFullYear();
-    
-    if (invoiceYear === currentYear) {
-      yearlyCommission += partnerCommission;
-    }
-  }
-
-  // Signed acts count = total paid - missing acts
-  const signedActsCount = documentRisk 
-    ? totalPaidInvoices - documentRisk.missingActsCount 
-    : 0;
-
-  return {
-    debtToAdmin,
-    reservedForExpenses,
-    yearlyCommission,
-    signedActsCount,
-    totalPaidInvoices,
-    invoicesWithDebt,
+interface InvoiceData {
+  id: string;
+  invoiceNumber: string;
+  status: string;
+  scheme: string;
+  paymentDate: string | null;
+  createdAt: string;
+  calculations?: {
+    partnerTransferDue?: string;
+    plannedExpenses?: string;
+    expensesPaidByPartner?: string;
+    partnerCommission?: string;
   };
-};
+}
 
 export const PartnerDashboard = () => {
   const { partnerId, isLoading: authLoading } = useAuth();
   const { viewMode, setViewMode } = useViewMode();
-  const [invoices, setInvoices] = useState<InvoiceData[]>([]);
-  const [documentRisk, setDocumentRisk] = useState<DocumentRiskData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showDebtDetails, setShowDebtDetails] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [showPayments, setShowPayments] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
 
-  const fetchData = async () => {
-    if (!partnerId) return;
-    
-    try {
-      // Fetch both invoices and document risk in parallel
-      const [invoicesData, riskData] = await Promise.all([
-        apiGet<any[]>('/invoices'),
-        apiGet<DocumentRiskData>('/partner/document-risk').catch(() => null),
-      ]);
-      
-      const mapped: InvoiceData[] = invoicesData.map((inv: any) => ({
+  const { data: debtDetails, isLoading: debtLoading } = useQuery<DebtDetails>({
+    queryKey: ['/api/my-debt'],
+    queryFn: () => apiGet<DebtDetails>('/my-debt'),
+    enabled: !!partnerId,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: documentRisk } = useQuery<DocumentRiskData>({
+    queryKey: ['/api/partner/document-risk'],
+    queryFn: () => apiGet<DocumentRiskData>('/partner/document-risk'),
+    enabled: !!partnerId,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery<InvoiceData[]>({
+    queryKey: ['/api/invoices'],
+    queryFn: async () => {
+      const data = await apiGet<any[]>('/invoices');
+      return data.map((inv: any) => ({
         id: inv.id,
-        invoice_number: inv.invoiceNumber,
+        invoiceNumber: inv.invoiceNumber,
         status: inv.status,
         scheme: inv.scheme,
-        payment_date: inv.paymentDate,
-        created_at: inv.createdAt,
+        paymentDate: inv.paymentDate,
+        createdAt: inv.createdAt,
         calculations: inv.calculations ? {
           partnerTransferDue: inv.calculations.partnerTransferDue,
           plannedExpenses: inv.calculations.plannedExpenses,
@@ -147,49 +120,78 @@ export const PartnerDashboard = () => {
           partnerCommission: inv.calculations.partnerCommission,
         } : undefined,
       }));
+    },
+    enabled: !!partnerId,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
+
+  const metrics = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    let reservedForExpenses = 0;
+    let yearlyCommission = 0;
+    let totalPaidInvoices = 0;
+
+    for (const inv of invoices) {
+      if (inv.status !== 'paid') continue;
       
-      setInvoices(mapped);
-      setDocumentRisk(riskData);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    
-    // Refresh on visibility change
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        fetchData();
+      totalPaidInvoices++;
+      
+      const calc = inv.calculations || {};
+      const plannedExpenses = parseFloat(calc.plannedExpenses || "0");
+      const expensesPaidByPartner = parseFloat(calc.expensesPaidByPartner || "0");
+      const partnerCommission = parseFloat(calc.partnerCommission || "0");
+      
+      if (plannedExpenses > 0) {
+        const reserved = Math.max(0, plannedExpenses - expensesPaidByPartner);
+        reservedForExpenses += reserved;
       }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibility);
-    
-    // Poll every 2 minutes
-    const interval = setInterval(fetchData, 120000);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      clearInterval(interval);
-    };
-  }, [partnerId]);
+      
+      const invoiceYear = inv.paymentDate 
+        ? new Date(inv.paymentDate).getFullYear()
+        : new Date(inv.createdAt).getFullYear();
+      
+      if (invoiceYear === currentYear) {
+        yearlyCommission += partnerCommission;
+      }
+    }
 
-  const metrics = useMemo(() => calculatePartnerMetrics(invoices, documentRisk), [invoices, documentRisk]);
-  
+    const signedActsCount = documentRisk 
+      ? totalPaidInvoices - documentRisk.missingActsCount 
+      : 0;
+
+    return {
+      reservedForExpenses,
+      yearlyCommission,
+      signedActsCount,
+      totalPaidInvoices,
+    };
+  }, [invoices, documentRisk]);
+
   const currentYear = new Date().getFullYear();
-  const hasDebt = metrics.debtToAdmin > 0;
+  const loading = debtLoading || invoicesLoading;
+  
+  const remainingDebt = debtDetails?.summary.remainingDebt ?? 0;
+  const totalPaid = debtDetails?.summary.totalPaid ?? 0;
+  const hasDebt = remainingDebt > 0;
+  
   const actsPercentage = metrics.totalPaidInvoices > 0 
     ? Math.round((metrics.signedActsCount / metrics.totalPaidInvoices) * 100) 
     : 0;
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchData();
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/my-debt'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/invoices'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/partner/document-risk'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] }),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   if (authLoading) {
@@ -218,15 +220,14 @@ export const PartnerDashboard = () => {
           variant="outline" 
           size="icon"
           onClick={handleRefresh}
-          disabled={refreshing}
+          disabled={loading || isRefreshing}
           data-testid="button-refresh"
         >
-          <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+          <RefreshCw className={cn("h-4 w-4", (loading || isRefreshing) && "animate-spin")} />
         </Button>
       </div>
 
       <div className="space-y-8">
-        {/* 4 Hero Metrics */}
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[...Array(4)].map((_, i) => (
@@ -236,7 +237,6 @@ export const PartnerDashboard = () => {
         ) : (
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {/* Card 1: Debt to Admin */}
               <Card 
                 className={cn(
                   "border-2 cursor-pointer transition-colors",
@@ -251,19 +251,27 @@ export const PartnerDashboard = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground mb-1">
-                        Перевести админу
+                        Долг админу
                       </p>
                       <p className={cn(
                         "text-2xl font-bold",
                         hasDebt ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
                       )} data-testid="text-debt-amount">
-                        {formatCurrency(metrics.debtToAdmin)}
+                        {formatCurrency(remainingDebt)}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {hasDebt 
-                          ? `${metrics.invoicesWithDebt.length} счетов` 
-                          : "Всё оплачено"}
-                      </p>
+                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                        {totalPaid > 0 && (
+                          <div className="flex items-center gap-1">
+                            <CreditCard className="h-3 w-3" />
+                            <span>Оплачено: {formatCurrency(totalPaid)}</span>
+                          </div>
+                        )}
+                        <span>
+                          {hasDebt 
+                            ? `${debtDetails?.invoices.length || 0} счетов` 
+                            : "Всё оплачено"}
+                        </span>
+                      </div>
                     </div>
                     <div className={cn(
                       "p-2 rounded-full",
@@ -291,7 +299,6 @@ export const PartnerDashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Card 2: Reserved for Expenses */}
               <Card data-testid="card-reserved-expenses">
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between gap-2">
@@ -313,7 +320,6 @@ export const PartnerDashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Card 3: Yearly Commission */}
               <Card data-testid="card-yearly-commission">
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between gap-2">
@@ -335,7 +341,6 @@ export const PartnerDashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Card 4: Signed Acts */}
               <Card data-testid="card-signed-acts">
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between gap-2">
@@ -368,34 +373,113 @@ export const PartnerDashboard = () => {
               </Card>
             </div>
 
-            {/* Debt Details Expandable */}
-            {showDebtDetails && metrics.invoicesWithDebt.length > 0 && (
+            {showDebtDetails && debtDetails && (
               <Card className="border-red-200/50 dark:border-red-800/30 bg-red-50/30 dark:bg-red-950/10">
-                <CardContent className="pt-4">
-                  <p className="text-sm font-medium text-muted-foreground mb-3">
-                    Счета с долгом к переводу:
-                  </p>
-                  <div className="space-y-2">
-                    {metrics.invoicesWithDebt.map((invoice) => (
-                      <div 
-                        key={invoice.id}
-                        className="flex items-center justify-between p-2 bg-background/80 rounded-md"
-                        data-testid={`debt-invoice-${invoice.id}`}
-                      >
-                        <span className="text-sm font-medium">{invoice.number}</span>
-                        <Badge variant="destructive">
-                          {formatCurrency(invoice.amount)}
-                        </Badge>
+                <CardContent className="pt-4 space-y-4">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Детали долга
+                    </p>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Общий долг: </span>
+                        <span className="font-semibold">{formatCurrency(debtDetails.summary.totalDebt)}</span>
                       </div>
-                    ))}
+                      <div>
+                        <span className="text-muted-foreground">Оплачено: </span>
+                        <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(debtDetails.summary.totalPaid)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Остаток: </span>
+                        <span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(debtDetails.summary.remainingDebt)}</span>
+                      </div>
+                    </div>
                   </div>
+
+                  {debtDetails.summary.totalDebt > 0 && (
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-300 bg-green-500"
+                        style={{ 
+                          width: `${Math.min(100, (debtDetails.summary.totalPaid / debtDetails.summary.totalDebt) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {debtDetails.invoices.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Счета (начислено к переводу):
+                      </p>
+                      {debtDetails.invoices.map((invoice) => (
+                        <div 
+                          key={invoice.id}
+                          className="flex items-center justify-between p-2 bg-background/80 rounded-md"
+                          data-testid={`debt-invoice-${invoice.id}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{invoice.invoiceNumber}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {invoice.scheme}
+                            </Badge>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {formatCurrency(invoice.amountToAdmin)}
+                          </span>
+                        </div>
+                      ))}
+                      <p className="text-xs text-muted-foreground italic pt-1">
+                        Оплаты вычитаются из общей суммы долга
+                      </p>
+                    </div>
+                  )}
+
+                  {debtDetails.payments.length > 0 && (
+                    <div className="space-y-2">
+                      <button 
+                        onClick={() => setShowPayments(!showPayments)}
+                        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showPayments ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        <span>Мои оплаты ({debtDetails.payments.length})</span>
+                      </button>
+                      
+                      {showPayments && (
+                        <div className="space-y-1.5 pl-4">
+                          {debtDetails.payments.map((payment) => (
+                            <div 
+                              key={payment.id}
+                              className="flex items-center justify-between p-2 bg-green-50/50 dark:bg-green-950/20 rounded-md border border-green-200/50 dark:border-green-800/30"
+                            >
+                              <div className="flex items-center gap-2">
+                                <CreditCard className="h-3 w-3 text-green-600 dark:text-green-400" />
+                                <span className="text-sm">
+                                  {new Date(payment.paymentDate).toLocaleDateString('ru-RU')}
+                                </span>
+                                {payment.notes && (
+                                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                    {payment.notes}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-semibold text-green-600 dark:text-green-400">
+                                {formatCurrency(parseFloat(payment.amount))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
           </div>
         )}
 
-        {/* Invoices List */}
+        <DoNotSpendDashboard />
+
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4 flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-2xl">Мои счета</CardTitle>

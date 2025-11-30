@@ -63,6 +63,40 @@ interface DocumentRiskData {
   missingActsInvoices: Array<{ id: string; invoiceNumber: string }>;
 }
 
+interface DoNotSpendSummary {
+  clientId: string;
+  clientName: string;
+  invoiceCount: number;
+  totalBudget: number;
+  totalSpent: number;
+  remaining: number;
+  invoices: Array<{
+    id: string;
+    number: string;
+    budget: number;
+    spent: number;
+    remaining: number;
+  }>;
+}
+
+interface PartnerSchemeSummary {
+  partnerId: string;
+  partnerName: string;
+  invoiceCount: number;
+  totalPlannedExpenses: number;
+  totalSpent: number;
+  totalCommission: number;
+  totalDoNotSpend: number;
+  invoices: Array<{
+    id: string;
+    number: string;
+    plannedExpenses: number;
+    spent: number;
+    commission: number;
+    doNotSpend: number;
+  }>;
+}
+
 interface InvoiceData {
   id: string;
   invoiceNumber: string;
@@ -102,6 +136,22 @@ export const PartnerDashboard = () => {
     refetchOnWindowFocus: true,
   });
 
+  const { data: agency30Summaries = [] } = useQuery<DoNotSpendSummary[]>({
+    queryKey: ['/api/do-not-spend'],
+    queryFn: () => apiGet<DoNotSpendSummary[]>('/do-not-spend'),
+    enabled: !!partnerId,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: partnerSchemeSummaries = [] } = useQuery<PartnerSchemeSummary[]>({
+    queryKey: ['/api/do-not-spend/partner-schemes'],
+    queryFn: () => apiGet<PartnerSchemeSummary[]>('/do-not-spend/partner-schemes'),
+    enabled: !!partnerId,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
+
   const { data: invoices = [], isLoading: invoicesLoading } = useQuery<InvoiceData[]>({
     queryKey: ['/api/invoices'],
     queryFn: async () => {
@@ -128,7 +178,6 @@ export const PartnerDashboard = () => {
 
   const metrics = useMemo(() => {
     const currentYear = new Date().getFullYear();
-    let reservedForExpenses = 0;
     let yearlyCommission = 0;
     let totalPaidInvoices = 0;
 
@@ -138,14 +187,7 @@ export const PartnerDashboard = () => {
       totalPaidInvoices++;
       
       const calc = inv.calculations || {};
-      const plannedExpenses = parseFloat(calc.plannedExpenses || "0");
-      const expensesPaidByPartner = parseFloat(calc.expensesPaidByPartner || "0");
       const partnerCommission = parseFloat(calc.partnerCommission || "0");
-      
-      if (plannedExpenses > 0) {
-        const reserved = Math.max(0, plannedExpenses - expensesPaidByPartner);
-        reservedForExpenses += reserved;
-      }
       
       const invoiceYear = inv.paymentDate 
         ? new Date(inv.paymentDate).getFullYear()
@@ -160,13 +202,17 @@ export const PartnerDashboard = () => {
       ? totalPaidInvoices - documentRisk.missingActsCount 
       : 0;
 
+    const agency30Remaining = agency30Summaries.reduce((sum, s) => sum + s.remaining, 0);
+    const partnerSchemeDoNotSpend = partnerSchemeSummaries.reduce((sum, s) => sum + s.totalDoNotSpend, 0);
+    const reservedForExpenses = agency30Remaining + partnerSchemeDoNotSpend;
+
     return {
       reservedForExpenses,
       yearlyCommission,
       signedActsCount,
       totalPaidInvoices,
     };
-  }, [invoices, documentRisk]);
+  }, [invoices, documentRisk, agency30Summaries, partnerSchemeSummaries]);
 
   const currentYear = new Date().getFullYear();
   const loading = debtLoading || invoicesLoading;

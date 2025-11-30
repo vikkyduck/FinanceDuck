@@ -18,7 +18,6 @@ import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
-import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
 import { AdminDashboardMetrics } from "./admin/AdminDashboardMetrics";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
@@ -154,7 +153,6 @@ export const AdminDashboard = () => {
 
         <TabsContent value="overview" className="space-y-6">
           <div className="space-y-6">
-            <PartnerDebtDashboard />
             <DoNotSpendDashboard />
           </div>
         </TabsContent>

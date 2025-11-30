@@ -5,7 +5,6 @@ import { BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AdminInvoicesList } from "./admin/AdminInvoicesList";
-import { WorkingCapitalManager } from "./admin/WorkingCapitalManager";
 import { ClientLTVReport } from "./admin/ClientLTVReport";
 import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
 import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
@@ -158,15 +157,6 @@ export const AdminDashboard = () => {
 
         <TabsContent value="finances" className="space-y-6">
           <div className="space-y-6">
-            <CollapsibleSection
-              id="workingCapital"
-              title="Оборотный капитал"
-              isExpanded={isExpanded("workingCapital")}
-              onToggle={() => toggleSection("workingCapital")}
-            >
-              <WorkingCapitalManager />
-            </CollapsibleSection>
-
             <CollapsibleSection
               id="cashFlow"
               title="Прогноз денежных потоков"

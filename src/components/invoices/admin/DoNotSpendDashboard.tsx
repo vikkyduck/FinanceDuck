@@ -341,74 +341,7 @@ export const DoNotSpendDashboard = ({
             </div>
           </div>
 
-          {role === 'partner' ? (
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
-                  <TableHead className="text-xs">Счёт</TableHead>
-                  <TableHead className="text-xs text-right">План. расходы</TableHead>
-                  <TableHead className="text-xs text-right">Потрачено</TableHead>
-                  <TableHead className="text-xs text-right">Комиссия</TableHead>
-                  <TableHead className="text-xs text-right">Не тратить</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {partnerSchemeSummaries.flatMap((summary) => 
-                  summary.invoices.map((invoice) => (
-                    <TableRow 
-                      key={invoice.id}
-                      className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 border-blue-200/50 dark:border-blue-800/30"
-                      data-testid={`row-partner-invoice-${invoice.id}`}
-                    >
-                      <TableCell className="text-sm">
-                        <div className="flex items-start gap-2">
-                          <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                          <div className="min-w-0 space-y-1">
-                            <div className="font-medium text-xs">
-                              {invoice.number}
-                            </div>
-                            {invoice.description && (
-                              <div className="text-xs text-muted-foreground line-clamp-1" title={invoice.description}>
-                                {invoice.description}
-                              </div>
-                            )}
-                            {invoice.notes && (
-                              <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
-                                <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                                <span className="line-clamp-1" title={invoice.notes}>
-                                  {invoice.notes}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(invoice.plannedExpenses)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(invoice.spent)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(invoice.commission)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right">
-                        <span className={cn(
-                          "font-semibold",
-                          invoice.doNotSpend > 0 
-                            ? "text-blue-600 dark:text-blue-400" 
-                            : "text-muted-foreground"
-                        )}>
-                          {formatCurrency(invoice.doNotSpend)}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          ) : (
-            <Table>
+          <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
                   <TableHead className="text-xs w-8"></TableHead>
@@ -523,7 +456,6 @@ export const DoNotSpendDashboard = ({
                 })}
               </TableBody>
             </Table>
-          )}
 
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">
             <div className="flex items-center justify-between text-sm flex-wrap gap-2">

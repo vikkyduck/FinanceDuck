@@ -1551,6 +1551,7 @@ export class DatabaseStorage implements IStorage {
     totalSpent: number;
     totalCommission: number;
     totalDoNotSpend: number;
+    totalPartnerDebt: number;
     invoiceCount: number;
     invoices: {
       id: string;
@@ -1562,6 +1563,7 @@ export class DatabaseStorage implements IStorage {
       spent: number;
       remaining: number;
       commission: number;
+      partnerDebt: number;
       doNotSpend: number;
       createdAt: Date | null;
     }[];
@@ -1587,6 +1589,25 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(partners, eq(invoices.partnerId, partners.id))
       .where(and(...conditions));
 
+    // Get all expenses for partner scheme invoices to calculate spent amounts
+    const invoiceIds = partnerInvoices.map(row => row.invoice.id);
+    const allExpenses = invoiceIds.length > 0 
+      ? await db.select().from(invoiceExpenses).where(inArray(invoiceExpenses.invoiceId, invoiceIds))
+      : [];
+    
+    // Group expenses by invoice ID
+    const expensesByInvoice = new Map<string, { paidByPartner: number; paidByAdmin: number }>();
+    for (const expense of allExpenses) {
+      const current = expensesByInvoice.get(expense.invoiceId) || { paidByPartner: 0, paidByAdmin: 0 };
+      const amount = parseFloat(expense.amount);
+      if (expense.paidByAdmin === true) {
+        current.paidByAdmin += amount;
+      } else {
+        current.paidByPartner += amount;
+      }
+      expensesByInvoice.set(expense.invoiceId, current);
+    }
+
     const partnerMap = new Map<string, {
       partnerId: string;
       partnerName: string;
@@ -1594,6 +1615,7 @@ export class DatabaseStorage implements IStorage {
       totalSpent: number;
       totalCommission: number;
       totalDoNotSpend: number;
+      totalPartnerDebt: number;
       invoiceCount: number;
       invoices: {
         id: string;
@@ -1605,6 +1627,7 @@ export class DatabaseStorage implements IStorage {
         spent: number;
         remaining: number;
         commission: number;
+        partnerDebt: number;
         doNotSpend: number;
         createdAt: Date | null;
       }[];
@@ -1619,13 +1642,16 @@ export class DatabaseStorage implements IStorage {
       const plannedExpenses = row.invoice.plannedExpenses ? parseFloat(row.invoice.plannedExpenses) : 0;
       const commissionRate = row.calculations.commissionRate ? parseFloat(row.calculations.commissionRate) : 10;
       
-      // Get actual spent expenses (expenses paid by partner from reserved budget)
-      const expensesPaidByPartner = parseFloat(row.calculations.expensesPaidByPartner || "0");
-      const spent = expensesPaidByPartner;
+      // Get ACTUAL spent expenses from invoice_expenses table (partner-paid only)
+      const invoiceExpensesData = expensesByInvoice.get(row.invoice.id) || { paidByPartner: 0, paidByAdmin: 0 };
+      const spent = invoiceExpensesData.paidByPartner;
       const remaining = Math.max(0, plannedExpenses - spent);
       
       // Commission is partner's share (what they keep): clientBill * (commissionRate / 100)
       const commission = clientBill * (commissionRate / 100);
+      
+      // Partner debt comes from stored calculation (FIXED value, doesn't change with expenses)
+      const partnerDebt = parseFloat(row.calculations.partnerTransferDue || "0");
       
       // "Do not spend" = remaining planned expenses + commission for admin/partner view
       // For assistant: only show remaining planned expenses (hide commission)
@@ -1642,6 +1668,7 @@ export class DatabaseStorage implements IStorage {
           totalSpent: 0,
           totalCommission: 0,
           totalDoNotSpend: 0,
+          totalPartnerDebt: 0,
           invoiceCount: 0,
           invoices: [],
         });
@@ -1653,6 +1680,7 @@ export class DatabaseStorage implements IStorage {
       // Only add commission to totals for non-assistant roles
       summary.totalCommission += role === 'assistant' ? 0 : commission;
       summary.totalDoNotSpend += doNotSpend;
+      summary.totalPartnerDebt += partnerDebt;
       summary.invoiceCount += 1;
       summary.invoices.push({
         id: row.invoice.id,
@@ -1664,6 +1692,7 @@ export class DatabaseStorage implements IStorage {
         spent,
         remaining,
         commission: role === 'assistant' ? 0 : commission,
+        partnerDebt,
         doNotSpend,
         createdAt: row.invoice.createdAt,
       });

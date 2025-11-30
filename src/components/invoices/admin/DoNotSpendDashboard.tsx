@@ -47,6 +47,7 @@ interface PartnerSchemeInvoice {
   spent: number;
   remaining: number;
   commission: number;
+  partnerDebt: number;
   doNotSpend: number;
   createdAt: string | null;
 }
@@ -58,6 +59,7 @@ interface PartnerSchemeSummary {
   totalSpent: number;
   totalCommission: number;
   totalDoNotSpend: number;
+  totalPartnerDebt: number;
   invoiceCount: number;
   invoices: PartnerSchemeInvoice[];
 }

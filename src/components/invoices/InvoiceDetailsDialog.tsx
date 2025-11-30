@@ -231,6 +231,14 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         title: "Успешно",
         description: "Расход удалён",
       });
+      
+      // Invalidate all invoice-related caches to update partner debt everywhere
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/partner/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/agency'] });
+      
       fetchInvoiceDetails();
     } catch (error: any) {
       toast({

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { sanitizeText, sanitizeNumber, sanitizeDate } from "@/lib/sanitize";
 import { invoiceService } from "@/lib/services/invoices";
 import { Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface EditExpenseDialogProps {
   open: boolean;
@@ -25,6 +26,7 @@ interface EditExpenseDialogProps {
 
 export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: EditExpenseDialogProps) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -89,6 +91,13 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
         title: "Успешно",
         description: "Расход обновлен",
       });
+
+      // Invalidate all invoice-related caches to update partner debt everywhere
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/partner/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/agency'] });
 
       onOpenChange(false);
       onSuccess?.();

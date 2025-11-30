@@ -322,14 +322,12 @@ export const DoNotSpendDashboard = ({
                   className="text-[18px] font-semibold text-foreground"
                   style={{ letterSpacing: "-0.2px" }}
                 >
-                  {role === 'partner' ? 'Деньги для перевода' : 'Партнёрские схемы'}
+                  Партнёрские схемы
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {role === 'partner'
-                    ? 'Храните эту сумму для перевода админу'
-                    : role === 'assistant' 
-                      ? 'Планируемые расходы по партнёрским схемам'
-                      : 'Планируемые расходы + комиссия'}
+                  {role === 'assistant' 
+                    ? 'Планируемые расходы по партнёрским схемам'
+                    : 'Планируемые расходы + комиссия'}
                 </p>
               </div>
             </div>
@@ -348,9 +346,10 @@ export const DoNotSpendDashboard = ({
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
                   <TableHead className="text-xs">Счёт</TableHead>
-                  <TableHead className="text-xs text-right">Сумма клиента</TableHead>
-                  <TableHead className="text-xs text-right">Моя комиссия</TableHead>
-                  <TableHead className="text-xs text-right">К переводу</TableHead>
+                  <TableHead className="text-xs text-right">План. расходы</TableHead>
+                  <TableHead className="text-xs text-right">Потрачено</TableHead>
+                  <TableHead className="text-xs text-right">Комиссия</TableHead>
+                  <TableHead className="text-xs text-right">Не тратить</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -385,7 +384,10 @@ export const DoNotSpendDashboard = ({
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(invoice.clientBill)}
+                        {formatCurrency(invoice.plannedExpenses)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right text-muted-foreground">
+                        {formatCurrency(invoice.spent)}
                       </TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground">
                         {formatCurrency(invoice.commission)}
@@ -526,11 +528,9 @@ export const DoNotSpendDashboard = ({
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">
             <div className="flex items-center justify-between text-sm flex-wrap gap-2">
               <span className="text-muted-foreground">
-                {role === 'partner'
-                  ? 'Эту сумму нужно перевести админу'
-                  : role === 'assistant' 
-                    ? 'Деньги зарезервированы на расходы проекта'
-                    : 'Деньги зарезервированы на расходы + комиссию'}
+                {role === 'assistant' 
+                  ? 'Деньги зарезервированы на расходы проекта'
+                  : 'Деньги зарезервированы на расходы + комиссию'}
               </span>
               <span className="font-semibold text-blue-700 dark:text-blue-400">
                 Итого: {formatCurrency(totalPartnerSchemeDoNotSpend)}

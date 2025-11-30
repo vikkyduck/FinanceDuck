@@ -120,7 +120,7 @@ export const PartnerDebtDashboard = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
-        {partnersWithDebt.map((summary, index) => (
+        {summaries.map((summary, index) => (
           <div 
             key={summary.partnerId} 
             ref={setRef(index)}
@@ -147,25 +147,21 @@ export const PartnerDebtDashboard = () => {
                   partnerName={summary.partnerName}
                   onPaymentRecorded={handlePaymentSuccess}
                 />
-                <Button
-                  className="w-full"
-                  onClick={() => handleRecordPayment(summary)}
-                  data-testid={`button-record-payment-card-${summary.partnerId}`}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Записать приход
-                </Button>
+                {summary.totalToTransfer > 0 && (
+                  <Button
+                    className="w-full"
+                    onClick={() => handleRecordPayment(summary)}
+                    data-testid={`button-record-payment-card-${summary.partnerId}`}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Записать приход
+                  </Button>
+                )}
               </div>
             </PartnerDebtCard>
           </div>
         ))}
       </div>
-
-      {partnersWithDebt.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground bg-muted/30 rounded-lg">
-          Нет активных долгов партнёров. Все оплачено!
-        </div>
-      )}
 
       {selectedPartner && (
         <RecordPaymentDialog

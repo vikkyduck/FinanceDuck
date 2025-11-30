@@ -101,15 +101,16 @@ export function calculateInvoice(
 
     case 'partner_10': {
       // Схема: Комиссия партнера 10%
-      // Клиент платит: X
-      // Комиссия партнера: X × 0.10
-      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - plannedExpenses (НЕ зависит от расходов!)
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
+      // Долг партнёра:
+      // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
+      // - Без резерва: уменьшается с расходами
       
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90;
-      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const partnerTransferDue = plannedExpenses > 0
+        ? Math.max(0, amountToAdmin - plannedExpenses)
+        : Math.max(0, amountToAdmin - expensesPaidByPartner);
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
@@ -127,15 +128,16 @@ export function calculateInvoice(
 
     case 'partner_15': {
       // Схема: Комиссия партнера 15%
-      // Клиент платит: X
-      // Комиссия партнера: X × 0.15
-      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - plannedExpenses (НЕ зависит от расходов!)
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
+      // Долг партнёра:
+      // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
+      // - Без резерва: уменьшается с расходами
       
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85;
-      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const partnerTransferDue = plannedExpenses > 0
+        ? Math.max(0, amountToAdmin - plannedExpenses)
+        : Math.max(0, amountToAdmin - expensesPaidByPartner);
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
@@ -153,15 +155,16 @@ export function calculateInvoice(
 
     case 'commission_based': {
       // Универсальная схема с произвольной комиссией
-      // Клиент платит: X
-      // Комиссия партнера: X × (rate / 100)
-      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - plannedExpenses (НЕ зависит от расходов!)
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
+      // Долг партнёра:
+      // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
+      // - Без резерва: уменьшается с расходами
       
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const partnerTransferDue = plannedExpenses > 0
+        ? Math.max(0, amountToAdmin - plannedExpenses)
+        : Math.max(0, amountToAdmin - expensesPaidByPartner);
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
@@ -182,7 +185,9 @@ export function calculateInvoice(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const partnerTransferDue = plannedExpenses > 0
+        ? Math.max(0, amountToAdmin - plannedExpenses)
+        : Math.max(0, amountToAdmin - expensesPaidByPartner);
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {

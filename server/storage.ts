@@ -1561,6 +1561,7 @@ export class DatabaseStorage implements IStorage {
     totalCommission: number;
     totalDoNotSpend: number;
     totalPartnerDebt: number;
+    totalClientBill: number;
     invoiceCount: number;
     invoices: {
       id: string;
@@ -1625,6 +1626,7 @@ export class DatabaseStorage implements IStorage {
       totalCommission: number;
       totalDoNotSpend: number;
       totalPartnerDebt: number;
+      totalClientBill: number;
       invoiceCount: number;
       invoices: {
         id: string;
@@ -1662,12 +1664,28 @@ export class DatabaseStorage implements IStorage {
       // Partner debt comes from stored calculation (FIXED value, doesn't change with expenses)
       const partnerDebt = parseFloat(row.calculations.partnerTransferDue || "0");
       
-      // "Do not spend" = remaining planned expenses + commission for admin/partner view
-      // For assistant: only show remaining planned expenses (hide commission)
-      const doNotSpend = role === 'assistant' ? remaining : (remaining + commission);
+      // "Do not spend" calculation:
+      // - For partner: partnerTransferDue (сколько денег держать для перевода админу)
+      // - For admin: remaining planned expenses + commission
+      // - For assistant: only remaining planned expenses (hide commission)
+      let doNotSpend: number;
+      if (role === 'partner') {
+        // Partner sees their debt (partnerTransferDue) as "don't spend"
+        doNotSpend = partnerDebt;
+      } else if (role === 'assistant') {
+        doNotSpend = remaining;
+      } else {
+        doNotSpend = remaining + commission;
+      }
       
-      // Skip if no planned expenses (nothing to show)
-      if (plannedExpenses === 0) continue;
+      // Skip logic:
+      // - For partner: skip if no debt to transfer (partnerTransferDue = 0)
+      // - For admin/assistant: skip if no planned expenses
+      if (role === 'partner') {
+        if (partnerDebt <= 0) continue;
+      } else {
+        if (plannedExpenses === 0) continue;
+      }
       
       if (!partnerMap.has(pId)) {
         partnerMap.set(pId, {
@@ -1678,6 +1696,7 @@ export class DatabaseStorage implements IStorage {
           totalCommission: 0,
           totalDoNotSpend: 0,
           totalPartnerDebt: 0,
+          totalClientBill: 0,
           invoiceCount: 0,
           invoices: [],
         });
@@ -1690,6 +1709,7 @@ export class DatabaseStorage implements IStorage {
       summary.totalCommission += role === 'assistant' ? 0 : commission;
       summary.totalDoNotSpend += doNotSpend;
       summary.totalPartnerDebt += partnerDebt;
+      summary.totalClientBill += clientBill;
       summary.invoiceCount += 1;
       summary.invoices.push({
         id: row.invoice.id,

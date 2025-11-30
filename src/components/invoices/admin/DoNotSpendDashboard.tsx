@@ -60,6 +60,7 @@ interface PartnerSchemeSummary {
   totalCommission: number;
   totalDoNotSpend: number;
   totalPartnerDebt: number;
+  totalClientBill: number;
   invoiceCount: number;
   invoices: PartnerSchemeInvoice[];
 }
@@ -321,12 +322,14 @@ export const DoNotSpendDashboard = ({
                   className="text-[18px] font-semibold text-foreground"
                   style={{ letterSpacing: "-0.2px" }}
                 >
-                  {role === 'partner' ? 'Резерв на ИП' : 'Партнёрские схемы'}
+                  {role === 'partner' ? 'Деньги для перевода' : 'Партнёрские схемы'}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {role === 'assistant' 
-                    ? 'Планируемые расходы по партнёрским схемам'
-                    : 'Планируемые расходы + комиссия'}
+                  {role === 'partner'
+                    ? 'Храните эту сумму для перевода админу'
+                    : role === 'assistant' 
+                      ? 'Планируемые расходы по партнёрским схемам'
+                      : 'Планируемые расходы + комиссия'}
                 </p>
               </div>
             </div>
@@ -344,14 +347,14 @@ export const DoNotSpendDashboard = ({
             <TableHeader>
               <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
                 <TableHead className="text-xs w-8"></TableHead>
-                <TableHead className="text-xs">Партнёр</TableHead>
+                <TableHead className="text-xs">{role === 'partner' ? 'Счёт' : 'Партнёр'}</TableHead>
                 <TableHead className="text-xs text-center">Счетов</TableHead>
-                <TableHead className="text-xs text-right">План. расходы</TableHead>
-                <TableHead className="text-xs text-right">Потрачено</TableHead>
-                {role !== 'assistant' && (
+                <TableHead className="text-xs text-right">{role === 'partner' ? 'Сумма клиента' : 'План. расходы'}</TableHead>
+                <TableHead className="text-xs text-right">{role === 'partner' ? 'Моя комиссия' : 'Потрачено'}</TableHead>
+                {role !== 'assistant' && role !== 'partner' && (
                   <TableHead className="text-xs text-right">Комиссия</TableHead>
                 )}
-                <TableHead className="text-xs text-right">Не тратить</TableHead>
+                <TableHead className="text-xs text-right">{role === 'partner' ? 'К переводу' : 'Не тратить'}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -381,12 +384,12 @@ export const DoNotSpendDashboard = ({
                         {summary.invoiceCount}
                       </TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(summary.totalPlannedExpenses)}
+                        {formatCurrency(role === 'partner' ? summary.totalClientBill : summary.totalPlannedExpenses)}
                       </TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(summary.totalSpent)}
+                        {formatCurrency(role === 'partner' ? summary.totalCommission : summary.totalSpent)}
                       </TableCell>
-                      {role !== 'assistant' && (
+                      {role !== 'assistant' && role !== 'partner' && (
                         <TableCell className="text-sm text-right text-muted-foreground">
                           {formatCurrency(summary.totalCommission)}
                         </TableCell>
@@ -428,12 +431,12 @@ export const DoNotSpendDashboard = ({
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-right text-muted-foreground">
-                          {formatCurrency(invoice.plannedExpenses)}
+                          {formatCurrency(role === 'partner' ? invoice.clientBill : invoice.plannedExpenses)}
                         </TableCell>
                         <TableCell className="text-xs text-right text-muted-foreground">
-                          {formatCurrency(invoice.spent)}
+                          {formatCurrency(role === 'partner' ? invoice.commission : invoice.spent)}
                         </TableCell>
-                        {role !== 'assistant' && (
+                        {role !== 'assistant' && role !== 'partner' && (
                           <TableCell className="text-xs text-right text-muted-foreground">
                             {formatCurrency(invoice.commission)}
                           </TableCell>
@@ -459,9 +462,11 @@ export const DoNotSpendDashboard = ({
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">
             <div className="flex items-center justify-between text-sm flex-wrap gap-2">
               <span className="text-muted-foreground">
-                {role === 'assistant' 
-                  ? 'Деньги зарезервированы на расходы проекта'
-                  : 'Деньги зарезервированы на расходы + комиссию'}
+                {role === 'partner'
+                  ? 'Эту сумму нужно перевести админу'
+                  : role === 'assistant' 
+                    ? 'Деньги зарезервированы на расходы проекта'
+                    : 'Деньги зарезервированы на расходы + комиссию'}
               </span>
               <span className="font-semibold text-blue-700 dark:text-blue-400">
                 Итого: {formatCurrency(totalPartnerSchemeDoNotSpend)}

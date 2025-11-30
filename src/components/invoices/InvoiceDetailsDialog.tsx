@@ -86,6 +86,10 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   const [hideFromAssistant, setHideFromAssistant] = useState(false);
   const [updatingHideFromAssistant, setUpdatingHideFromAssistant] = useState(false);
 
+  // Состояние для планируемых расходов (только для партнёрских схем и админа)
+  const [plannedExpensesEdit, setPlannedExpensesEdit] = useState<number | ''>('');
+  const [updatingPlannedExpenses, setUpdatingPlannedExpenses] = useState(false);
+
   useEffect(() => {
     if (open && invoiceId) {
       fetchInvoiceDetails();
@@ -125,6 +129,10 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       const bill = calc?.client_bill ?? invoice.client_bill ?? 0;
       setClientBillEdit(bill);
       setHideFromAssistant(invoice.hidden_from_assistant || false);
+      
+      // Устанавливаем значение planned_expenses для партнёрских схем
+      const plannedExp = invoice.planned_expenses ? parseFloat(invoice.planned_expenses) : 0;
+      setPlannedExpensesEdit(plannedExp);
     }
   }, [invoice]);
 
@@ -158,6 +166,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         notes: invoiceData.notes,
         created_at: invoiceData.createdAt,
         hidden_from_assistant: invoiceData.hideFromAssistant,
+        planned_expenses: invoiceData.plannedExpenses,
         clients: invoiceData.client ? { name: invoiceData.client.name } : null,
         partners: invoiceData.partner ? { name: invoiceData.partner.name } : null,
         client_bill: invoiceData.calculations?.clientBill || invoiceData.clientBill,
@@ -494,6 +503,44 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       });
     } finally {
       setUpdatingClientBill(false);
+    }
+  };
+
+  const handleUpdatePlannedExpenses = async (newAmount: number) => {
+    if (!invoiceId || !invoice) return;
+
+    if (Number.isNaN(newAmount) || newAmount < 0) {
+      toast({
+        title: "Некорректное значение",
+        description: "Планируемые расходы должны быть положительным числом",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const currentAmount = invoice.planned_expenses ? parseFloat(invoice.planned_expenses) : 0;
+    if (currentAmount === newAmount) return;
+
+    try {
+      setUpdatingPlannedExpenses(true);
+      await apiPatch(`/invoices/${invoiceId}`, { 
+        plannedExpenses: newAmount.toString()
+      });
+      toast({
+        title: "Успешно",
+        description: `Планируемые расходы обновлены: ${formatCurrency(newAmount)}`,
+      });
+      
+      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] });
+      fetchInvoiceDetails();
+    } catch (error: any) {
+      toast({
+        title: "Системная ошибка",
+        description: error.message ?? "Не удалось обновить планируемые расходы",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingPlannedExpenses(false);
     }
   };
 
@@ -1035,6 +1082,46 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                             <div className="flex justify-between text-sm text-muted-foreground">
                               <span>Расходы на исполнителей:</span>
                               <span>{formatCurrency(calc?.executor_expenses_total || 0)}</span>
+                            </div>
+                          )}
+                          
+                          {userRole === 'admin' && (
+                            <div className="space-y-2 pt-3 border-t border-muted">
+                              <Label className="text-sm">Планируемые расходы на проект</Label>
+                              <div className="flex gap-2 items-center">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={plannedExpensesEdit}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPlannedExpensesEdit(val === '' ? '' : Number(val));
+                                  }}
+                                  className="w-32 text-right"
+                                  data-testid="input-planned-expenses"
+                                  placeholder="0"
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    if (plannedExpensesEdit !== '' && !Number.isNaN(plannedExpensesEdit)) {
+                                      handleUpdatePlannedExpenses(Number(plannedExpensesEdit));
+                                    }
+                                  }}
+                                  disabled={updatingPlannedExpenses}
+                                  data-testid="button-save-planned-expenses"
+                                >
+                                  {updatingPlannedExpenses ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    'Сохранить'
+                                  )}
+                                </Button>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Сумма резервируется на расходы проекта (зарплаты, материалы)
+                              </p>
                             </div>
                           )}
                         </div>

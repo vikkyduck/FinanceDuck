@@ -18,7 +18,7 @@ import { randomBytes } from "crypto";
  *   - Partner pays expenses from client money (expensesPaidByPartner)
  *   - Partner transfers remainder to admin: amountToAdmin - expensesPaidByPartner
  *   - Admin may also pay expenses from own pocket (expensesPaidByAdmin)
- *   - Admin net profit = (amountToAdmin - expensesPaidByPartner) - expensesPaidByAdmin
+ *   - Admin net profit = (amountToAdmin - expensesPaidByPartner) - expensesPaidByAdmin - plannedExpenses
  * 
  * For agency_30:
  *   - 70% stays with partner for project expenses
@@ -27,6 +27,7 @@ import { randomBytes } from "crypto";
  * 
  * @param expensesPaidByPartner - Expenses paid by partner from client money (paidByAdmin=false)
  * @param expensesPaidByAdmin - Expenses paid by admin from own funds (paidByAdmin=true)
+ * @param plannedExpenses - Planned project expenses (reserved, not yet spent) - affects net profit for partner schemes
  */
 function calculateInvoiceServer(
   scheme: InvoiceScheme,
@@ -34,7 +35,8 @@ function calculateInvoiceServer(
   partnerCommissionRate?: number,
   executorExpenses: number = 0,
   expensesPaidByPartner: number = 0,
-  expensesPaidByAdmin: number = 0
+  expensesPaidByAdmin: number = 0,
+  plannedExpenses: number = 0
 ): Partial<InvoiceCalculation> {
   const result: Partial<InvoiceCalculation> = {
     clientBill: clientBill.toString(),
@@ -72,8 +74,8 @@ function calculateInvoiceServer(
       const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
       // Партнёр переведёт: amountToAdmin - expensesPaidByPartner (это ДОЛГ партнёра)
       const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом - планируемые расходы
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin - plannedExpenses;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -91,8 +93,8 @@ function calculateInvoiceServer(
       const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
       // Партнёр переведёт: amountToAdmin - expensesPaidByPartner (это ДОЛГ партнёра)
       const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом - планируемые расходы
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin - plannedExpenses;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -111,8 +113,8 @@ function calculateInvoiceServer(
       const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
       // Партнёр переведёт: amountToAdmin - expensesPaidByPartner (это ДОЛГ партнёра)
       const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
+      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом - планируемые расходы
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin - plannedExpenses;
       
       result.commissionRate = commissionRate.toString();
       result.commissionAmount = commissionAmount.toString();
@@ -732,12 +734,16 @@ export class DatabaseStorage implements IStorage {
     const clientBill = parseFloat(calculations.clientBill || "0");
     const commissionRate = calculations.commissionRate ? parseFloat(calculations.commissionRate) : undefined;
     const executorExpenses = parseFloat(calculations.executorExpensesTotal || "0");
+    const plannedExp = created.plannedExpenses ? parseFloat(created.plannedExpenses) : 0;
     
     const computed = calculateInvoiceServer(
       created.scheme as InvoiceScheme,
       clientBill,
       commissionRate,
-      executorExpenses
+      executorExpenses,
+      0, // expensesPaidByPartner
+      0, // expensesPaidByAdmin
+      plannedExp
     );
     
     await db.insert(invoiceCalculations).values({
@@ -787,6 +793,7 @@ export class DatabaseStorage implements IStorage {
     const expensesPaidByAdmin = expenses
       .filter(e => e.paidByAdmin === true)
       .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const plannedExp = invoice.plannedExpenses ? parseFloat(invoice.plannedExpenses) : 0;
     
     // Recalculate all fields with both expense types
     const computed = calculateInvoiceServer(
@@ -795,7 +802,8 @@ export class DatabaseStorage implements IStorage {
       commissionRate,
       executorExpenses,
       expensesPaidByPartner,
-      expensesPaidByAdmin
+      expensesPaidByAdmin,
+      plannedExp
     );
     
     if (existing) {
@@ -864,6 +872,7 @@ export class DatabaseStorage implements IStorage {
     
     const clientBill = parseFloat(existing.clientBill || "0");
     const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
+    const plannedExp = invoice.plannedExpenses ? parseFloat(invoice.plannedExpenses) : 0;
     
     // Recalculate with correct expense breakdown
     const computed = calculateInvoiceServer(
@@ -872,7 +881,8 @@ export class DatabaseStorage implements IStorage {
       commissionRate,
       total,
       expensesPaidByPartner,
-      expensesPaidByAdmin
+      expensesPaidByAdmin,
+      plannedExp
     );
     
     await db.update(invoiceCalculations)
@@ -3175,6 +3185,7 @@ export class DatabaseStorage implements IStorage {
         
         const clientBill = parseFloat(existing.clientBill || "0");
         const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
+        const plannedExp = invoice.plannedExpenses ? parseFloat(invoice.plannedExpenses) : 0;
         
         // Recalculate with correct expense breakdown
         const computed = calculateInvoiceServer(
@@ -3183,7 +3194,8 @@ export class DatabaseStorage implements IStorage {
           commissionRate,
           totalExpenses,
           expensesPaidByPartner,
-          expensesPaidByAdmin
+          expensesPaidByAdmin,
+          plannedExp
         );
         
         // Update

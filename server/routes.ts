@@ -1055,8 +1055,9 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Invoice not found" });
       }
       
-      if (calculations) {
-        await storage.updateInvoiceCalculations(id, calculations);
+      // Recalculate if calculations provided OR if plannedExpenses changed
+      if (calculations || invoiceData.plannedExpenses !== undefined) {
+        await storage.updateInvoiceCalculations(id, calculations || {});
       }
       
       // Reload full invoice with recalculated values

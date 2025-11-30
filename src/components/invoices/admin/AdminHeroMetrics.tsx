@@ -36,6 +36,8 @@ export const AdminHeroMetrics = ({ period = 'month' }: AdminHeroMetricsProps) =>
   }
 
   const netProfit = stats.totalNetProfit || 0;
+  const expectedProfit = stats.expectedProfit || 0;
+  const receivedProfit = stats.receivedProfit || 0;
   const overdueWarning = stats.overdueInvoices > 0;
 
   return (
@@ -66,6 +68,14 @@ export const AdminHeroMetrics = ({ period = 'month' }: AdminHeroMetricsProps) =>
             <p className="text-3xl font-bold text-emerald-600" data-testid="value-net-profit">
               {formatCurrency(netProfit)}
             </p>
+            <div className="flex gap-4 mt-2 text-xs">
+              <span className="text-muted-foreground">
+                Получено: <span className="text-emerald-600 font-medium">{formatCurrency(receivedProfit)}</span>
+              </span>
+              <span className="text-muted-foreground">
+                Ожидается: <span className="text-amber-600 font-medium">{formatCurrency(expectedProfit)}</span>
+              </span>
+            </div>
           </CardContent>
         </Card>
 

@@ -14,8 +14,13 @@ export interface DashboardStats {
   totalPartnerCommission?: number;
   totalAdminShare?: number;
   totalNetProfit?: number;
+  expectedProfit?: number;  // Profit from unpaid invoices
+  receivedProfit?: number;  // Profit from paid invoices
+  totalPlannedExpenses?: number;  // Reserved for planned expenses
   partnerDebt?: number;
   clientRemaining?: number;
+  recurringExpectedMonthly?: number;
+  recurringExpectedYearly?: number;
 }
 
 export function useDashboardStats(interval = 120000) {

@@ -1079,7 +1079,10 @@ export class DatabaseStorage implements IStorage {
     let totalPartnerCommission = 0;
     let totalAdminShare = 0;
     let totalNetProfit = 0;
+    let expectedProfit = 0;  // For unpaid invoices
+    let receivedProfit = 0;  // For paid invoices
     let clientRemaining = 0;
+    let totalPlannedExpenses = 0;  // Reserved funds from planned expenses
     
     for (const r of results) {
       const inv = r.invoice;
@@ -1088,9 +1091,11 @@ export class DatabaseStorage implements IStorage {
       totalInvoices++;
       const clientBill = calc ? parseFloat(calc.clientBill || "0") : 0;
       const expenses = calc ? parseFloat(calc.executorExpensesTotal || "0") : 0;
+      const plannedExp = inv.plannedExpenses ? parseFloat(inv.plannedExpenses) : 0;
       
       totalClientBill += clientBill;
       totalExpenses += expenses;
+      totalPlannedExpenses += plannedExp;
       
       if (inv.status === 'paid') {
         paidInvoices++;
@@ -1106,6 +1111,7 @@ export class DatabaseStorage implements IStorage {
       
       if (calc) {
         const scheme = inv.scheme;
+        const netProfit = parseFloat(calc.netProfitAdmin || "0");
         
         if (scheme === 'agency_30') {
           // Agency 30%: 15% to partner, 15% to admin (both from margin)
@@ -1119,7 +1125,14 @@ export class DatabaseStorage implements IStorage {
           clientRemaining += parseFloat(calc.clientRemaining || "0");
         }
         
-        totalNetProfit += parseFloat(calc.netProfitAdmin || "0");
+        totalNetProfit += netProfit;
+        
+        // Split profit into expected vs received based on payment status
+        if (inv.status === 'paid') {
+          receivedProfit += netProfit;
+        } else {
+          expectedProfit += netProfit;
+        }
       }
     }
     
@@ -1155,6 +1168,9 @@ export class DatabaseStorage implements IStorage {
       stats.totalPartnerCommission = totalPartnerCommission;
       stats.totalAdminShare = totalAdminShare;
       stats.totalNetProfit = totalNetProfit;
+      stats.expectedProfit = expectedProfit;  // Profit from unpaid invoices
+      stats.receivedProfit = receivedProfit;  // Profit from paid invoices
+      stats.totalPlannedExpenses = totalPlannedExpenses;  // Reserved for planned expenses
       stats.clientRemaining = clientRemaining;
       
       // Calculate recurring expected amounts for admin

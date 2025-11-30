@@ -117,7 +117,6 @@ export const PartnerDashboard = () => {
   const { partnerId, isLoading: authLoading } = useAuth();
   const { viewMode, setViewMode } = useViewMode();
   const [showDebtDetails, setShowDebtDetails] = useState(false);
-  const [showPayments, setShowPayments] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
@@ -487,39 +486,33 @@ export const PartnerDashboard = () => {
 
                   {debtDetails.payments.length > 0 && (
                     <div className="space-y-2">
-                      <button 
-                        onClick={() => setShowPayments(!showPayments)}
-                        className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {showPayments ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        <span>Мои оплаты ({debtDetails.payments.length})</span>
-                      </button>
-                      
-                      {showPayments && (
-                        <div className="space-y-1.5 pl-4">
-                          {debtDetails.payments.map((payment) => (
-                            <div 
-                              key={payment.id}
-                              className="flex items-center justify-between p-2 bg-green-50/50 dark:bg-green-950/20 rounded-md border border-green-200/50 dark:border-green-800/30"
-                            >
-                              <div className="flex items-center gap-2">
-                                <CreditCard className="h-3 w-3 text-green-600 dark:text-green-400" />
-                                <span className="text-sm">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        История приходов:
+                      </p>
+                      <div className="space-y-1.5">
+                        {debtDetails.payments.map((payment) => (
+                          <div 
+                            key={payment.id}
+                            className="flex items-start justify-between gap-3 py-2 px-3 rounded-md bg-muted/50 text-sm"
+                          >
+                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <span className="text-muted-foreground whitespace-nowrap">
                                   {new Date(payment.paymentDate).toLocaleDateString('ru-RU')}
                                 </span>
-                                {payment.notes && (
-                                  <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                                    {payment.notes}
-                                  </span>
-                                )}
+                                <span className="font-medium text-green-600 dark:text-green-400 whitespace-nowrap">
+                                  {formatCurrency(parseFloat(payment.amount))}
+                                </span>
                               </div>
-                              <span className="font-semibold text-green-600 dark:text-green-400">
-                                {formatCurrency(parseFloat(payment.amount))}
-                              </span>
+                              {payment.notes && (
+                                <span className="text-xs text-muted-foreground break-words">
+                                  {payment.notes}
+                                </span>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </CardContent>

@@ -37,17 +37,6 @@ export const CriticalAlertsSection = () => {
   const queryClient = useQueryClient();
   const refetchInterval = useVisibilityAwareInterval();
 
-  const { data: alertsData = [], isLoading, isError } = useQuery<CriticalAlertData[]>({
-    queryKey: ["/api/admin/critical-alerts"],
-    queryFn: () => apiGet<CriticalAlertData[]>("/admin/critical-alerts"),
-    refetchInterval,
-    staleTime: 30000,
-    retry: 2,
-  });
-  
-  // Handle error gracefully - don't crash the dashboard
-  if (isError) return null;
-
   const handleMarkAsPaid = useCallback(async (invoiceId: string) => {
     try {
       await apiPost(`/invoices/${invoiceId}/mark-paid`, {});
@@ -58,6 +47,16 @@ export const CriticalAlertsSection = () => {
       toast.error("Ошибка при обновлении счета");
     }
   }, [queryClient]);
+
+  const { data: alertsData = [], isLoading, isError } = useQuery<CriticalAlertData[]>({
+    queryKey: ["/api/admin/critical-alerts"],
+    queryFn: () => apiGet<CriticalAlertData[]>("/admin/critical-alerts"),
+    refetchInterval,
+    staleTime: 30000,
+    retry: 2,
+  });
+  
+  if (isError) return null;
 
   const alerts: CriticalAlert[] = alertsData.map(alert => {
     let icon: LucideIcon;

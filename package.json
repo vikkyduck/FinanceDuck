@@ -12,6 +12,7 @@
     "start": "serve dist -s -l 5000"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.17.3",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
@@ -58,6 +59,7 @@
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "framer-motion": "^12.23.24",
+    "google-auth-library": "^10.5.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",

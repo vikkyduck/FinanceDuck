@@ -4,9 +4,11 @@ import path from "path";
 import { createServer as createViteServer, type ViteDevServer } from "vite";
 import { app } from "./index";
 import { storage } from "./storage";
+import { backupService } from "./backupService";
 
 const isProduction = process.env.NODE_ENV === "production";
 const RECURRING_CHECK_INTERVAL = 60 * 60 * 1000;
+const BACKUP_CHECK_INTERVAL = 60 * 60 * 1000;
 
 async function processRecurringInvoicesQuietly() {
   try {
@@ -25,6 +27,33 @@ function startRecurringSchedulerLazy() {
     processRecurringInvoicesQuietly();
     setInterval(processRecurringInvoicesQuietly, RECURRING_CHECK_INTERVAL);
   }, 60000);
+}
+
+let lastBackupDate: string | null = null;
+
+async function checkAndRunDailyBackup() {
+  try {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const today = now.toISOString().split('T')[0];
+    
+    if (currentHour === 3 && lastBackupDate !== today) {
+      console.log("[Backup] Running daily automatic backup...");
+      const backup = await backupService.createBackup("auto");
+      console.log(`[Backup] Daily backup completed: ${backup.filename}`);
+      lastBackupDate = today;
+    }
+  } catch (error) {
+    console.error("[Backup] Daily backup error:", error);
+  }
+}
+
+function startBackupSchedulerLazy() {
+  setTimeout(() => {
+    console.log("[Backup] Starting backup scheduler (daily at 3:00)");
+    checkAndRunDailyBackup();
+    setInterval(checkAndRunDailyBackup, BACKUP_CHECK_INTERVAL);
+  }, 120000);
 }
 
 async function setupVite(server: Express, vite: ViteDevServer) {
@@ -83,5 +112,6 @@ function serveStatic(server: Express) {
   server.listen(port, "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
     startRecurringSchedulerLazy();
+    startBackupSchedulerLazy();
   });
 })();

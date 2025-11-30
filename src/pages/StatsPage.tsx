@@ -13,6 +13,7 @@ import {
   LazyRevenueForecastChart,
   LazySalesStatistics,
 } from "./StatsPageLazy";
+import { BackupManager } from "@/components/admin/BackupManager";
 
 const StatsPage = () => {
   const { role, isLoading } = useAuth();
@@ -114,6 +115,13 @@ const StatsPage = () => {
             >
               План-факт
             </TabsTrigger>
+            <TabsTrigger 
+              value="backups"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
+              data-testid="tab-backups"
+            >
+              Бэкапы
+            </TabsTrigger>
           </TabsList>
 
           <AnimatePresence mode="wait">
@@ -153,6 +161,19 @@ const StatsPage = () => {
                 transition={{ duration: 0.3 }}
               >
                 <MonthlyFinancialTable year={selectedYear} />
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
+
+          <AnimatePresence mode="wait">
+            <TabsContent value="backups" className="space-y-8 mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+              >
+                <BackupManager />
               </motion.div>
             </TabsContent>
           </AnimatePresence>

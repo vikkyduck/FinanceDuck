@@ -72,11 +72,9 @@ function calculateInvoiceServer(
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
       const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
-      // Остаток резерва = plannedExpenses - уже потраченные расходы партнёром
-      // expensesPaidByPartner УЖЕ часть plannedExpenses, поэтому вычитаем только остаток резерва
-      const remainingPlannedExpenses = Math.max(0, plannedExpenses - expensesPaidByPartner);
-      // Партнёр переведёт: amountToAdmin - потраченные расходы - оставшийся резерв
-      const partnerTransferDue = Math.max(0, amountToAdmin - expensesPaidByPartner - remainingPlannedExpenses);
+      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - резерв (НЕ зависит от расходов!)
+      // Расходы вычитаются только из резерва в таблице "Не тратить", не из долга
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses);
       // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
@@ -94,11 +92,9 @@ function calculateInvoiceServer(
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
       const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
-      // Остаток резерва = plannedExpenses - уже потраченные расходы партнёром
-      // expensesPaidByPartner УЖЕ часть plannedExpenses, поэтому вычитаем только остаток резерва
-      const remainingPlannedExpenses = Math.max(0, plannedExpenses - expensesPaidByPartner);
-      // Партнёр переведёт: amountToAdmin - потраченные расходы - оставшийся резерв
-      const partnerTransferDue = Math.max(0, amountToAdmin - expensesPaidByPartner - remainingPlannedExpenses);
+      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - резерв (НЕ зависит от расходов!)
+      // Расходы вычитаются только из резерва в таблице "Не тратить", не из долга
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses);
       // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
@@ -117,11 +113,9 @@ function calculateInvoiceServer(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
-      // Остаток резерва = plannedExpenses - уже потраченные расходы партнёром
-      // expensesPaidByPartner УЖЕ часть plannedExpenses, поэтому вычитаем только остаток резерва
-      const remainingPlannedExpenses = Math.max(0, plannedExpenses - expensesPaidByPartner);
-      // Партнёр переведёт: amountToAdmin - потраченные расходы - оставшийся резерв
-      const partnerTransferDue = Math.max(0, amountToAdmin - expensesPaidByPartner - remainingPlannedExpenses);
+      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - резерв (НЕ зависит от расходов!)
+      // Расходы вычитаются только из резерва в таблице "Не тратить", не из долга
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses);
       // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       

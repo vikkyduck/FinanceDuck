@@ -1364,6 +1364,22 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Partner hero metrics - 4 dynamic cards for partner dashboard
+  app.get("/api/partner/hero-metrics", authMiddleware, requireRole("partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const partnerId = req.user?.partnerId;
+      if (!partnerId) {
+        return res.status(400).json({ error: "Partner ID not found in session" });
+      }
+      
+      const metrics = await storage.getPartnerHeroMetrics(partnerId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get partner hero metrics error:", error);
+      res.status(500).json({ error: "Failed to get partner metrics" });
+    }
+  });
+
   app.get("/api/do-not-spend", authMiddleware, requireRole("admin", "assistant", "partner"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role;

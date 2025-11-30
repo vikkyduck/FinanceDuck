@@ -3,13 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { PartnerInvoicesList } from "./partner/PartnerInvoicesList";
-import { PartnerStats } from "./partner/PartnerStats";
 import { PartnerTerms } from "./partner/PartnerTerms";
-import { OverduePaymentsAlert } from "./shared/OverduePaymentsAlert";
-import { PartnerClientStats } from "./partner/PartnerClientStats";
-import { PartnerDocumentRiskLight } from "./partner/PartnerDocumentRiskLight";
-import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
-import { PartnerPaymentHistory } from "./partner/PartnerPaymentHistory";
+import { PartnerHeroMetrics } from "./partner/PartnerHeroMetrics";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
@@ -34,24 +29,7 @@ export const PartnerDashboard = () => {
       />
 
       <div className="space-y-8">
-        <PartnerDocumentRiskLight />
-        
-        <OverduePaymentsAlert role="partner" />
-        
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-2xl">Статистика</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PartnerStats />
-          </CardContent>
-        </Card>
-
-        <PartnerClientStats />
-        
-        <DoNotSpendDashboard />
-
-        <PartnerPaymentHistory showTitle={true} />
+        <PartnerHeroMetrics />
 
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4">

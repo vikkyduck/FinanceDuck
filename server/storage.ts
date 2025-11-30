@@ -235,6 +235,7 @@ export interface IStorage {
   getPartnerClientStats(partnerId: string, year: number): Promise<PartnerClientStatsData[]>;
   getPartnerDocumentRisk(partnerId: string): Promise<PartnerDocumentRiskData>;
   getPartnerAgency30Funds(partnerId: string): Promise<PartnerAgency30FundsData[]>;
+  getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData>;
   
   // Working capital
   getWorkingCapital(): Promise<WorkingCapitalData | null>;
@@ -285,6 +286,15 @@ export interface PartnerAgency30FundsData {
   totalSpent: number;
   remaining: number;
   invoiceCount: number;
+}
+
+export interface PartnerHeroMetricsData {
+  debtToAdmin: number;
+  reservedForExpenses: number;
+  yearlyCommission: number;
+  signedActsCount: number;
+  totalPaidInvoices: number;
+  invoicesWithDebt: { id: string; number: string; amount: number }[];
 }
 
 export interface MonthlyData {
@@ -3949,6 +3959,103 @@ export class DatabaseStorage implements IStorage {
       }))
       .filter(s => s.totalBudget > 0)
       .sort((a, b) => b.remaining - a.remaining);
+  }
+
+  async getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData> {
+    const currentYear = new Date().getFullYear();
+    const yearStart = new Date(currentYear, 0, 1);
+    
+    // Get all paid invoices for this partner in current year
+    const partnerInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.status, 'paid'),
+        sql`${invoices.createdAt} >= ${yearStart.toISOString()}`
+      ));
+    
+    // Get all invoices with debt (partnerTransferDue > 0)
+    const allPartnerInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.status, 'paid')
+      ));
+    
+    // Calculate metrics
+    let debtToAdmin = 0;
+    let reservedForExpenses = 0;
+    let yearlyCommission = 0;
+    const invoicesWithDebt: { id: string; number: string; amount: number }[] = [];
+    
+    for (const row of allPartnerInvoices) {
+      if (!row.calculations) continue;
+      
+      const partnerTransferDue = parseFloat(row.calculations.partnerTransferDue || "0");
+      const plannedExpenses = parseFloat(row.calculations.plannedExpenses || "0");
+      const expensesPaidByPartner = parseFloat(row.calculations.expensesPaidByPartner || "0");
+      
+      // Add to debt if partnerTransferDue > 0
+      if (partnerTransferDue > 0) {
+        debtToAdmin += partnerTransferDue;
+        invoicesWithDebt.push({
+          id: row.invoice.id,
+          number: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+          amount: partnerTransferDue,
+        });
+      }
+      
+      // For partner schemes with reserve (plannedExpenses > 0)
+      // Reserved = plannedExpenses - expensesPaidByPartner
+      if (plannedExpenses > 0) {
+        const reserved = Math.max(0, plannedExpenses - expensesPaidByPartner);
+        reservedForExpenses += reserved;
+      }
+    }
+    
+    // Calculate yearly commission from current year invoices
+    for (const row of partnerInvoices) {
+      if (!row.calculations) continue;
+      const commission = parseFloat(row.calculations.partnerCommission || "0");
+      yearlyCommission += commission;
+    }
+    
+    // Get payments made to reduce debt
+    const payments = await db.select().from(partnerPayments)
+      .where(eq(partnerPayments.partnerId, partnerId));
+    
+    const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    debtToAdmin = Math.max(0, debtToAdmin - totalPaid);
+    
+    // Count signed acts for this partner's invoices
+    const paidInvoiceIds = allPartnerInvoices.map(r => r.invoice.id);
+    let signedActsCount = 0;
+    
+    if (paidInvoiceIds.length > 0) {
+      const actsResult = await db.select({ count: sql<number>`count(*)` })
+        .from(signedActs)
+        .where(inArray(signedActs.invoiceId, paidInvoiceIds));
+      signedActsCount = Number(actsResult[0]?.count || 0);
+    }
+    
+    return {
+      debtToAdmin,
+      reservedForExpenses,
+      yearlyCommission,
+      signedActsCount,
+      totalPaidInvoices: allPartnerInvoices.length,
+      invoicesWithDebt,
+    };
   }
 
   async getWorkingCapital(): Promise<WorkingCapitalData | null> {

@@ -1514,6 +1514,126 @@ export class DatabaseStorage implements IStorage {
       .filter(s => s.totalBudget > 0)
       .sort((a, b) => b.remaining - a.remaining);
   }
+
+  async getPartnerSchemeDoNotSpendData(partnerId?: string, role?: string): Promise<{
+    partnerId: string;
+    partnerName: string;
+    totalPlannedExpenses: number;
+    totalCommission: number;
+    totalDoNotSpend: number;
+    invoiceCount: number;
+    invoices: {
+      id: string;
+      number: string;
+      description: string | null;
+      notes: string | null;
+      clientBill: number;
+      plannedExpenses: number;
+      commission: number;
+      doNotSpend: number;
+      createdAt: Date | null;
+    }[];
+  }[]> {
+    const conditions = [
+      eq(invoices.scheme, 'commission_based'),
+      inArray(invoices.status, ['paid', 'sent'])
+    ];
+    
+    if (partnerId) {
+      conditions.push(eq(invoices.partnerId, partnerId));
+    }
+    
+    const partnerInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        partnerName: partners.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id))
+      .where(and(...conditions));
+
+    const partnerMap = new Map<string, {
+      partnerId: string;
+      partnerName: string;
+      totalPlannedExpenses: number;
+      totalCommission: number;
+      totalDoNotSpend: number;
+      invoiceCount: number;
+      invoices: {
+        id: string;
+        number: string;
+        description: string | null;
+        notes: string | null;
+        clientBill: number;
+        plannedExpenses: number;
+        commission: number;
+        doNotSpend: number;
+        createdAt: Date | null;
+      }[];
+    }>();
+
+    for (const row of partnerInvoices) {
+      if (!row.invoice.partnerId || !row.calculations) continue;
+
+      const pId = row.invoice.partnerId;
+      const partnerName = row.partnerName || 'Unknown';
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const plannedExpenses = row.invoice.plannedExpenses ? parseFloat(row.invoice.plannedExpenses) : 0;
+      const commissionRate = row.calculations.commissionRate ? parseFloat(row.calculations.commissionRate) : 10;
+      
+      // Commission is admin's share: clientBill * (commissionRate / 100)
+      const commission = clientBill * (commissionRate / 100);
+      
+      // "Do not spend" = planned expenses + commission for admin/partner view
+      // For assistant: only show planned expenses (hide commission)
+      const doNotSpend = role === 'assistant' ? plannedExpenses : (plannedExpenses + commission);
+      
+      // Skip if no planned expenses (nothing to show)
+      if (plannedExpenses === 0) continue;
+      
+      if (!partnerMap.has(pId)) {
+        partnerMap.set(pId, {
+          partnerId: pId,
+          partnerName,
+          totalPlannedExpenses: 0,
+          totalCommission: 0,
+          totalDoNotSpend: 0,
+          invoiceCount: 0,
+          invoices: [],
+        });
+      }
+
+      const summary = partnerMap.get(pId)!;
+      summary.totalPlannedExpenses += plannedExpenses;
+      summary.totalCommission += commission;
+      summary.totalDoNotSpend += doNotSpend;
+      summary.invoiceCount += 1;
+      summary.invoices.push({
+        id: row.invoice.id,
+        number: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+        description: row.invoice.description,
+        notes: row.invoice.notes,
+        clientBill,
+        plannedExpenses,
+        commission: role === 'assistant' ? 0 : commission,
+        doNotSpend,
+        createdAt: row.invoice.createdAt,
+      });
+    }
+
+    return Array.from(partnerMap.values())
+      .map(s => ({
+        ...s,
+        invoices: s.invoices.sort((a, b) => {
+          if (!a.createdAt || !b.createdAt) return 0;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }),
+      }))
+      .filter(s => s.totalDoNotSpend > 0)
+      .sort((a, b) => b.totalDoNotSpend - a.totalDoNotSpend);
+  }
   
   async getAdminDashboardStats(year?: number, month?: number): Promise<{
     yearlySummary: {

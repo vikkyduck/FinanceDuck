@@ -1374,6 +1374,23 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Partner schemes "Do Not Spend" data - planned expenses + commission for partner_10, partner_15, etc.
+  app.get("/api/do-not-spend/partner-schemes", authMiddleware, requireRole("admin", "assistant", "partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role;
+      const partnerId = req.user?.partnerId;
+      
+      const data = await storage.getPartnerSchemeDoNotSpendData(
+        role === 'partner' ? partnerId : undefined,
+        role
+      );
+      res.json(data);
+    } catch (error) {
+      console.error("Get partner scheme do-not-spend error:", error);
+      res.status(500).json({ error: "Failed to get partner scheme do-not-spend data" });
+    }
+  });
+
   /**
    * UNIFIED FINANCIAL SUMMARY ENDPOINT
    * Single source of truth for all financial data across all roles.

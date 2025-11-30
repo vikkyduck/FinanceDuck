@@ -26,6 +26,11 @@ export async function apiRequest<T>(
     throw new Error(errorData.error || `Request failed: ${response.status}`);
   }
 
+  // Handle 204 No Content response (e.g., DELETE requests)
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json();
 }
 

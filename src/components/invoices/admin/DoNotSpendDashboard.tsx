@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
 import {
   Table,
   TableBody,
@@ -73,6 +74,7 @@ export const DoNotSpendDashboard = ({
 
   const { data: summaries = [], isLoading: loadingAgency } = useQuery<DoNotSpendSummary[]>({
     queryKey: ['/api/do-not-spend'],
+    queryFn: () => apiGet<DoNotSpendSummary[]>('/do-not-spend'),
     enabled: isAuthenticated,
     refetchInterval: 120000,
     refetchOnWindowFocus: true,
@@ -80,6 +82,7 @@ export const DoNotSpendDashboard = ({
 
   const { data: partnerSchemeSummaries = [], isLoading: loadingPartner } = useQuery<PartnerSchemeSummary[]>({
     queryKey: ['/api/do-not-spend/partner-schemes'],
+    queryFn: () => apiGet<PartnerSchemeSummary[]>('/do-not-spend/partner-schemes'),
     enabled: isAuthenticated,
     refetchInterval: 120000,
     refetchOnWindowFocus: true,

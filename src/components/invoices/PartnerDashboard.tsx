@@ -309,8 +309,8 @@ export const PartnerDashboard = () => {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card 
                 className={cn(
-                  "border-2 transition-colors",
-                  canExpand && "cursor-pointer",
+                  "border-2 transition-all duration-200",
+                  canExpand && "cursor-pointer hover:shadow-md",
                   hasDebt 
                     ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" 
                     : "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20"
@@ -318,7 +318,7 @@ export const PartnerDashboard = () => {
                 onClick={() => canExpand && setShowDebtDetails(!showDebtDetails)}
                 data-testid="card-debt-to-admin"
               >
-                <CardContent className="pt-6 pb-5">
+                <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 space-y-2">
                       <p className="text-sm font-medium text-muted-foreground">
@@ -364,8 +364,8 @@ export const PartnerDashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-reserved-expenses">
-                <CardContent className="pt-6 pb-5">
+              <Card className="transition-all duration-200 hover:shadow-md" data-testid="card-reserved-expenses">
+                <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 space-y-2">
                       <p className="text-sm font-medium text-muted-foreground">
@@ -385,8 +385,8 @@ export const PartnerDashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-yearly-commission">
-                <CardContent className="pt-6 pb-5">
+              <Card className="transition-all duration-200 hover:shadow-md" data-testid="card-yearly-commission">
+                <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 space-y-2">
                       <p className="text-sm font-medium text-muted-foreground">
@@ -406,8 +406,8 @@ export const PartnerDashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-signed-acts">
-                <CardContent className="pt-6 pb-5">
+              <Card className="transition-all duration-200 hover:shadow-md" data-testid="card-signed-acts">
+                <CardContent className="p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 space-y-2">
                       <p className="text-sm font-medium text-muted-foreground">
@@ -440,11 +440,12 @@ export const PartnerDashboard = () => {
 
             {showDebtDetails && debtDetails && (
               <Card className={cn(
+                "transition-all duration-200",
                 hasDebt 
                   ? "border-red-200/50 dark:border-red-800/30 bg-red-50/30 dark:bg-red-950/10"
                   : "border-green-200/50 dark:border-green-800/30 bg-green-50/30 dark:bg-green-950/10"
               )}>
-                <CardContent className="pt-4 space-y-4">
+                <CardContent className="p-5 space-y-4">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className="text-sm font-medium text-muted-foreground">
                       {hasOverpayment ? "Детали переплаты" : "Детали долга"}

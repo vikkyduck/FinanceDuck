@@ -1155,6 +1155,8 @@ export function registerRoutes(app: Express): void {
       
       if (role === "partner") {
         partnerId = req.user?.partnerId;
+      } else if (role === "admin" && req.query.partnerId) {
+        partnerId = req.query.partnerId as string;
       }
       
       const payments = await storage.getPartnerPayments(partnerId);

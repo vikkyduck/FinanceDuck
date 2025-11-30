@@ -120,6 +120,12 @@ export const PartnerDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: partnerInfo } = useQuery<{ id: string; name: string }>({
+    queryKey: ['/api/partners', partnerId],
+    queryFn: () => apiGet<{ id: string; name: string }>(`/partners/${partnerId}`),
+    enabled: !!partnerId,
+  });
+
   const { data: debtDetails, isLoading: debtLoading } = useQuery<DebtDetails>({
     queryKey: ['/api/my-debt'],
     queryFn: () => apiGet<DebtDetails>('/my-debt'),
@@ -267,7 +273,7 @@ export const PartnerDashboard = () => {
     <DashboardLayout>
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <DashboardHeader
-          title="Панель партнёра"
+          title={partnerInfo?.name ? `Здравствуйте, ${partnerInfo.name.split(' ')[0]}` : "Панель партнёра"}
           subtitle="Ваша статистика и счета"
         />
         <Button 

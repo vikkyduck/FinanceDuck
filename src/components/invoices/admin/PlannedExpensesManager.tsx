@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,6 @@ import { Calendar, Plus, Pencil, Trash2, Clock, CheckCircle2, XCircle, Loader2 }
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { queryClient } from "@/lib/queryClient";
 import { apiPost, apiPut, apiDelete } from "@/lib/api";
 import { showSuccess } from "@/lib/errorHandler";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +43,7 @@ const statusConfig = {
 
 export function PlannedExpensesManager({ invoiceId, className, onExpenseChanged }: PlannedExpensesManagerProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);

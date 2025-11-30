@@ -159,7 +159,7 @@ export const PartnerPaymentsManager = () => {
                 </TableRow>
                 {isExpanded && (
                   <TableRow key={`${summary.partnerId}-detail`}>
-                    <TableCell colSpan={6} className="p-0">
+                    <TableCell colSpan={6} className="p-4 bg-muted/30">
                       <PartnerInvoicesDetail
                         partnerId={summary.partnerId}
                         partnerName={summary.partnerName}

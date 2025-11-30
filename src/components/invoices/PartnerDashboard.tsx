@@ -108,7 +108,8 @@ interface InvoiceData {
     partnerTransferDue?: string;
     plannedExpenses?: string;
     expensesPaidByPartner?: string;
-    partnerCommission?: string;
+    commissionAmount?: string;
+    partnerShareFromMargin?: string;
   };
 }
 
@@ -167,7 +168,8 @@ export const PartnerDashboard = () => {
           partnerTransferDue: inv.calculations.partnerTransferDue,
           plannedExpenses: inv.calculations.plannedExpenses,
           expensesPaidByPartner: inv.calculations.expensesPaidByPartner,
-          partnerCommission: inv.calculations.partnerCommission,
+          commissionAmount: inv.calculations.commissionAmount,
+          partnerShareFromMargin: inv.calculations.partnerShareFromMargin,
         } : undefined,
       }));
     },
@@ -187,7 +189,9 @@ export const PartnerDashboard = () => {
       totalPaidInvoices++;
       
       const calc = inv.calculations || {};
-      const partnerCommission = parseFloat(calc.partnerCommission || "0");
+      const commissionAmount = parseFloat(calc.commissionAmount || "0");
+      const partnerShareFromMargin = parseFloat(calc.partnerShareFromMargin || "0");
+      const partnerCommission = inv.scheme === 'agency_30' ? partnerShareFromMargin : commissionAmount;
       
       const invoiceYear = inv.paymentDate 
         ? new Date(inv.paymentDate).getFullYear()

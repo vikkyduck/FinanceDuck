@@ -72,6 +72,21 @@ export function AppSidebar() {
     }> = [];
 
     // Main section - for everyone
+    // Partner gets single-page dashboard - no extra menu items
+    if (role === "partner") {
+      groups.push({
+        label: "Главное",
+        items: [
+          { 
+            title: "Панель", 
+            url: "/", 
+            icon: Home,
+          },
+        ]
+      });
+      return groups; // Partner only sees one menu item
+    }
+
     groups.push({
       label: "Главное",
       items: [
@@ -94,11 +109,6 @@ export function AppSidebar() {
           url: "/stats",
           icon: BarChart3,
         }] : []),
-        ...(role === "partner" ? [{
-          title: "Задолженность",
-          url: "/partner-debt",
-          icon: TrendingDown,
-        }] : [])
       ]
     });
 

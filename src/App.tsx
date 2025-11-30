@@ -20,7 +20,28 @@ import ClientsPage from "./pages/ClientsPage";
 import PartnersPage from "./pages/PartnersPage";
 import AccessCodesPage from "./pages/AccessCodesPage";
 import StatsPage from "./pages/StatsPage";
-import PartnerDebtDashboard from "./pages/PartnerDebtDashboard";
+import { useAuth } from "@/hooks/useAuth";
+
+// Component that routes "/" based on role
+const RoleBasedHome = () => {
+  const { role, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+  
+  // Partners and Admins go directly to their dashboard
+  if (role === 'partner' || role === 'admin' || role === 'assistant') {
+    return <InvoicesDashboard />;
+  }
+  
+  // Clients see the general Index page
+  return <Index />;
+};
 
 const queryClient = new QueryClient();
 
@@ -34,7 +55,7 @@ const AnimatedRoutes = () => {
           path="/" 
           element={
             <ProtectedRoute>
-              <Index />
+              <RoleBasedHome />
             </ProtectedRoute>
           } 
         />
@@ -75,14 +96,6 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute>
               <StatsPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/partner-debt" 
-          element={
-            <ProtectedRoute>
-              <PartnerDebtDashboard />
             </ProtectedRoute>
           } 
         />

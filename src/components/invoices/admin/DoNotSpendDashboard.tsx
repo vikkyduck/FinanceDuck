@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, Fragment } from "react";
+import { useState, Fragment, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Building2, ChevronDown, ChevronRight, FileText, MessageSquare, Users } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -67,68 +68,34 @@ export const DoNotSpendDashboard = ({
   className,
 }: DoNotSpendDashboardProps) => {
   const { isAuthenticated, role } = useAuth();
-  const [summaries, setSummaries] = useState<DoNotSpendSummary[]>([]);
-  const [partnerSchemeSummaries, setPartnerSchemeSummaries] = useState<PartnerSchemeSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalRemaining, setTotalRemaining] = useState(0);
-  const [totalPartnerSchemeDoNotSpend, setTotalPartnerSchemeDoNotSpend] = useState(0);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
 
-  const fetchData = useCallback(async () => {
-    if (!isAuthenticated) {
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      const [agency30Response, partnerSchemeResponse] = await Promise.all([
-        fetch('/api/do-not-spend', { credentials: 'include' }),
-        fetch('/api/do-not-spend/partner-schemes', { credentials: 'include' })
-      ]);
-      
-      if (agency30Response.ok) {
-        const data = await agency30Response.json();
-        setSummaries(data);
-        setTotalRemaining(data.reduce((sum: number, s: DoNotSpendSummary) => sum + s.remaining, 0));
-      } else if (agency30Response.status !== 401 && agency30Response.status !== 403) {
-        console.error("Error fetching do-not-spend data:", await agency30Response.text());
-      }
+  const { data: summaries = [], isLoading: loadingAgency } = useQuery<DoNotSpendSummary[]>({
+    queryKey: ['/api/do-not-spend'],
+    enabled: isAuthenticated,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
 
-      if (partnerSchemeResponse.ok) {
-        const data = await partnerSchemeResponse.json();
-        setPartnerSchemeSummaries(data);
-        setTotalPartnerSchemeDoNotSpend(data.reduce((sum: number, s: PartnerSchemeSummary) => sum + s.totalDoNotSpend, 0));
-      } else if (partnerSchemeResponse.status !== 401 && partnerSchemeResponse.status !== 403) {
-        console.error("Error fetching partner scheme data:", await partnerSchemeResponse.text());
-      }
-    } catch (error) {
-      console.error("Error fetching do-not-spend data:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated]);
+  const { data: partnerSchemeSummaries = [], isLoading: loadingPartner } = useQuery<PartnerSchemeSummary[]>({
+    queryKey: ['/api/do-not-spend/partner-schemes'],
+    enabled: isAuthenticated,
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
 
-  useEffect(() => {
-    fetchData();
-    
-    let isVisible = document.visibilityState === 'visible';
-    
-    const handleVisibilityChange = () => {
-      isVisible = document.visibilityState === 'visible';
-      if (isVisible) fetchData();
-    };
-    
-    const interval = setInterval(() => {
-      if (isVisible) fetchData();
-    }, 120000);
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchData]);
+  const loading = loadingAgency || loadingPartner;
+
+  const totalRemaining = useMemo(() => 
+    summaries.reduce((sum: number, s: DoNotSpendSummary) => sum + s.remaining, 0),
+    [summaries]
+  );
+
+  const totalPartnerSchemeDoNotSpend = useMemo(() => 
+    partnerSchemeSummaries.reduce((sum: number, s: PartnerSchemeSummary) => sum + s.totalDoNotSpend, 0),
+    [partnerSchemeSummaries]
+  );
 
   const toggleClient = (clientId: string) => {
     setExpandedClients(prev => {

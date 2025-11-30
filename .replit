@@ -45,6 +45,10 @@ localPort = 24678
 externalPort = 3002
 
 [[ports]]
+localPort = 33591
+externalPort = 6800
+
+[[ports]]
 localPort = 34917
 externalPort = 6000
 
@@ -78,4 +82,4 @@ defaultBucketID = "replit-objstore-d0c6102a-e3a6-4b70-b8b9-ef6a6dc6f5ad"
 [userenv]
 
 [userenv.shared]
-BACKUP_BUCKET_NAME = "Backups"
+BACKUP_BUCKET_NAME = "replit-objstore-d0c6102a-e3a6-4b70-b8b9-ef6a6dc6f5ad"

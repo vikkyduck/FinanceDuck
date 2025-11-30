@@ -25,7 +25,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
-import { apiPost, apiDelete } from "@/lib/api";
+import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { showSuccess } from "@/lib/errorHandler";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -53,6 +53,7 @@ export function BackupManager() {
 
   const { data: backups, isLoading, error } = useQuery<BackupInfo[]>({
     queryKey: ["/api/backups"],
+    queryFn: () => apiGet<BackupInfo[]>("/backups"),
     staleTime: 30000,
   });
 

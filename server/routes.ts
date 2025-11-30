@@ -50,11 +50,12 @@ const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
     'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
+    'plannedExpenses',
   ],
   partner: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description',
     'clientBill', 'scheme', 'createdAt', 'updatedAt',
-    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes',
+    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'plannedExpenses',
   ],
   client: [
     'id', 'invoiceNumber', 'status', 'description', 'clientBill',
@@ -65,6 +66,7 @@ const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'id', 'invoiceNumber', 'clientId', 'status', 'description',
     'clientBill', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
+    'plannedExpenses',
   ],
 };
 

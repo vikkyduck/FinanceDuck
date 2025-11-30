@@ -45,6 +45,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
   const [notes, setNotes] = useState("");
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(undefined);
   const [hideFromAssistant, setHideFromAssistant] = useState(false);
+  const [plannedExpenses, setPlannedExpenses] = useState("");
 
   const wizardSteps = [
     { number: 1, label: "Клиент и партнер" },
@@ -136,6 +137,9 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
       const calculations = calculateInvoice(dbScheme, validated.clientBill, commissionRate);
       const formattedPaymentDate = validated.paymentDate ? format(validated.paymentDate, 'yyyy-MM-dd') : undefined;
 
+      const isPartnerScheme = ['partner_10', 'partner_15', 'custom', 'commission_based'].includes(scheme);
+      const plannedExpensesValue = isPartnerScheme && plannedExpenses ? parseFloat(plannedExpenses) : undefined;
+      
       await invoiceService.createInvoice({
         invoiceNumber: trimmedInvoiceNumber,
         clientId: validated.clientId,
@@ -148,6 +152,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         hideFromAssistant: effectiveRole === 'admin' ? hideFromAssistant : false,
         clientBill: validated.clientBill,
         calculations: calculations,
+        plannedExpenses: plannedExpensesValue,
       });
 
       showSuccess("Успешно", "Счет создан");
@@ -179,6 +184,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     setNotes("");
     setPaymentDate(undefined);
     setHideFromAssistant(false);
+    setPlannedExpenses("");
   };
 
   return (
@@ -316,6 +322,28 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           className="h-11 text-lg font-semibold"
                         />
                       </div>
+
+                      {['partner_10', 'partner_15', 'custom', 'commission_based'].includes(scheme) && (
+                        <div className="space-y-2 p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-200/50 dark:border-blue-800/30">
+                          <Label className="flex items-center gap-2">
+                            Планируемые расходы проекта
+                            <span className="text-xs text-muted-foreground">(необязательно)</span>
+                          </Label>
+                          <Input
+                            type="number"
+                            data-testid="input-planned-expenses"
+                            value={plannedExpenses}
+                            onChange={(e) => setPlannedExpenses(e.target.value)}
+                            placeholder="Сумма расходов на проект"
+                            min="0"
+                            step="0.01"
+                            className="h-11"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Укажите планируемые расходы (зарплаты, материалы) для расчёта резерва
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 

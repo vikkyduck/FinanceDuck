@@ -262,6 +262,7 @@ export const invoiceService = {
     hideFromAssistant?: boolean;
     clientBill: number;
     calculations: Record<string, any>;
+    plannedExpenses?: number;
   }): Promise<any> {
     return apiPost("/invoices", {
       invoiceNumber: invoice.invoiceNumber,
@@ -273,6 +274,7 @@ export const invoiceService = {
       notes: invoice.notes,
       paymentDate: invoice.paymentDate,
       hideFromAssistant: invoice.hideFromAssistant,
+      plannedExpenses: invoice.plannedExpenses,
       calculations: {
         clientBill: invoice.clientBill.toString(),
         ...invoice.calculations,

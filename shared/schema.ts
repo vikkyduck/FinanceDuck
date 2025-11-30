@@ -85,6 +85,7 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
   recurringInvoiceId: uuid("recurring_invoice_id"),
+  plannedExpenses: numeric("planned_expenses", { precision: 15, scale: 2 }),
 });
 
 export const assistantBonusPayments = pgTable("assistant_bonus_payments", {

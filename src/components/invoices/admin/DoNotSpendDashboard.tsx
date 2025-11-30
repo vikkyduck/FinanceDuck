@@ -343,121 +343,185 @@ export const DoNotSpendDashboard = ({
             </div>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
-                <TableHead className="text-xs w-8"></TableHead>
-                <TableHead className="text-xs">{role === 'partner' ? 'Счёт' : 'Партнёр'}</TableHead>
-                <TableHead className="text-xs text-center">Счетов</TableHead>
-                <TableHead className="text-xs text-right">{role === 'partner' ? 'Сумма клиента' : 'План. расходы'}</TableHead>
-                <TableHead className="text-xs text-right">{role === 'partner' ? 'Моя комиссия' : 'Потрачено'}</TableHead>
-                {role !== 'assistant' && role !== 'partner' && (
-                  <TableHead className="text-xs text-right">Комиссия</TableHead>
-                )}
-                <TableHead className="text-xs text-right">{role === 'partner' ? 'К переводу' : 'Не тратить'}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {partnerSchemeSummaries.map((summary) => {
-                const isExpanded = expandedPartners.has(summary.partnerId);
-                return (
-                  <Fragment key={summary.partnerId}>
+          {role === 'partner' ? (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
+                  <TableHead className="text-xs">Счёт</TableHead>
+                  <TableHead className="text-xs text-right">Сумма клиента</TableHead>
+                  <TableHead className="text-xs text-right">Моя комиссия</TableHead>
+                  <TableHead className="text-xs text-right">К переводу</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {partnerSchemeSummaries.flatMap((summary) => 
+                  summary.invoices.map((invoice) => (
                     <TableRow 
-                      className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 border-blue-200/50 dark:border-blue-800/30 cursor-pointer"
-                      onClick={() => togglePartner(summary.partnerId)}
-                      data-testid={`row-partner-${summary.partnerId}`}
+                      key={invoice.id}
+                      className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 border-blue-200/50 dark:border-blue-800/30"
+                      data-testid={`row-partner-invoice-${invoice.id}`}
                     >
-                      <TableCell className="text-sm w-8 p-2">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </TableCell>
                       <TableCell className="text-sm">
-                        <div className="flex items-center gap-2">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          {summary.partnerName}
+                        <div className="flex items-start gap-2">
+                          <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0 space-y-1">
+                            <div className="font-medium text-xs">
+                              {invoice.number}
+                            </div>
+                            {invoice.description && (
+                              <div className="text-xs text-muted-foreground line-clamp-1" title={invoice.description}>
+                                {invoice.description}
+                              </div>
+                            )}
+                            {invoice.notes && (
+                              <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
+                                <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                <span className="line-clamp-1" title={invoice.notes}>
+                                  {invoice.notes}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-center text-muted-foreground">
-                        {summary.invoiceCount}
+                      <TableCell className="text-sm text-right text-muted-foreground">
+                        {formatCurrency(invoice.clientBill)}
                       </TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(role === 'partner' ? summary.totalClientBill : summary.totalPlannedExpenses)}
+                        {formatCurrency(invoice.commission)}
                       </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(role === 'partner' ? summary.totalCommission : summary.totalSpent)}
-                      </TableCell>
-                      {role !== 'assistant' && role !== 'partner' && (
-                        <TableCell className="text-sm text-right text-muted-foreground">
-                          {formatCurrency(summary.totalCommission)}
-                        </TableCell>
-                      )}
                       <TableCell className="text-sm text-right">
-                        <span className="font-semibold text-blue-700 dark:text-blue-400">
-                          {formatCurrency(summary.totalDoNotSpend)}
+                        <span className={cn(
+                          "font-semibold",
+                          invoice.doNotSpend > 0 
+                            ? "text-blue-600 dark:text-blue-400" 
+                            : "text-muted-foreground"
+                        )}>
+                          {formatCurrency(invoice.doNotSpend)}
                         </span>
                       </TableCell>
                     </TableRow>
-                    {isExpanded && summary.invoices.map((invoice) => (
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
+                  <TableHead className="text-xs w-8"></TableHead>
+                  <TableHead className="text-xs">Партнёр</TableHead>
+                  <TableHead className="text-xs text-center">Счетов</TableHead>
+                  <TableHead className="text-xs text-right">План. расходы</TableHead>
+                  <TableHead className="text-xs text-right">Потрачено</TableHead>
+                  {role !== 'assistant' && (
+                    <TableHead className="text-xs text-right">Комиссия</TableHead>
+                  )}
+                  <TableHead className="text-xs text-right">Не тратить</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {partnerSchemeSummaries.map((summary) => {
+                  const isExpanded = expandedPartners.has(summary.partnerId);
+                  return (
+                    <Fragment key={summary.partnerId}>
                       <TableRow 
-                        key={invoice.id}
-                        className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/30 dark:border-blue-800/20"
-                        data-testid={`row-partner-invoice-${invoice.id}`}
+                        className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 border-blue-200/50 dark:border-blue-800/30 cursor-pointer"
+                        onClick={() => togglePartner(summary.partnerId)}
+                        data-testid={`row-partner-${summary.partnerId}`}
                       >
-                        <TableCell className="p-2"></TableCell>
-                        <TableCell className="text-sm pl-8" colSpan={2}>
-                          <div className="flex items-start gap-2">
-                            <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                            <div className="min-w-0 space-y-1">
-                              <div className="font-medium text-xs">
-                                {invoice.number}
-                              </div>
-                              {invoice.description && (
-                                <div className="text-xs text-muted-foreground" title={invoice.description}>
-                                  {invoice.description}
-                                </div>
-                              )}
-                              {invoice.notes && (
-                                <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
-                                  <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                                  <span className="line-clamp-2" title={invoice.notes}>
-                                    {invoice.notes}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                        <TableCell className="text-sm w-8 p-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          <div className="flex items-center gap-2">
+                            <Users className="h-3 w-3 text-muted-foreground" />
+                            {summary.partnerName}
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground">
-                          {formatCurrency(role === 'partner' ? invoice.clientBill : invoice.plannedExpenses)}
+                        <TableCell className="text-sm text-center text-muted-foreground">
+                          {summary.invoiceCount}
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground">
-                          {formatCurrency(role === 'partner' ? invoice.commission : invoice.spent)}
+                        <TableCell className="text-sm text-right text-muted-foreground">
+                          {formatCurrency(summary.totalPlannedExpenses)}
                         </TableCell>
-                        {role !== 'assistant' && role !== 'partner' && (
-                          <TableCell className="text-xs text-right text-muted-foreground">
-                            {formatCurrency(invoice.commission)}
+                        <TableCell className="text-sm text-right text-muted-foreground">
+                          {formatCurrency(summary.totalSpent)}
+                        </TableCell>
+                        {role !== 'assistant' && (
+                          <TableCell className="text-sm text-right text-muted-foreground">
+                            {formatCurrency(summary.totalCommission)}
                           </TableCell>
                         )}
-                        <TableCell className="text-xs text-right">
-                          <span className={cn(
-                            "font-medium",
-                            invoice.doNotSpend > 0 
-                              ? "text-blue-600 dark:text-blue-400" 
-                              : "text-muted-foreground"
-                          )}>
-                            {formatCurrency(invoice.doNotSpend)}
+                        <TableCell className="text-sm text-right">
+                          <span className="font-semibold text-blue-700 dark:text-blue-400">
+                            {formatCurrency(summary.totalDoNotSpend)}
                           </span>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
+                      {isExpanded && summary.invoices.map((invoice) => (
+                        <TableRow 
+                          key={invoice.id}
+                          className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/30 dark:border-blue-800/20"
+                          data-testid={`row-partner-invoice-${invoice.id}`}
+                        >
+                          <TableCell className="p-2"></TableCell>
+                          <TableCell className="text-sm pl-8" colSpan={2}>
+                            <div className="flex items-start gap-2">
+                              <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              <div className="min-w-0 space-y-1">
+                                <div className="font-medium text-xs">
+                                  {invoice.number}
+                                </div>
+                                {invoice.description && (
+                                  <div className="text-xs text-muted-foreground" title={invoice.description}>
+                                    {invoice.description}
+                                  </div>
+                                )}
+                                {invoice.notes && (
+                                  <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
+                                    <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                    <span className="line-clamp-2" title={invoice.notes}>
+                                      {invoice.notes}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground">
+                            {formatCurrency(invoice.plannedExpenses)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground">
+                            {formatCurrency(invoice.spent)}
+                          </TableCell>
+                          {role !== 'assistant' && (
+                            <TableCell className="text-xs text-right text-muted-foreground">
+                              {formatCurrency(invoice.commission)}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-xs text-right">
+                            <span className={cn(
+                              "font-medium",
+                              invoice.doNotSpend > 0 
+                                ? "text-blue-600 dark:text-blue-400" 
+                                : "text-muted-foreground"
+                            )}>
+                              {formatCurrency(invoice.doNotSpend)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </Fragment>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
 
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">
             <div className="flex items-center justify-between text-sm flex-wrap gap-2">

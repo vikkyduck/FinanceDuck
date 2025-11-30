@@ -133,6 +133,25 @@ export const invoiceExpenses = pgTable("invoice_expenses", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+export const plannedExpenseStatusEnum = pgEnum('planned_expense_status', ['pending', 'realized', 'cancelled']);
+
+export const invoicePlannedExpenses = pgTable("invoice_planned_expenses", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  description: text("description").notNull(),
+  expectedAmount: numeric("expected_amount", { precision: 15, scale: 2 }).notNull(),
+  expectedDate: date("expected_date").notNull(),
+  status: plannedExpenseStatusEnum("status").default('pending').notNull(),
+  notes: text("notes"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_planned_expenses_invoice").on(table.invoiceId),
+  index("idx_planned_expenses_status").on(table.status),
+  index("idx_planned_expenses_date").on(table.expectedDate),
+]);
+
 export const partnerPayments = pgTable("partner_payments", {
   id: uuid("id").defaultRandom().primaryKey(),
   partnerId: uuid("partner_id").references(() => partners.id).notNull(),
@@ -223,8 +242,11 @@ export type AccessToken = typeof accessTokens.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
 export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
 export type InsertRecurringInvoice = typeof recurringInvoices.$inferInsert;
+export type InvoicePlannedExpense = typeof invoicePlannedExpenses.$inferSelect;
+export type InsertInvoicePlannedExpense = typeof invoicePlannedExpenses.$inferInsert;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
 export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'commission_based';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 export type ActType = 'executor' | 'company';
 export type Frequency = 'monthly' | 'quarterly' | 'yearly';
+export type PlannedExpenseStatus = 'pending' | 'realized' | 'cancelled';

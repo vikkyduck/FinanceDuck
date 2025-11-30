@@ -30,16 +30,16 @@ export interface InvoiceCalculations {
  * @param clientBill - Total amount client pays
  * @param partnerCommissionRate - Custom commission rate (for commission_based scheme)
  * @param executorExpenses - Total executor expenses (for reference)
- * @param expensesPaidByPartner - Expenses paid by partner from client money
+ * @param expensesPaidByPartner - Expenses paid by partner from client money (for display only)
  * @param expensesPaidByAdmin - Expenses paid by admin from own funds
+ * @param plannedExpenses - Reserved amount for expenses (резерв)
  * 
  * CRITICAL BUSINESS RULE:
  * For partner schemes (partner_10, partner_15, commission_based):
- *   - Partner receives client payment
- *   - Partner pays expenses from client money (expensesPaidByPartner)
- *   - Partner transfers remainder to admin: amountToAdmin - expensesPaidByPartner
- *   - Admin may also pay expenses from own pocket (expensesPaidByAdmin)
- *   - Admin net profit = (amountToAdmin - expensesPaidByPartner) - expensesPaidByAdmin
+ *   - partnerTransferDue = clientBill - commissionAmount - plannedExpenses (FIXED!)
+ *   - This value does NOT change when expenses are added!
+ *   - Expenses only reduce the "remaining reserve" display (plannedExpenses - expensesPaidByPartner)
+ *   - Admin net profit = partnerTransferDue - expensesPaidByAdmin
  * 
  * For agency_30:
  *   - 70% stays with partner for project expenses
@@ -52,7 +52,8 @@ export function calculateInvoice(
   partnerCommissionRate?: number,
   executorExpenses: number = 0,
   expensesPaidByPartner: number = 0,
-  expensesPaidByAdmin: number = 0
+  expensesPaidByAdmin: number = 0,
+  plannedExpenses: number = 0
 ): InvoiceCalculations {
   let calculations: InvoiceCalculations = {
     client_bill: clientBill,
@@ -102,14 +103,14 @@ export function calculateInvoice(
       // Схема: Комиссия партнера 10%
       // Клиент платит: X
       // Комиссия партнера: X × 0.10
-      // Долг партнёра = amountToAdmin - expensesPaidByPartner
+      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - plannedExpenses (НЕ зависит от расходов!)
       // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       
       const commissionRate = 10;
       const commissionAmount = clientBill * 0.10;
-      const amountToAdmin = clientBill * 0.90; // Теоретическая сумма до расходов
-      const partnerTransferDue = amountToAdmin - expensesPaidByPartner; // Долг партнёра
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin; // Прибыль админа
+      const amountToAdmin = clientBill * 0.90;
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -128,14 +129,14 @@ export function calculateInvoice(
       // Схема: Комиссия партнера 15%
       // Клиент платит: X
       // Комиссия партнера: X × 0.15
-      // Долг партнёра = amountToAdmin - expensesPaidByPartner
+      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - plannedExpenses (НЕ зависит от расходов!)
       // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       
       const commissionRate = 15;
       const commissionAmount = clientBill * 0.15;
-      const amountToAdmin = clientBill * 0.85; // Теоретическая сумма до расходов
-      const partnerTransferDue = amountToAdmin - expensesPaidByPartner; // Долг партнёра
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin; // Прибыль админа
+      const amountToAdmin = clientBill * 0.85;
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -154,14 +155,14 @@ export function calculateInvoice(
       // Универсальная схема с произвольной комиссией
       // Клиент платит: X
       // Комиссия партнера: X × (rate / 100)
-      // Долг партнёра = amountToAdmin - expensesPaidByPartner
+      // ФИКСИРОВАННЫЙ долг партнёра = amountToAdmin - plannedExpenses (НЕ зависит от расходов!)
       // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
       
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
-      const amountToAdmin = clientBill - commissionAmount; // Теоретическая сумма до расходов
-      const partnerTransferDue = amountToAdmin - expensesPaidByPartner; // Долг партнёра
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin; // Прибыль админа
+      const amountToAdmin = clientBill - commissionAmount;
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
+      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {
         ...calculations,
@@ -181,7 +182,7 @@ export function calculateInvoice(
       const commissionRate = partnerCommissionRate || 10;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
-      const partnerTransferDue = amountToAdmin - expensesPaidByPartner;
+      const partnerTransferDue = Math.max(0, amountToAdmin - plannedExpenses); // ФИКСИРОВАНО!
       const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
       
       calculations = {

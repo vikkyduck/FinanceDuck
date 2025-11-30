@@ -27,7 +27,7 @@ export const invoiceSchema = z.object({
   invoiceNumber: z.string().trim().max(50, { message: "Invoice number too long" }).optional().or(z.literal('')),
   partnerId: uuidSchema,
   clientId: uuidSchema,
-  scheme: z.enum(['agency_30', 'commission_based'], { message: "Invalid scheme" }),
+  scheme: z.enum(['partner_10', 'partner_15', 'agency_30', 'commission_based'], { message: "Invalid scheme" }),
   clientBill: z.string()
     .trim()
     .regex(/^\d+(\.\d{1,2})?$/, { message: "Invalid amount format" })

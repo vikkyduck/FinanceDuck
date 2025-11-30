@@ -3109,11 +3109,13 @@ export class DatabaseStorage implements IStorage {
       })
     );
     
+    const balance = totalDebt - totalPaid;
     return {
       summary: {
         totalDebt,
         totalPaid,
-        remainingDebt: Math.max(0, totalDebt - totalPaid),
+        remainingDebt: Math.max(0, balance),
+        overpayment: balance < 0 ? Math.abs(balance) : 0,
         invoiceCount: invoiceDetails.length,
       },
       invoices: invoiceDetails,

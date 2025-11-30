@@ -221,11 +221,13 @@ export const PartnerDashboard = () => {
   const loading = debtLoading || invoicesLoading;
   
   const remainingDebt = debtDetails?.summary.remainingDebt ?? 0;
+  const overpayment = (debtDetails?.summary as any)?.overpayment ?? 0;
   const totalPaid = debtDetails?.summary.totalPaid ?? 0;
   const totalDebt = debtDetails?.summary.totalDebt ?? 0;
   const hasDebt = remainingDebt > 0;
+  const hasOverpayment = overpayment > 0;
   const hasPayments = (debtDetails?.payments.length ?? 0) > 0;
-  const canExpand = hasDebt || hasPayments || totalDebt > 0;
+  const canExpand = hasDebt || hasOverpayment || hasPayments || totalDebt > 0;
   
   const actsPercentage = metrics.totalPaidInvoices > 0 
     ? Math.round((metrics.signedActsCount / metrics.totalPaidInvoices) * 100) 
@@ -304,13 +306,13 @@ export const PartnerDashboard = () => {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-muted-foreground mb-1">
-                        Долг админу
+                        {hasOverpayment ? "Переплата (админ должен вам)" : "Долг админу"}
                       </p>
                       <p className={cn(
                         "text-2xl font-bold",
                         hasDebt ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
                       )} data-testid="text-debt-amount">
-                        {formatCurrency(remainingDebt)}
+                        {hasOverpayment ? formatCurrency(overpayment) : formatCurrency(remainingDebt)}
                       </p>
                       <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
                         {totalPaid > 0 && (
@@ -320,9 +322,11 @@ export const PartnerDashboard = () => {
                           </div>
                         )}
                         <span>
-                          {hasDebt 
-                            ? `${debtDetails?.invoices.length || 0} счетов` 
-                            : "Всё оплачено"}
+                          {hasOverpayment 
+                            ? "Вы переплатили"
+                            : hasDebt 
+                              ? `${debtDetails?.invoices.length || 0} счетов` 
+                              : "Всё оплачено"}
                         </span>
                       </div>
                     </div>
@@ -435,11 +439,11 @@ export const PartnerDashboard = () => {
                 <CardContent className="pt-4 space-y-4">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className="text-sm font-medium text-muted-foreground">
-                      Детали долга
+                      {hasOverpayment ? "Детали переплаты" : "Детали долга"}
                     </p>
                     <div className="flex items-center gap-4 text-sm">
                       <div>
-                        <span className="text-muted-foreground">Общий долг: </span>
+                        <span className="text-muted-foreground">Начислено: </span>
                         <span className="font-semibold">{formatCurrency(debtDetails.summary.totalDebt)}</span>
                       </div>
                       <div>
@@ -447,8 +451,17 @@ export const PartnerDashboard = () => {
                         <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(debtDetails.summary.totalPaid)}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Остаток: </span>
-                        <span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(debtDetails.summary.remainingDebt)}</span>
+                        {hasOverpayment ? (
+                          <>
+                            <span className="text-muted-foreground">Переплата: </span>
+                            <span className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(overpayment)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-muted-foreground">Остаток: </span>
+                            <span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(debtDetails.summary.remainingDebt)}</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

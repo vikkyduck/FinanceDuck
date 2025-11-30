@@ -1,1 +1,182 @@
-export const PartnerDebtDashboard = () => null;
+import { useState, useCallback, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet } from "@/lib/api";
+import { PartnerDebtCard } from "./PartnerDebtCard";
+import { PartnerInvoicesDetail } from "./PartnerInvoicesDetail";
+import { RecordPaymentDialog } from "./RecordPaymentDialog";
+import { Button } from "@/components/ui/button";
+import { RefreshCw, Plus, Loader2 } from "lucide-react";
+import { formatCurrency } from "@/lib/invoiceCalculations";
+import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
+
+interface PartnerDebtSummary {
+  partnerId: string;
+  partnerName: string;
+  totalToTransfer: number;
+  totalPaid: number;
+  remaining: number;
+  invoiceCount: number;
+  paidCommission: number;
+  totalInvoiceCount: number;
+  email: string | null;
+  phone: string | null;
+}
+
+export const PartnerDebtDashboard = () => {
+  const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [selectedPartner, setSelectedPartner] = useState<PartnerDebtSummary | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: summaries = [], isLoading, refetch, isFetching } = useQuery<PartnerDebtSummary[]>({
+    queryKey: ["/api/partner-debt"],
+    queryFn: () => apiGet<PartnerDebtSummary[]>("/partner-debt"),
+    refetchInterval: 120000,
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    let isVisible = document.visibilityState === 'visible';
+    
+    const handleVisibilityChange = () => {
+      isVisible = document.visibilityState === 'visible';
+      if (isVisible) refetch();
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refetch]);
+
+  const { setRef } = useStaggerAnimation(summaries.length, 80);
+
+  const handleRecordPayment = useCallback((partner: PartnerDebtSummary) => {
+    setSelectedPartner(partner);
+    setPaymentDialogOpen(true);
+  }, []);
+
+  const handlePaymentSuccess = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["/api/partner-debt"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/partner-payments"] });
+    refetch();
+  }, [queryClient, refetch]);
+
+  const partnersWithDebt = summaries.filter(s => s.totalToTransfer > 0);
+  const totalRemaining = summaries.reduce((sum, s) => sum + s.remaining, 0);
+  const totalDebt = summaries.reduce((sum, s) => sum + s.totalToTransfer, 0);
+  const totalPaid = summaries.reduce((sum, s) => sum + s.totalPaid, 0);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (summaries.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        Нет партнёров в системе
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold">Расчёты с партнёрами</h2>
+          <p className="text-sm text-muted-foreground">
+            {partnersWithDebt.length} из {summaries.length} партнёров с активным долгом
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Общий долг</div>
+            <div className="text-lg font-semibold">{formatCurrency(totalDebt)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Оплачено</div>
+            <div className="text-lg font-semibold text-green-600">{formatCurrency(totalPaid)}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Остаток</div>
+            <div className="text-lg font-semibold text-red-600">{formatCurrency(totalRemaining)}</div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            data-testid="button-refresh-partner-debt"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+            Обновить
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+        {partnersWithDebt.map((summary, index) => (
+          <div 
+            key={summary.partnerId} 
+            ref={setRef(index)}
+            className="opacity-0 animate-in fade-in slide-in-from-bottom-4 duration-300"
+            style={{ animationDelay: `${index * 80}ms`, animationFillMode: 'forwards' }}
+          >
+            <PartnerDebtCard
+              summary={{
+                partner_id: summary.partnerId,
+                partner_name: summary.partnerName,
+                total_to_transfer: summary.totalToTransfer,
+                total_paid: summary.totalPaid,
+                remaining: summary.remaining,
+                invoice_count: summary.invoiceCount,
+              }}
+              isExpanded={expandedPartnerId === summary.partnerId}
+              onExpand={() => setExpandedPartnerId(
+                expandedPartnerId === summary.partnerId ? null : summary.partnerId
+              )}
+            >
+              <div className="pt-4 space-y-3">
+                <PartnerInvoicesDetail
+                  partnerId={summary.partnerId}
+                  partnerName={summary.partnerName}
+                  onPaymentRecorded={handlePaymentSuccess}
+                />
+                <Button
+                  className="w-full"
+                  onClick={() => handleRecordPayment(summary)}
+                  data-testid={`button-record-payment-card-${summary.partnerId}`}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Записать приход
+                </Button>
+              </div>
+            </PartnerDebtCard>
+          </div>
+        ))}
+      </div>
+
+      {partnersWithDebt.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground bg-muted/30 rounded-lg">
+          Нет активных долгов партнёров. Все оплачено!
+        </div>
+      )}
+
+      {selectedPartner && (
+        <RecordPaymentDialog
+          open={paymentDialogOpen}
+          onOpenChange={setPaymentDialogOpen}
+          partnerId={selectedPartner.partnerId}
+          partnerName={selectedPartner.partnerName}
+          remaining={selectedPartner.remaining}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+    </div>
+  );
+};

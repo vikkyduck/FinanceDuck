@@ -13,6 +13,7 @@ import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
 import { ManageAccessCodesDialog } from "./admin/ManageAccessCodesDialog";
 import { AssistantBonusManager } from "./admin/AssistantBonusManager";
 import { PartnerPaymentsManager } from "./admin/PartnerPaymentsManager";
+import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { AdminCashFlowForecast } from "./admin/AdminCashFlowForecast";
 import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
@@ -57,6 +58,7 @@ export const AdminDashboard = () => {
       invoicesList: true,
       bonuses: true,
       partnerPayments: true,
+      partnerPaymentsTable: false,
       clientLTV: true,
     }
   );
@@ -226,9 +228,18 @@ export const AdminDashboard = () => {
 
             <CollapsibleSection
               id="partnerPayments"
-              title="Расчёты с партнёрами"
+              title="Расчёты с партнёрами (карточки)"
               isExpanded={isExpanded("partnerPayments")}
               onToggle={() => toggleSection("partnerPayments")}
+            >
+              <PartnerDebtDashboard />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              id="partnerPaymentsTable"
+              title="Расчёты с партнёрами (таблица)"
+              isExpanded={isExpanded("partnerPaymentsTable")}
+              onToggle={() => toggleSection("partnerPaymentsTable")}
             >
               <PartnerPaymentsManager />
             </CollapsibleSection>

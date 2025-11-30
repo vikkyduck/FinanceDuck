@@ -169,7 +169,7 @@ export const AdminDashboardMetrics = () => {
             <div className="text-center p-4 bg-background/50 rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <Percent className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Net Profit Margin</p>
+                <p className="text-sm text-muted-foreground">Рентабельность</p>
               </div>
               <p className={`text-2xl font-bold ${stats.yearlySummary.netProfitMargin >= 20 ? 'text-green-600 dark:text-green-400' : stats.yearlySummary.netProfitMargin >= 10 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-yearly-margin">
                 {stats.yearlySummary.netProfitMargin.toFixed(1)}%
@@ -224,7 +224,7 @@ export const AdminDashboardMetrics = () => {
             </div>
             {(stats.monthlyCashFlow.recurring || 0) > 0 && (
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Recurring</span>
+                <span className="text-sm text-muted-foreground">Регулярные</span>
                 <span className="font-semibold text-blue-600" data-testid="text-cashflow-recurring">
                   {formatCurrency(stats.monthlyCashFlow.recurring || 0)}
                 </span>
@@ -246,7 +246,7 @@ export const AdminDashboardMetrics = () => {
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <FileText className="h-4 w-4 text-blue-600" />
-              Sales ({MONTH_NAMES[selectedMonth]})
+              Продажи ({MONTH_NAMES[selectedMonth]})
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">

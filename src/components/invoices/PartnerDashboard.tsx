@@ -27,6 +27,16 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+const getSchemeDisplayName = (scheme: string): string => {
+  const schemeNames: Record<string, string> = {
+    'partner_10': '10%',
+    'partner_15': '15%',
+    'agency_30': 'Агентский',
+    'commission_based': 'По договору',
+  };
+  return schemeNames[scheme] || scheme;
+};
+
 interface DebtInvoice {
   id: string;
   invoiceNumber: string;
@@ -308,36 +318,28 @@ export const PartnerDashboard = () => {
                 onClick={() => canExpand && setShowDebtDetails(!showDebtDetails)}
                 data-testid="card-debt-to-admin"
               >
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">
-                        {hasOverpayment ? "Переплата (админ должен вам)" : "Долг админу"}
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {hasOverpayment ? "Ваш баланс" : "К оплате"}
                       </p>
                       <p className={cn(
-                        "text-2xl font-bold",
+                        "text-3xl font-semibold tracking-tight",
                         hasDebt ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
                       )} data-testid="text-debt-amount">
-                        {hasOverpayment ? formatCurrency(overpayment) : formatCurrency(remainingDebt)}
+                        {hasOverpayment ? `+${formatCurrency(overpayment)}` : formatCurrency(remainingDebt)}
                       </p>
-                      <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                        {totalPaid > 0 && (
-                          <div className="flex items-center gap-1">
-                            <CreditCard className="h-3 w-3" />
-                            <span>Оплачено: {formatCurrency(totalPaid)}</span>
-                          </div>
-                        )}
-                        <span>
-                          {hasOverpayment 
-                            ? "Вы переплатили"
-                            : hasDebt 
-                              ? `${debtDetails?.invoices.length || 0} счетов` 
-                              : "Всё оплачено"}
-                        </span>
-                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {hasOverpayment 
+                          ? "Мы вам должны"
+                          : hasDebt 
+                            ? `${debtDetails?.invoices.length || 0} неоплаченных` 
+                            : "Всё оплачено"}
+                      </p>
                     </div>
                     <div className={cn(
-                      "p-2 rounded-full",
+                      "p-2.5 rounded-full",
                       hasDebt 
                         ? "bg-red-100 dark:bg-red-900/30" 
                         : "bg-green-100 dark:bg-green-900/30"
@@ -350,33 +352,33 @@ export const PartnerDashboard = () => {
                     </div>
                   </div>
                   {canExpand && (
-                    <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground">
                       {showDebtDetails ? (
-                        <ChevronDown className="h-3 w-3" />
+                        <ChevronDown className="h-3.5 w-3.5" />
                       ) : (
-                        <ChevronRight className="h-3 w-3" />
+                        <ChevronRight className="h-3.5 w-3.5" />
                       )}
-                      <span>Показать детали</span>
+                      <span>Детали</span>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
               <Card data-testid="card-reserved-expenses">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">
-                        Резерв на расходы
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Резерв
                       </p>
-                      <p className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-reserved-amount">
+                      <p className="text-3xl font-semibold tracking-tight text-blue-600 dark:text-blue-400" data-testid="text-reserved-amount">
                         {formatCurrency(metrics.reservedForExpenses)}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        На проектные расходы
+                      <p className="text-xs text-muted-foreground">
+                        На расходы по проектам
                       </p>
                     </div>
-                    <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                    <div className="p-2.5 rounded-full bg-blue-100 dark:bg-blue-900/30">
                       <Wallet className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                   </div>
@@ -384,20 +386,20 @@ export const PartnerDashboard = () => {
               </Card>
 
               <Card data-testid="card-yearly-commission">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">
-                        Комиссия {currentYear}
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Заработано
                       </p>
-                      <p className="text-2xl font-bold text-primary" data-testid="text-commission-amount">
+                      <p className="text-3xl font-semibold tracking-tight text-primary" data-testid="text-commission-amount">
                         {formatCurrency(metrics.yearlyCommission)}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        За текущий год
+                      <p className="text-xs text-muted-foreground">
+                        За {currentYear} год
                       </p>
                     </div>
-                    <div className="p-2 rounded-full bg-primary/10">
+                    <div className="p-2.5 rounded-full bg-primary/10">
                       <TrendingUp className="h-5 w-5 text-primary" />
                     </div>
                   </div>
@@ -405,21 +407,21 @@ export const PartnerDashboard = () => {
               </Card>
 
               <Card data-testid="card-signed-acts">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-muted-foreground mb-1">
-                        Подписано актов
+                <CardContent className="pt-6 pb-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        Акты
                       </p>
-                      <p className="text-2xl font-bold" data-testid="text-acts-count">
-                        {metrics.signedActsCount} / {metrics.totalPaidInvoices}
+                      <p className="text-3xl font-semibold tracking-tight" data-testid="text-acts-count">
+                        {metrics.signedActsCount}<span className="text-lg text-muted-foreground font-normal"> / {metrics.totalPaidInvoices}</span>
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {actsPercentage}% от оплаченных
+                      <p className="text-xs text-muted-foreground">
+                        {actsPercentage === 100 ? "Все подписаны" : `${actsPercentage}% подписано`}
                       </p>
                     </div>
                     <div className={cn(
-                      "p-2 rounded-full",
+                      "p-2.5 rounded-full",
                       actsPercentage === 100 
                         ? "bg-green-100 dark:bg-green-900/30" 
                         : "bg-amber-100 dark:bg-amber-900/30"
@@ -497,7 +499,7 @@ export const PartnerDashboard = () => {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{invoice.invoiceNumber}</span>
                             <Badge variant="secondary" className="text-xs">
-                              {invoice.scheme}
+                              {getSchemeDisplayName(invoice.scheme)}
                             </Badge>
                           </div>
                           <span className="text-sm text-muted-foreground">

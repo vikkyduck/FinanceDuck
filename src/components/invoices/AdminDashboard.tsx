@@ -91,18 +91,15 @@ export const AdminDashboard = () => {
       </div>
 
       {/* Quick Stats Link */}
-      <Card className="border-0 shadow-sm bg-gradient-to-r from-primary/10 to-primary/5 mb-6">
-        <CardContent className="py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold">Детальная аналитика и прогнозы</p>
-              <p className="text-sm text-muted-foreground">
-                Графики, план-факт, прогнозы продаж
-              </p>
-            </div>
-            <Button onClick={() => navigate('/stats')} variant="outline">
+      <Card className="border-0 shadow-none bg-muted/30 mb-6">
+        <CardContent className="py-3">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-muted-foreground">
+              Графики, план-факт, прогнозы
+            </p>
+            <Button onClick={() => navigate('/stats')} variant="outline" size="sm">
               <BarChart3 className="h-4 w-4 mr-2" />
-              Открыть аналитику
+              Аналитика
             </Button>
           </div>
         </CardContent>

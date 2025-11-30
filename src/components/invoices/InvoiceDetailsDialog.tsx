@@ -60,7 +60,9 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     status: "draft" | "sent" | "paid" | "cancelled",
-    label: string
+    label: string,
+    hasUnspentReserve?: boolean,
+    remainingReserve?: number
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   
@@ -252,6 +254,25 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     
     // Требуем подтверждение только для финальных статусов
     if (newStatus === "paid" || newStatus === "cancelled") {
+      // Check if there's unspent reserve when trying to mark as paid
+      if (newStatus === "paid") {
+        const reservedAmount = invoice?.planned_expenses ? parseFloat(invoice.planned_expenses) : 0;
+        // Only count expenses paid by partner (from client money) as spent from reserve
+        const spentFromReserve = expenses
+          .filter((e: any) => e.paidByAdmin !== true)
+          .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+        const remainingReserve = reservedAmount - spentFromReserve;
+        
+        if (remainingReserve > 0) {
+          setPendingStatusChange({ 
+            status: newStatus, 
+            label: labels[newStatus],
+            hasUnspentReserve: true,
+            remainingReserve: remainingReserve
+          });
+          return;
+        }
+      }
       setPendingStatusChange({ status: newStatus, label: labels[newStatus] });
     } else {
       handleStatusChange(newStatus);
@@ -1085,45 +1106,91 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                             </div>
                           )}
                           
-                          {userRole === 'admin' && (
-                            <div className="space-y-2 pt-3 border-t border-muted">
-                              <Label className="text-sm">Планируемые расходы на проект</Label>
-                              <div className="flex gap-2 items-center">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="1"
-                                  value={plannedExpensesEdit}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setPlannedExpensesEdit(val === '' ? '' : Number(val));
-                                  }}
-                                  className="w-32 text-right"
-                                  data-testid="input-planned-expenses"
-                                  placeholder="0"
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    if (plannedExpensesEdit !== '' && !Number.isNaN(plannedExpensesEdit)) {
-                                      handleUpdatePlannedExpenses(Number(plannedExpensesEdit));
-                                    }
-                                  }}
-                                  disabled={updatingPlannedExpenses}
-                                  data-testid="button-save-planned-expenses"
-                                >
-                                  {updatingPlannedExpenses ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    'Сохранить'
-                                  )}
-                                </Button>
+                          {userRole === 'admin' && (() => {
+                            const reservedAmount = invoice?.planned_expenses ? parseFloat(invoice.planned_expenses) : 0;
+                            // Only count expenses paid by partner (from client money) as spent from reserve
+                            const spentFromReserve = expenses
+                              .filter((e: any) => e.paidByAdmin !== true)
+                              .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+                            const adminPaidExpenses = expenses
+                              .filter((e: any) => e.paidByAdmin === true)
+                              .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+                            const remainingReserve = reservedAmount - spentFromReserve;
+                            const isOverspent = remainingReserve < 0 && reservedAmount > 0;
+                            
+                            return (
+                              <div className="space-y-3 pt-3 border-t border-muted">
+                                <Label className="text-sm font-medium">Планируемые расходы на проект</Label>
+                                
+                                {reservedAmount > 0 && (
+                                  <div className="bg-muted/50 rounded-md p-3 space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Зарезервировано:</span>
+                                      <span className="font-medium">{formatCurrency(reservedAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                      <span className="text-muted-foreground">Потрачено (из денег клиента):</span>
+                                      <span className={isOverspent ? "font-medium text-destructive" : "font-medium"}>
+                                        {formatCurrency(spentFromReserve)}
+                                      </span>
+                                    </div>
+                                    {adminPaidExpenses > 0 && (
+                                      <div className="flex justify-between text-sm text-muted-foreground">
+                                        <span>Оплачено админом (не из резерва):</span>
+                                        <span>{formatCurrency(adminPaidExpenses)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between text-sm border-t pt-2">
+                                      <span className="font-medium">Осталось резерва:</span>
+                                      <span className={`font-bold ${isOverspent ? "text-destructive" : remainingReserve > 0 ? "text-primary" : "text-muted-foreground"}`}>
+                                        {isOverspent ? `-${formatCurrency(Math.abs(remainingReserve))}` : formatCurrency(remainingReserve)}
+                                      </span>
+                                    </div>
+                                    {isOverspent && (
+                                      <p className="text-xs text-destructive">
+                                        Расходы превысили зарезервированную сумму
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                                
+                                <div className="flex gap-2 items-center">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={plannedExpensesEdit}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setPlannedExpensesEdit(val === '' ? '' : Number(val));
+                                    }}
+                                    className="w-32 text-right"
+                                    data-testid="input-planned-expenses"
+                                    placeholder="0"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      if (plannedExpensesEdit !== '' && !Number.isNaN(plannedExpensesEdit)) {
+                                        handleUpdatePlannedExpenses(Number(plannedExpensesEdit));
+                                      }
+                                    }}
+                                    disabled={updatingPlannedExpenses}
+                                    data-testid="button-save-planned-expenses"
+                                  >
+                                    {updatingPlannedExpenses ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      'Сохранить'
+                                    )}
+                                  </Button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Сумма резервируется на расходы проекта (зарплаты, материалы)
+                                </p>
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                Сумма резервируется на расходы проекта (зарплаты, материалы)
-                              </p>
-                            </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       </>
                     )}
@@ -1287,16 +1354,37 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       <AlertDialog open={!!pendingStatusChange} onOpenChange={(open) => !open && setPendingStatusChange(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Изменить статус счёта?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Вы собираетесь изменить статус счёта на "{pendingStatusChange?.label}". 
-              {pendingStatusChange?.status === "paid" && (
-                " Это означает, что оплата получена от клиента."
+            <AlertDialogTitle>
+              {pendingStatusChange?.hasUnspentReserve 
+                ? "Работы ещё не завершены!" 
+                : "Изменить статус счёта?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              {pendingStatusChange?.hasUnspentReserve ? (
+                <div className="space-y-3">
+                  <p>
+                    У вас остался неиспользованный резерв: <strong className="text-primary">{formatCurrency(pendingStatusChange.remainingReserve || 0)}</strong>
+                  </p>
+                  <p className="text-amber-600 dark:text-amber-500">
+                    Это может означать, что работы по проекту ещё не завершены. 
+                    Рекомендуется сначала добавить все расходы исполнителей или уменьшить сумму резерва.
+                  </p>
+                  <p>
+                    Вы уверены, что хотите отметить счёт как "Оплачен"?
+                  </p>
+                </div>
+              ) : (
+                <>
+                  Вы собираетесь изменить статус счёта на "{pendingStatusChange?.label}". 
+                  {pendingStatusChange?.status === "paid" && (
+                    " Это означает, что оплата получена от клиента."
+                  )}
+                  {pendingStatusChange?.status === "cancelled" && (
+                    " Счёт будет помечен как отменённый и не будет учитываться в расчётах."
+                  )}
+                  {" "}Продолжить?
+                </>
               )}
-              {pendingStatusChange?.status === "cancelled" && (
-                " Счёт будет помечен как отменённый и не будет учитываться в расчётах."
-              )}
-              {" "}Продолжить?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1304,12 +1392,15 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
             <AlertDialogAction 
               onClick={confirmStatusChange}
               disabled={updatingStatus}
+              className={pendingStatusChange?.hasUnspentReserve ? "bg-amber-600 hover:bg-amber-700" : ""}
             >
               {updatingStatus ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Обновление...
                 </>
+              ) : pendingStatusChange?.hasUnspentReserve ? (
+                "Всё равно отметить оплаченным"
               ) : (
                 "Изменить статус"
               )}

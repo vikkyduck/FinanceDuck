@@ -1674,28 +1674,13 @@ export class DatabaseStorage implements IStorage {
       // Partner debt comes from stored calculation (FIXED value, doesn't change with expenses)
       const partnerDebt = parseFloat(row.calculations.partnerTransferDue || "0");
       
-      // "Do not spend" calculation:
-      // - For partner: partnerTransferDue (сколько денег держать для перевода админу)
-      // - For admin: remaining planned expenses + commission
-      // - For assistant: only remaining planned expenses (hide commission)
-      let doNotSpend: number;
-      if (role === 'partner') {
-        // Partner sees their debt (partnerTransferDue) as "don't spend"
-        doNotSpend = partnerDebt;
-      } else if (role === 'assistant') {
-        doNotSpend = remaining;
-      } else {
-        doNotSpend = remaining + commission;
-      }
+      // "Do not spend" calculation - UNIFIED for all roles:
+      // remaining planned expenses + commission
+      // Assistant sees commission as 0, but logic is the same
+      const doNotSpend = remaining + commission;
       
-      // Skip logic:
-      // - For partner: skip if no debt to transfer (partnerTransferDue = 0)
-      // - For admin/assistant: skip if no planned expenses
-      if (role === 'partner') {
-        if (partnerDebt <= 0) continue;
-      } else {
-        if (plannedExpenses === 0) continue;
-      }
+      // Skip invoices without planned expenses (same logic for ALL roles)
+      if (plannedExpenses <= 0) continue;
       
       if (!partnerMap.has(pId)) {
         partnerMap.set(pId, {

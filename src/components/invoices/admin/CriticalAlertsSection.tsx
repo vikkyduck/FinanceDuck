@@ -44,6 +44,9 @@ export const CriticalAlertsSection = () => {
     staleTime: 30000,
     retry: 2,
   });
+  
+  // Handle error gracefully - don't crash the dashboard
+  if (isError) return null;
 
   const handleMarkAsPaid = useCallback(async (invoiceId: string) => {
     try {
@@ -90,8 +93,6 @@ export const CriticalAlertsSection = () => {
       actionLabel,
     };
   });
-
-  if (isError) return null;
 
   if (isLoading) {
     return (

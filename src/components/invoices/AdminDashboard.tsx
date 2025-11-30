@@ -20,7 +20,6 @@ import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
-import { PlannedExpensesSummary } from "./admin/PlannedExpensesSummary";
 import { AdminDashboardMetrics } from "./admin/AdminDashboardMetrics";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
@@ -157,7 +156,6 @@ export const AdminDashboard = () => {
           <div className="space-y-6">
             <PartnerDebtDashboard />
             <DoNotSpendDashboard />
-            <PlannedExpensesSummary />
           </div>
         </TabsContent>
 

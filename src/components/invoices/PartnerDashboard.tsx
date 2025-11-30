@@ -222,7 +222,10 @@ export const PartnerDashboard = () => {
   
   const remainingDebt = debtDetails?.summary.remainingDebt ?? 0;
   const totalPaid = debtDetails?.summary.totalPaid ?? 0;
+  const totalDebt = debtDetails?.summary.totalDebt ?? 0;
   const hasDebt = remainingDebt > 0;
+  const hasPayments = (debtDetails?.payments.length ?? 0) > 0;
+  const canExpand = hasDebt || hasPayments || totalDebt > 0;
   
   const actsPercentage = metrics.totalPaidInvoices > 0 
     ? Math.round((metrics.signedActsCount / metrics.totalPaidInvoices) * 100) 
@@ -288,12 +291,13 @@ export const PartnerDashboard = () => {
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card 
                 className={cn(
-                  "border-2 cursor-pointer transition-colors",
+                  "border-2 transition-colors",
+                  canExpand && "cursor-pointer",
                   hasDebt 
                     ? "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" 
                     : "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20"
                 )}
-                onClick={() => hasDebt && setShowDebtDetails(!showDebtDetails)}
+                onClick={() => canExpand && setShowDebtDetails(!showDebtDetails)}
                 data-testid="card-debt-to-admin"
               >
                 <CardContent className="pt-6">
@@ -335,7 +339,7 @@ export const PartnerDashboard = () => {
                       )}
                     </div>
                   </div>
-                  {hasDebt && (
+                  {canExpand && (
                     <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                       {showDebtDetails ? (
                         <ChevronDown className="h-3 w-3" />
@@ -423,7 +427,11 @@ export const PartnerDashboard = () => {
             </div>
 
             {showDebtDetails && debtDetails && (
-              <Card className="border-red-200/50 dark:border-red-800/30 bg-red-50/30 dark:bg-red-950/10">
+              <Card className={cn(
+                hasDebt 
+                  ? "border-red-200/50 dark:border-red-800/30 bg-red-50/30 dark:bg-red-950/10"
+                  : "border-green-200/50 dark:border-green-800/30 bg-green-50/30 dark:bg-green-950/10"
+              )}>
                 <CardContent className="pt-4 space-y-4">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <p className="text-sm font-medium text-muted-foreground">

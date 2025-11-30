@@ -44,6 +44,8 @@ interface PartnerSchemeInvoice {
   notes: string | null;
   clientBill: number;
   plannedExpenses: number;
+  spent: number;
+  remaining: number;
   commission: number;
   doNotSpend: number;
   createdAt: string | null;
@@ -53,6 +55,7 @@ interface PartnerSchemeSummary {
   partnerId: string;
   partnerName: string;
   totalPlannedExpenses: number;
+  totalSpent: number;
   totalCommission: number;
   totalDoNotSpend: number;
   invoiceCount: number;
@@ -342,6 +345,7 @@ export const DoNotSpendDashboard = ({
                 <TableHead className="text-xs">Партнёр</TableHead>
                 <TableHead className="text-xs text-center">Счетов</TableHead>
                 <TableHead className="text-xs text-right">План. расходы</TableHead>
+                <TableHead className="text-xs text-right">Потрачено</TableHead>
                 {role !== 'assistant' && (
                   <TableHead className="text-xs text-right">Комиссия</TableHead>
                 )}
@@ -376,6 +380,9 @@ export const DoNotSpendDashboard = ({
                       </TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground">
                         {formatCurrency(summary.totalPlannedExpenses)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right text-muted-foreground">
+                        {formatCurrency(summary.totalSpent)}
                       </TableCell>
                       {role !== 'assistant' && (
                         <TableCell className="text-sm text-right text-muted-foreground">
@@ -420,6 +427,9 @@ export const DoNotSpendDashboard = ({
                         </TableCell>
                         <TableCell className="text-xs text-right text-muted-foreground">
                           {formatCurrency(invoice.plannedExpenses)}
+                        </TableCell>
+                        <TableCell className="text-xs text-right text-muted-foreground">
+                          {formatCurrency(invoice.spent)}
                         </TableCell>
                         {role !== 'assistant' && (
                           <TableCell className="text-xs text-right text-muted-foreground">

@@ -1545,6 +1545,7 @@ export class DatabaseStorage implements IStorage {
     partnerId: string;
     partnerName: string;
     totalPlannedExpenses: number;
+    totalSpent: number;
     totalCommission: number;
     totalDoNotSpend: number;
     invoiceCount: number;
@@ -1555,13 +1556,16 @@ export class DatabaseStorage implements IStorage {
       notes: string | null;
       clientBill: number;
       plannedExpenses: number;
+      spent: number;
+      remaining: number;
       commission: number;
       doNotSpend: number;
       createdAt: Date | null;
     }[];
   }[]> {
+    // Include all partner schemes: commission_based, partner_10, partner_15
     const conditions = [
-      eq(invoices.scheme, 'commission_based'),
+      inArray(invoices.scheme, ['commission_based', 'partner_10', 'partner_15']),
       inArray(invoices.status, ['paid', 'sent'])
     ];
     
@@ -1584,6 +1588,7 @@ export class DatabaseStorage implements IStorage {
       partnerId: string;
       partnerName: string;
       totalPlannedExpenses: number;
+      totalSpent: number;
       totalCommission: number;
       totalDoNotSpend: number;
       invoiceCount: number;
@@ -1594,6 +1599,8 @@ export class DatabaseStorage implements IStorage {
         notes: string | null;
         clientBill: number;
         plannedExpenses: number;
+        spent: number;
+        remaining: number;
         commission: number;
         doNotSpend: number;
         createdAt: Date | null;
@@ -1609,12 +1616,17 @@ export class DatabaseStorage implements IStorage {
       const plannedExpenses = row.invoice.plannedExpenses ? parseFloat(row.invoice.plannedExpenses) : 0;
       const commissionRate = row.calculations.commissionRate ? parseFloat(row.calculations.commissionRate) : 10;
       
-      // Commission is admin's share: clientBill * (commissionRate / 100)
+      // Get actual spent expenses (expenses paid by partner from reserved budget)
+      const expensesPaidByPartner = parseFloat(row.calculations.expensesPaidByPartner || "0");
+      const spent = expensesPaidByPartner;
+      const remaining = Math.max(0, plannedExpenses - spent);
+      
+      // Commission is partner's share (what they keep): clientBill * (commissionRate / 100)
       const commission = clientBill * (commissionRate / 100);
       
-      // "Do not spend" = planned expenses + commission for admin/partner view
-      // For assistant: only show planned expenses (hide commission)
-      const doNotSpend = role === 'assistant' ? plannedExpenses : (plannedExpenses + commission);
+      // "Do not spend" = remaining planned expenses + commission for admin/partner view
+      // For assistant: only show remaining planned expenses (hide commission)
+      const doNotSpend = role === 'assistant' ? remaining : (remaining + commission);
       
       // Skip if no planned expenses (nothing to show)
       if (plannedExpenses === 0) continue;
@@ -1624,6 +1636,7 @@ export class DatabaseStorage implements IStorage {
           partnerId: pId,
           partnerName,
           totalPlannedExpenses: 0,
+          totalSpent: 0,
           totalCommission: 0,
           totalDoNotSpend: 0,
           invoiceCount: 0,
@@ -1633,6 +1646,7 @@ export class DatabaseStorage implements IStorage {
 
       const summary = partnerMap.get(pId)!;
       summary.totalPlannedExpenses += plannedExpenses;
+      summary.totalSpent += spent;
       // Only add commission to totals for non-assistant roles
       summary.totalCommission += role === 'assistant' ? 0 : commission;
       summary.totalDoNotSpend += doNotSpend;
@@ -1644,6 +1658,8 @@ export class DatabaseStorage implements IStorage {
         notes: row.invoice.notes,
         clientBill,
         plannedExpenses,
+        spent,
+        remaining,
         commission: role === 'assistant' ? 0 : commission,
         doNotSpend,
         createdAt: row.invoice.createdAt,

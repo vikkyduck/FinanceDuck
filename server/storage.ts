@@ -256,10 +256,9 @@ export interface ClientLTVData {
   client_id: string;
   client_name: string;
   total_invoices: number;
-  total_billed: number;
-  total_paid: number;
-  outstanding_debt: number;
-  payment_rate: number;
+  paid_invoices: number;
+  total_admin_profit: number;
+  potential_profit: number;
 }
 
 export interface PartnerClientStatsData {
@@ -4069,6 +4068,7 @@ export class DatabaseStorage implements IStorage {
 
   async getClientLTV(): Promise<ClientLTVData[]> {
     // Get all invoices with client info and calculations
+    // LTV = чистая прибыль админа (netProfitAdmin) от клиента
     const allInvoices = await db
       .select({
         invoice: invoices,
@@ -4087,7 +4087,8 @@ export class DatabaseStorage implements IStorage {
 
       const clientId = row.invoice.clientId;
       const clientName = row.clientName || 'Неизвестный клиент';
-      const clientBill = parseFloat(row.calculations?.clientBill || "0");
+      // Используем netProfitAdmin как доход админа от клиента
+      const adminProfit = parseFloat(row.calculations?.netProfitAdmin || "0");
       const isPaid = row.invoice.status === 'paid';
 
       if (!clientMap.has(clientId)) {
@@ -4095,33 +4096,28 @@ export class DatabaseStorage implements IStorage {
           client_id: clientId,
           client_name: clientName,
           total_invoices: 0,
-          total_billed: 0,
-          total_paid: 0,
-          outstanding_debt: 0,
-          payment_rate: 0,
+          paid_invoices: 0,
+          total_admin_profit: 0,
+          potential_profit: 0,
         });
       }
 
       const client = clientMap.get(clientId)!;
       client.total_invoices += 1;
-      client.total_billed += clientBill;
 
       if (isPaid) {
-        client.total_paid += clientBill;
+        // Оплаченные счета - реальная прибыль
+        client.paid_invoices += 1;
+        client.total_admin_profit += adminProfit;
       } else if (row.invoice.status === 'sent') {
-        client.outstanding_debt += clientBill;
+        // Неоплаченные счета - потенциальная прибыль
+        client.potential_profit += adminProfit;
       }
     }
 
-    // Calculate payment rate for each client
+    // Сортируем по total_admin_profit (реальной прибыли)
     return Array.from(clientMap.values())
-      .map(client => ({
-        ...client,
-        payment_rate: client.total_billed > 0 
-          ? (client.total_paid / client.total_billed) * 100 
-          : 0,
-      }))
-      .sort((a, b) => b.total_billed - a.total_billed);
+      .sort((a, b) => b.total_admin_profit - a.total_admin_profit);
   }
 }
 

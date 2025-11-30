@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { TrendingUp, Users, AlertCircle } from "lucide-react";
+import { TrendingUp, Users, AlertCircle, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -13,20 +13,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 
 interface ClientLTV {
   client_id: string;
   client_name: string;
   total_invoices: number;
-  total_billed: number;
-  total_paid: number;
-  outstanding_debt: number;
-  payment_rate: number;
+  paid_invoices: number;
+  total_admin_profit: number;
+  potential_profit: number;
 }
 
 export const ClientLTVReport = () => {
-  const [sortBy, setSortBy] = useState<'total_billed' | 'total_paid' | 'outstanding_debt'>('total_billed');
+  const [sortBy, setSortBy] = useState<'total_admin_profit' | 'potential_profit' | 'total_invoices'>('total_admin_profit');
 
   const { data: clients = [], isLoading, error } = useQuery<ClientLTV[]>({
     queryKey: ["/api/admin/client-ltv"],
@@ -71,11 +69,12 @@ export const ClientLTVReport = () => {
 
   const totals = clients.reduce(
     (acc, client) => ({
-      total_billed: acc.total_billed + client.total_billed,
-      total_paid: acc.total_paid + client.total_paid,
-      outstanding_debt: acc.outstanding_debt + client.outstanding_debt,
+      total_admin_profit: acc.total_admin_profit + client.total_admin_profit,
+      potential_profit: acc.potential_profit + client.potential_profit,
+      total_invoices: acc.total_invoices + client.total_invoices,
+      paid_invoices: acc.paid_invoices + client.paid_invoices,
     }),
-    { total_billed: 0, total_paid: 0, outstanding_debt: 0 }
+    { total_admin_profit: 0, potential_profit: 0, total_invoices: 0, paid_invoices: 0 }
   );
 
   return (
@@ -88,21 +87,21 @@ export const ClientLTVReport = () => {
               LTV Драконов (Клиентов)
             </CardTitle>
             <CardDescription>
-              Пожизненная ценность каждого клиента
+              Чистая прибыль админа по каждому клиенту
             </CardDescription>
           </div>
           <div className="flex gap-4 text-sm flex-wrap">
             <div className="text-center">
-              <div className="text-muted-foreground">Всего выставлено</div>
-              <div className="text-lg font-semibold">{formatCurrency(totals.total_billed)}</div>
+              <div className="text-muted-foreground">Заработано</div>
+              <div className="text-lg font-semibold text-green-600">{formatCurrency(totals.total_admin_profit)}</div>
             </div>
             <div className="text-center">
-              <div className="text-muted-foreground">Оплачено</div>
-              <div className="text-lg font-semibold text-green-600">{formatCurrency(totals.total_paid)}</div>
+              <div className="text-muted-foreground">В ожидании</div>
+              <div className="text-lg font-semibold text-amber-600">{formatCurrency(totals.potential_profit)}</div>
             </div>
             <div className="text-center">
-              <div className="text-muted-foreground">Задолженность</div>
-              <div className="text-lg font-semibold text-red-600">{formatCurrency(totals.outstanding_debt)}</div>
+              <div className="text-muted-foreground">Счетов</div>
+              <div className="text-lg font-semibold">{totals.paid_invoices} / {totals.total_invoices}</div>
             </div>
           </div>
         </div>
@@ -116,72 +115,63 @@ export const ClientLTVReport = () => {
                 <TableHead>Клиент</TableHead>
                 <TableHead className="text-right">Счетов</TableHead>
                 <TableHead 
-                  className="text-right cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSortBy('total_billed')}
+                  className="text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
+                  onClick={() => setSortBy('total_admin_profit')}
+                  data-testid="sort-total-profit"
                 >
                   <div className="flex items-center justify-end gap-1">
-                    Всего выставлено
-                    {sortBy === 'total_billed' && <TrendingUp className="h-3 w-3" />}
+                    Доход (оплачено)
+                    {sortBy === 'total_admin_profit' && <TrendingUp className="h-3 w-3" />}
                   </div>
                 </TableHead>
                 <TableHead 
-                  className="text-right cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSortBy('total_paid')}
+                  className="text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
+                  onClick={() => setSortBy('potential_profit')}
+                  data-testid="sort-potential-profit"
                 >
                   <div className="flex items-center justify-end gap-1">
-                    Оплачено
-                    {sortBy === 'total_paid' && <TrendingUp className="h-3 w-3" />}
+                    В ожидании
+                    {sortBy === 'potential_profit' && <TrendingUp className="h-3 w-3" />}
                   </div>
                 </TableHead>
-                <TableHead 
-                  className="text-right cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSortBy('outstanding_debt')}
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    Задолженность
-                    {sortBy === 'outstanding_debt' && <TrendingUp className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead className="text-right">Оплата %</TableHead>
+                <TableHead className="text-right">Всего LTV</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedClients.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     Нет данных по клиентам
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedClients.map((client) => (
-                  <TableRow key={client.client_id}>
-                    <TableCell className="font-medium">{client.client_name}</TableCell>
-                    <TableCell className="text-right">{client.total_invoices}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(client.total_billed)}
-                    </TableCell>
-                    <TableCell className="text-right text-green-600 font-medium">
-                      {formatCurrency(client.total_paid)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {client.outstanding_debt > 0 ? (
-                        <span className="text-red-600 font-medium flex items-center justify-end gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          {formatCurrency(client.outstanding_debt)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge 
-                        variant={client.payment_rate >= 80 ? "default" : client.payment_rate >= 50 ? "secondary" : "destructive"}
-                      >
-                        {client.payment_rate.toFixed(0)}%
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
+                sortedClients.map((client) => {
+                  const totalLTV = client.total_admin_profit + client.potential_profit;
+                  return (
+                    <TableRow key={client.client_id} data-testid={`row-client-${client.client_id}`}>
+                      <TableCell className="font-medium">{client.client_name}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {client.paid_invoices} / {client.total_invoices}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-green-600">
+                        {formatCurrency(client.total_admin_profit)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {client.potential_profit > 0 ? (
+                          <span className="text-amber-600 font-medium flex items-center justify-end gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatCurrency(client.potential_profit)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatCurrency(totalLTV)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

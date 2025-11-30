@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { AddExpenseDialog } from "./assistant/AddExpenseDialog";
 import { EditExpenseDialog } from "./assistant/EditExpenseDialog";
 import { SignedActsSection } from "./SignedActsSection";
+import { PlannedExpensesManager } from "./admin/PlannedExpensesManager";
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, UserRole } from "@/lib/invoicePermissions";
 import { apiGet, apiPatch, apiDelete, apiPost } from "@/lib/api";
@@ -1138,6 +1139,14 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                   )}
                 </CardContent>
               </Card>
+            )}
+
+            {/* Planned Expenses Section - only for admin and partner schemes */}
+            {userRole === 'admin' && invoice?.scheme !== 'agency_30' && invoiceId && (
+              <PlannedExpensesManager
+                invoiceId={invoiceId}
+                onExpenseChanged={fetchInvoiceDetails}
+              />
             )}
 
             {/* Signed Acts Section */}

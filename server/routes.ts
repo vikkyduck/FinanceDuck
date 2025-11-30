@@ -1117,6 +1117,162 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // ====== PLANNED EXPENSES (only admin can manage) ======
+  
+  // Get all planned expenses for an invoice
+  app.get("/api/invoices/:id/planned-expenses", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const expenses = await storage.getInvoicePlannedExpenses(id);
+      res.json(expenses);
+    } catch (error) {
+      console.error("Get planned expenses error:", error);
+      res.status(500).json({ error: "Failed to get planned expenses" });
+    }
+  });
+
+  // Get planned expenses summary for an invoice
+  app.get("/api/invoices/:id/planned-expenses/summary", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const summary = await storage.getPlannedExpensesSummary(id);
+      res.json(summary);
+    } catch (error) {
+      console.error("Get planned expenses summary error:", error);
+      res.status(500).json({ error: "Failed to get planned expenses summary" });
+    }
+  });
+
+  // Create planned expense (admin only)
+  app.post("/api/invoices/:id/planned-expenses", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { description, expectedAmount, expectedDate, notes } = req.body;
+      
+      // Check invoice exists and has partner scheme (not agency_30)
+      const invoice = await storage.getInvoice(id);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      
+      const partnerSchemes = ['partner_10', 'partner_15', 'commission_based'];
+      if (!partnerSchemes.includes(invoice.scheme)) {
+        return res.status(400).json({ error: "Planned expenses are only available for partner schemes (partner_10, partner_15, commission_based)" });
+      }
+      
+      // Validate required fields
+      if (!description || !expectedAmount || !expectedDate) {
+        return res.status(400).json({ error: "Missing required fields: description, expectedAmount, expectedDate" });
+      }
+      
+      // Validate amount
+      const parsedAmount = parseFloat(String(expectedAmount));
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: "Invalid amount: must be a positive number" });
+      }
+      
+      // Validate date format
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedDate)) {
+        return res.status(400).json({ error: "Invalid date format: must be YYYY-MM-DD" });
+      }
+      
+      const expense = await storage.createPlannedExpense({
+        invoiceId: id,
+        description: String(description).trim(),
+        expectedAmount: parsedAmount.toString(),
+        expectedDate,
+        notes: notes ? String(notes).trim() : null,
+        createdBy: req.user!.token.id,
+      });
+      
+      res.status(201).json(expense);
+    } catch (error) {
+      console.error("Create planned expense error:", error);
+      res.status(500).json({ error: "Failed to create planned expense" });
+    }
+  });
+
+  // Update planned expense (admin only)
+  app.put("/api/planned-expenses/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { description, expectedAmount, expectedDate, status, notes } = req.body;
+      
+      // Check if expense exists
+      const existing = await storage.getPlannedExpense(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Planned expense not found" });
+      }
+      
+      const updates: any = {};
+      
+      if (description !== undefined) {
+        updates.description = String(description).trim();
+      }
+      
+      if (expectedAmount !== undefined) {
+        const parsedAmount = parseFloat(String(expectedAmount));
+        if (isNaN(parsedAmount) || parsedAmount <= 0) {
+          return res.status(400).json({ error: "Invalid amount: must be a positive number" });
+        }
+        updates.expectedAmount = parsedAmount.toString();
+      }
+      
+      if (expectedDate !== undefined) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedDate)) {
+          return res.status(400).json({ error: "Invalid date format: must be YYYY-MM-DD" });
+        }
+        updates.expectedDate = expectedDate;
+      }
+      
+      if (status !== undefined) {
+        if (!['pending', 'realized', 'cancelled'].includes(status)) {
+          return res.status(400).json({ error: "Invalid status: must be pending, realized, or cancelled" });
+        }
+        updates.status = status;
+      }
+      
+      if (notes !== undefined) {
+        updates.notes = notes ? String(notes).trim() : null;
+      }
+      
+      const updated = await storage.updatePlannedExpense(id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Update planned expense error:", error);
+      res.status(500).json({ error: "Failed to update planned expense" });
+    }
+  });
+
+  // Delete planned expense (admin only)
+  app.delete("/api/planned-expenses/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const existing = await storage.getPlannedExpense(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Planned expense not found" });
+      }
+      
+      await storage.deletePlannedExpense(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete planned expense error:", error);
+      res.status(500).json({ error: "Failed to delete planned expense" });
+    }
+  });
+
+  // Get all planned expenses (admin only - for reporting)
+  app.get("/api/planned-expenses", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const expenses = await storage.getAllPlannedExpenses();
+      res.json(expenses);
+    } catch (error) {
+      console.error("Get all planned expenses error:", error);
+      res.status(500).json({ error: "Failed to get planned expenses" });
+    }
+  });
+
   app.delete("/api/invoices/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
@@ -1370,6 +1526,90 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Get do-not-spend error:", error);
       res.status(500).json({ error: "Failed to get do-not-spend data" });
+    }
+  });
+
+  // Get planned expenses summary by partner (for partner schemes)
+  app.get("/api/planned-expenses-summary", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role;
+      const userPartnerId = req.user?.partnerId;
+      
+      // Get all planned expenses with invoice info
+      const allPlannedExpenses = await storage.getAllPlannedExpenses();
+      
+      // Get invoices with partner info to group by partner
+      const invoices = await storage.getInvoices('admin');
+      
+      // Build summary grouped by partner
+      const partnerSummary: Record<string, {
+        partnerId: string;
+        partnerName: string;
+        totalPending: number;
+        invoices: Array<{
+          invoiceId: string;
+          invoiceNumber: string;
+          clientName: string;
+          scheme: string;
+          pendingAmount: number;
+          plannedExpenses: Array<{
+            id: string;
+            description: string;
+            expectedAmount: number;
+            expectedDate: string;
+            status: string;
+          }>;
+        }>;
+      }> = {};
+      
+      // Only include partner schemes (not agency_30)
+      const partnerSchemeInvoices = invoices.filter(inv => 
+        inv.scheme !== 'agency_30' && inv.status !== 'cancelled'
+      );
+      
+      for (const invoice of partnerSchemeInvoices) {
+        if (!invoice.partnerId || !invoice.partner) continue;
+        
+        // Filter by partner if viewing as partner
+        if (role === 'partner' && invoice.partnerId !== userPartnerId) continue;
+        
+        const invoicePlannedExpenses = allPlannedExpenses.filter(pe => pe.invoiceId === invoice.id);
+        const pendingExpenses = invoicePlannedExpenses.filter(pe => pe.status === 'pending');
+        const pendingAmount = pendingExpenses.reduce((sum, pe) => sum + (parseFloat(pe.expectedAmount) || 0), 0);
+        
+        if (pendingAmount === 0 && pendingExpenses.length === 0) continue;
+        
+        if (!partnerSummary[invoice.partnerId]) {
+          partnerSummary[invoice.partnerId] = {
+            partnerId: invoice.partnerId,
+            partnerName: invoice.partner.name,
+            totalPending: 0,
+            invoices: [],
+          };
+        }
+        
+        partnerSummary[invoice.partnerId].totalPending += pendingAmount;
+        partnerSummary[invoice.partnerId].invoices.push({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber || `#${invoice.id.slice(0, 8)}`,
+          clientName: invoice.client?.name || 'Клиент',
+          scheme: invoice.scheme,
+          pendingAmount,
+          plannedExpenses: invoicePlannedExpenses.map(pe => ({
+            id: pe.id,
+            description: pe.description,
+            expectedAmount: parseFloat(pe.expectedAmount) || 0,
+            expectedDate: pe.expectedDate,
+            status: pe.status,
+          })),
+        });
+      }
+      
+      const summaries = Object.values(partnerSummary).filter(s => s.totalPending > 0 || s.invoices.length > 0);
+      res.json(summaries);
+    } catch (error) {
+      console.error("Get planned expenses summary error:", error);
+      res.status(500).json({ error: "Failed to get planned expenses summary" });
     }
   });
 

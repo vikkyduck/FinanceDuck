@@ -1,10 +1,10 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments, recurringInvoices,
-  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment,
-  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment,
-  AccessToken, UserSession, UserRole, InvoiceScheme, ActType
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments, recurringInvoices, invoicePlannedExpenses,
+  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment, InvoicePlannedExpense,
+  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment, InsertInvoicePlannedExpense,
+  AccessToken, UserSession, UserRole, InvoiceScheme, ActType, PlannedExpenseStatus
 } from "../shared/schema";
 import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
@@ -165,6 +165,14 @@ export interface IStorage {
   createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense>;
   updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null>;
   deleteInvoiceExpense(id: string): Promise<void>;
+  
+  getInvoicePlannedExpenses(invoiceId: string): Promise<InvoicePlannedExpense[]>;
+  getAllPlannedExpenses(): Promise<InvoicePlannedExpense[]>;
+  getPlannedExpense(id: string): Promise<InvoicePlannedExpense | null>;
+  createPlannedExpense(expense: InsertInvoicePlannedExpense): Promise<InvoicePlannedExpense>;
+  updatePlannedExpense(id: string, updates: Partial<InsertInvoicePlannedExpense>): Promise<InvoicePlannedExpense | null>;
+  deletePlannedExpense(id: string): Promise<void>;
+  getPlannedExpensesSummary(invoiceId: string): Promise<{ total: number; pending: number; realized: number; cancelled: number }>;
   
   deleteDocument(id: string): Promise<void>;
   
@@ -913,6 +921,76 @@ export class DatabaseStorage implements IStorage {
       // Recalculate with proper expense breakdown by payer
       await this.recalculateInvoiceExpenses(expense.invoiceId);
     }
+  }
+
+  async getInvoicePlannedExpenses(invoiceId: string): Promise<InvoicePlannedExpense[]> {
+    return db
+      .select()
+      .from(invoicePlannedExpenses)
+      .where(eq(invoicePlannedExpenses.invoiceId, invoiceId))
+      .orderBy(asc(invoicePlannedExpenses.expectedDate));
+  }
+
+  async getAllPlannedExpenses(): Promise<InvoicePlannedExpense[]> {
+    return db
+      .select()
+      .from(invoicePlannedExpenses)
+      .orderBy(desc(invoicePlannedExpenses.expectedDate));
+  }
+
+  async getPlannedExpense(id: string): Promise<InvoicePlannedExpense | null> {
+    const [expense] = await db
+      .select()
+      .from(invoicePlannedExpenses)
+      .where(eq(invoicePlannedExpenses.id, id))
+      .limit(1);
+    return expense || null;
+  }
+
+  async createPlannedExpense(expense: InsertInvoicePlannedExpense): Promise<InvoicePlannedExpense> {
+    const [created] = await db.insert(invoicePlannedExpenses).values(expense).returning();
+    return created;
+  }
+
+  async updatePlannedExpense(id: string, updates: Partial<InsertInvoicePlannedExpense>): Promise<InvoicePlannedExpense | null> {
+    const [updated] = await db
+      .update(invoicePlannedExpenses)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(invoicePlannedExpenses.id, id))
+      .returning();
+    return updated || null;
+  }
+
+  async deletePlannedExpense(id: string): Promise<void> {
+    await db.delete(invoicePlannedExpenses).where(eq(invoicePlannedExpenses.id, id));
+  }
+
+  async getPlannedExpensesSummary(invoiceId: string): Promise<{ total: number; pending: number; realized: number; cancelled: number }> {
+    const expenses = await this.getInvoicePlannedExpenses(invoiceId);
+    
+    let total = 0;
+    let pending = 0;
+    let realized = 0;
+    let cancelled = 0;
+    
+    for (const expense of expenses) {
+      const amount = parseFloat(expense.expectedAmount) || 0;
+      total += amount;
+      
+      switch (expense.status) {
+        case 'pending':
+          pending += amount;
+          break;
+        case 'realized':
+          realized += amount;
+          break;
+        case 'cancelled':
+          cancelled += amount;
+          break;
+      }
+    }
+    
+    return { total, pending, realized, cancelled };
   }
 
   async deleteInvoice(id: string): Promise<void> {

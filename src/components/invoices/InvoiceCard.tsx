@@ -240,11 +240,24 @@ export const InvoiceCard = ({
               );
             })()}
 
-            {/* Partner (for admin/assistant) */}
+            {/* Partner and Notes (for admin/assistant) */}
             {(role === 'admin' || role === 'assistant') && (
-              <div className="pt-2 border-t">
-                <p className="text-xs text-muted-foreground">Партнер</p>
-                <p className="font-medium text-sm">{invoice.partners?.name}</p>
+              <div className="pt-2 border-t space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Партнёр</p>
+                    <p className="font-medium text-sm">{invoice.partner_name || invoice.partners?.name || "—"}</p>
+                  </div>
+                  {invoice.notes && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Комментарий</p>
+                      <p className="font-medium text-sm text-muted-foreground line-clamp-2">{invoice.notes}</p>
+                    </div>
+                  )}
+                </div>
+                {!invoice.notes && (
+                  <div className="text-xs text-muted-foreground/60 italic">Комментарий отсутствует</div>
+                )}
               </div>
             )}
 

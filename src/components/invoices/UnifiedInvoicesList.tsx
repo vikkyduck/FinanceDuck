@@ -75,6 +75,12 @@ export const UnifiedInvoicesList = ({
     setStatusFilter,
     sortBy,
     setSortBy,
+    clientFilter,
+    setClientFilter,
+    partnerFilter,
+    setPartnerFilter,
+    clients,
+    partners,
     filteredInvoices,
     statusCounts,
   } = useInvoiceFilters(invoices, initialStatusFilter);
@@ -285,6 +291,14 @@ export const UnifiedInvoicesList = ({
           sortBy={sortBy}
           onSortChange={setSortBy}
           statusCounts={statusCounts}
+          clientFilter={clientFilter}
+          onClientChange={setClientFilter}
+          clients={clients}
+          partnerFilter={partnerFilter}
+          onPartnerChange={setPartnerFilter}
+          partners={partners}
+          showClientFilter={true}
+          showPartnerFilter={role === 'admin' || role === 'assistant'}
         />
 
         {filteredInvoices.length === 0 ? (
@@ -362,6 +376,14 @@ export const UnifiedInvoicesList = ({
           sortBy={sortBy}
           onSortChange={setSortBy}
           statusCounts={statusCounts}
+          clientFilter={clientFilter}
+          onClientChange={setClientFilter}
+          clients={clients}
+          partnerFilter={partnerFilter}
+          onPartnerChange={setPartnerFilter}
+          partners={partners}
+          showClientFilter={true}
+          showPartnerFilter={role === 'admin' || role === 'assistant'}
         />
 
         {filteredInvoices.length === 0 ? (
@@ -411,6 +433,9 @@ export const UnifiedInvoicesList = ({
                 )}
                 <TableHead className="font-semibold">Номер</TableHead>
                 <TableHead className="font-semibold">Клиент</TableHead>
+                {(role === 'admin' || role === 'assistant') && (
+                  <TableHead className="font-semibold">Партнёр</TableHead>
+                )}
                 <TableHead className="font-semibold">Сумма</TableHead>
                 {role === 'partner' && (
                   <>
@@ -466,6 +491,9 @@ export const UnifiedInvoicesList = ({
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{invoice.client_name}</TableCell>
+                    {(role === 'admin' || role === 'assistant') && (
+                      <TableCell className="text-muted-foreground">{invoice.partner_name || "—"}</TableCell>
+                    )}
                     <TableCell className="text-2xl font-semibold">{formatCurrency(invoice.client_bill || 0)}</TableCell>
                     {role === 'partner' && (
                       <>

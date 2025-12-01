@@ -1395,7 +1395,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  // Partner schemes "Do Not Spend" data - planned expenses + commission for partner_10, partner_15, etc.
+  // Partner schemes "Do Not Spend" data - planned expenses for partner_10, partner_15, etc.
   app.get("/api/do-not-spend/partner-schemes", authMiddleware, requireRole("admin", "assistant", "partner"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role;
@@ -1409,6 +1409,22 @@ export function registerRoutes(app: Express): void {
     } catch (error) {
       console.error("Get partner scheme do-not-spend error:", error);
       res.status(500).json({ error: "Failed to get partner scheme do-not-spend data" });
+    }
+  });
+
+  // Expected commission for unpaid invoices - partner's pending earnings
+  app.get("/api/expected-commission", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role;
+      const partnerId = req.user?.partnerId;
+      
+      const data = await storage.getExpectedCommission(
+        role === 'partner' ? partnerId : undefined
+      );
+      res.json(data);
+    } catch (error) {
+      console.error("Get expected commission error:", error);
+      res.status(500).json({ error: "Failed to get expected commission data" });
     }
   });
 

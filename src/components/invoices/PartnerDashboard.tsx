@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
 import { UnifiedInvoicesList } from "./UnifiedInvoicesList";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
+import { ExpectedCommissionDashboard } from "./admin/ExpectedCommissionDashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
@@ -552,6 +553,8 @@ export const PartnerDashboard = () => {
         )}
 
         <DoNotSpendDashboard />
+
+        <ExpectedCommissionDashboard />
 
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4 flex flex-row items-center justify-between gap-2">

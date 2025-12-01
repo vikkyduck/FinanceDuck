@@ -1734,6 +1734,116 @@ export class DatabaseStorage implements IStorage {
       .filter(s => s.totalDoNotSpend > 0)
       .sort((a, b) => b.totalDoNotSpend - a.totalDoNotSpend);
   }
+
+  async getExpectedCommission(partnerId?: string): Promise<{
+    partnerId: string;
+    partnerName: string;
+    totalExpectedCommission: number;
+    invoiceCount: number;
+    invoices: {
+      id: string;
+      number: string;
+      clientName: string | null;
+      clientBill: number;
+      commission: number;
+      scheme: string;
+      createdAt: Date | null;
+    }[];
+  }[]> {
+    // Get all UNPAID invoices (status = 'sent') for partner schemes
+    const conditions = [
+      inArray(invoices.scheme, ['commission_based', 'partner_10', 'partner_15', 'agency_30']),
+      eq(invoices.status, 'sent')
+    ];
+    
+    if (partnerId) {
+      conditions.push(eq(invoices.partnerId, partnerId));
+    }
+    
+    const unpaidInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        partnerName: partners.name,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(and(...conditions));
+
+    const partnerMap = new Map<string, {
+      partnerId: string;
+      partnerName: string;
+      totalExpectedCommission: number;
+      invoiceCount: number;
+      invoices: {
+        id: string;
+        number: string;
+        clientName: string | null;
+        clientBill: number;
+        commission: number;
+        scheme: string;
+        createdAt: Date | null;
+      }[];
+    }>();
+
+    for (const row of unpaidInvoices) {
+      if (!row.invoice.partnerId || !row.calculations) continue;
+
+      const pId = row.invoice.partnerId;
+      const partnerName = row.partnerName || 'Unknown';
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const scheme = row.invoice.scheme || 'commission_based';
+      
+      // Calculate commission based on scheme
+      let commission = 0;
+      if (scheme === 'agency_30') {
+        // For agency_30: partner gets partnerShareFromMargin (15% of client bill)
+        commission = parseFloat(row.calculations.partnerShareFromMargin || "0");
+      } else {
+        // For partner_10, partner_15, commission_based: use commissionAmount
+        commission = parseFloat(row.calculations.commissionAmount || "0");
+      }
+      
+      if (commission <= 0) continue;
+      
+      if (!partnerMap.has(pId)) {
+        partnerMap.set(pId, {
+          partnerId: pId,
+          partnerName,
+          totalExpectedCommission: 0,
+          invoiceCount: 0,
+          invoices: [],
+        });
+      }
+
+      const summary = partnerMap.get(pId)!;
+      summary.totalExpectedCommission += commission;
+      summary.invoiceCount += 1;
+      summary.invoices.push({
+        id: row.invoice.id,
+        number: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+        clientName: row.clientName,
+        clientBill,
+        commission,
+        scheme,
+        createdAt: row.invoice.createdAt,
+      });
+    }
+
+    return Array.from(partnerMap.values())
+      .map(s => ({
+        ...s,
+        invoices: s.invoices.sort((a, b) => {
+          if (!a.createdAt || !b.createdAt) return 0;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }),
+      }))
+      .filter(s => s.totalExpectedCommission > 0)
+      .sort((a, b) => b.totalExpectedCommission - a.totalExpectedCommission);
+  }
   
   async getAdminDashboardStats(year?: number, month?: number): Promise<{
     yearlySummary: {

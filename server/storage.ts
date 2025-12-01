@@ -1673,10 +1673,9 @@ export class DatabaseStorage implements IStorage {
       // Partner debt comes from stored calculation (FIXED value, doesn't change with expenses)
       const partnerDebt = parseFloat(row.calculations.partnerTransferDue || "0");
       
-      // "Do not spend" calculation - UNIFIED for all roles:
-      // remaining planned expenses + commission
-      // Assistant sees commission as 0, but logic is the same
-      const doNotSpend = remaining + commission;
+      // "Do not spend" calculation - only remaining planned expenses
+      // Commission is now tracked separately for "Expected Commission" dashboard
+      const doNotSpend = remaining;
       
       // Skip invoices without planned expenses (same logic for ALL roles)
       if (plannedExpenses <= 0) continue;

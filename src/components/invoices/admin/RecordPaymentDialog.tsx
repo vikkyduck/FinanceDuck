@@ -75,10 +75,10 @@ export const RecordPaymentDialog = ({
     const limitCheck = checkLimit();
     if (!limitCheck.allowed) return;
 
-    if (!amount || parseFloat(amount) <= 0) {
+    if (!amount || parseFloat(amount) === 0) {
       toast({
         title: "Ошибка",
-        description: "Введите сумму платежа",
+        description: "Введите сумму платежа (отрицательная = возврат партнёру)",
         variant: "destructive",
       });
       return;
@@ -97,9 +97,12 @@ export const RecordPaymentDialog = ({
         notes: notes || undefined,
       });
 
+      const isRefund = amountNum < 0;
       toast({
-        title: "Приход записан",
-        description: `Приход от ${partnerName} записан`,
+        title: isRefund ? "Возврат записан" : "Приход записан",
+        description: isRefund 
+          ? `Возврат ${formatCurrency(Math.abs(amountNum))} партнёру ${partnerName}`
+          : `Приход от ${partnerName} записан`,
       });
       setAmount("");
       setDate(new Date());
@@ -165,17 +168,25 @@ export const RecordPaymentDialog = ({
               id="amount"
               type="number"
               step="0.01"
-              min="0"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               required
               data-testid="input-payment-amount"
             />
-            {amount && parseFloat(amount) > remaining && remaining > 0 && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Отрицательная сумма = возврат денег партнёру
+            </p>
+            {amount && parseFloat(amount) > 0 && parseFloat(amount) > remaining && remaining > 0 && (
               <div className="flex items-center gap-2 mt-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-sm">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                 <span>Сумма превышает остаток долга на {formatCurrency(parseFloat(amount) - remaining)}</span>
+              </div>
+            )}
+            {amount && parseFloat(amount) < 0 && (
+              <div className="flex items-center gap-2 mt-2 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 text-sm">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <span>Возврат партнёру: {formatCurrency(Math.abs(parseFloat(amount)))}</span>
               </div>
             )}
           </div>

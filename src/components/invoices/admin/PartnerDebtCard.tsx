@@ -26,7 +26,8 @@ export const PartnerDebtCard = ({
   isExpanded = false,
   children
 }: PartnerDebtCardProps) => {
-  const isPaid = summary.remaining === 0;
+  const isPaid = summary.remaining <= 0;
+  const hasOverpayment = summary.remaining < 0;
   const paidPercentage = summary.total_to_transfer > 0 
     ? Math.round((summary.total_paid / summary.total_to_transfer) * 100) 
     : 0;
@@ -80,10 +81,15 @@ export const PartnerDebtCard = ({
           
           {isPaid ? (
             <Badge 
-              className="shrink-0 gap-1 bg-green-500/10 text-green-600 border-0"
+              className={cn(
+                "shrink-0 gap-1 border-0",
+                hasOverpayment 
+                  ? "bg-blue-500/10 text-blue-600" 
+                  : "bg-green-500/10 text-green-600"
+              )}
             >
               <Check className="h-3 w-3" />
-              Оплачено
+              {hasOverpayment ? "Переплата" : "Оплачено"}
             </Badge>
           ) : (
             <div className="flex items-center gap-2 shrink-0">
@@ -112,12 +118,16 @@ export const PartnerDebtCard = ({
           </div>
           
           <div className="flex justify-between items-center text-[15px]">
-            <span className="text-muted-foreground">Остаток</span>
+            <span className="text-muted-foreground">
+              {hasOverpayment ? "Переплата" : "Остаток"}
+            </span>
             <span 
               className="font-semibold" 
-              style={{ color: summary.remaining > 0 ? "#FF3B30" : "#34C759" }}
+              style={{ color: summary.remaining > 0 ? "#FF3B30" : hasOverpayment ? "#007AFF" : "#34C759" }}
             >
-              {formatCurrency(summary.remaining)}
+              {hasOverpayment 
+                ? formatCurrency(Math.abs(summary.remaining))
+                : formatCurrency(summary.remaining)}
             </span>
           </div>
 

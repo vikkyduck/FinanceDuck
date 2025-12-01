@@ -19,6 +19,7 @@ import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { DoNotSpendDashboard } from "./admin/DoNotSpendDashboard";
+import { ExpectedAdminProfitDashboard } from "./admin/ExpectedAdminProfitDashboard";
 import { AdminDashboardMetrics } from "./admin/AdminDashboardMetrics";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
@@ -152,6 +153,7 @@ export const AdminDashboard = () => {
         <TabsContent value="overview" className="space-y-6">
           <div className="space-y-6">
             <DoNotSpendDashboard />
+            <ExpectedAdminProfitDashboard />
           </div>
         </TabsContent>
 

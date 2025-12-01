@@ -1844,6 +1844,102 @@ export class DatabaseStorage implements IStorage {
       .filter(s => s.totalExpectedCommission > 0)
       .sort((a, b) => b.totalExpectedCommission - a.totalExpectedCommission);
   }
+
+  async getExpectedAdminProfit(): Promise<{
+    partnerId: string;
+    partnerName: string;
+    totalExpectedProfit: number;
+    invoiceCount: number;
+    invoices: {
+      id: string;
+      number: string;
+      clientName: string | null;
+      clientBill: number;
+      netProfitAdmin: number;
+      scheme: string;
+      createdAt: Date | null;
+    }[];
+  }[]> {
+    // Get all UNPAID invoices (status = 'sent' or 'draft') with calculations
+    const conditions = [
+      inArray(invoices.status, ['sent', 'draft'])
+    ];
+    
+    const unpaidInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        partnerName: partners.name,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(partners, eq(invoices.partnerId, partners.id))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(and(...conditions));
+
+    const partnerMap = new Map<string, {
+      partnerId: string;
+      partnerName: string;
+      totalExpectedProfit: number;
+      invoiceCount: number;
+      invoices: {
+        id: string;
+        number: string;
+        clientName: string | null;
+        clientBill: number;
+        netProfitAdmin: number;
+        scheme: string;
+        createdAt: Date | null;
+      }[];
+    }>();
+
+    for (const row of unpaidInvoices) {
+      if (!row.calculations) continue;
+
+      const pId = row.invoice.partnerId || 'no-partner';
+      const partnerName = row.partnerName || 'Без партнёра';
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const netProfitAdmin = parseFloat(row.calculations.netProfitAdmin || "0");
+      const scheme = row.invoice.scheme || 'commission_based';
+      
+      if (netProfitAdmin <= 0) continue;
+      
+      if (!partnerMap.has(pId)) {
+        partnerMap.set(pId, {
+          partnerId: pId,
+          partnerName,
+          totalExpectedProfit: 0,
+          invoiceCount: 0,
+          invoices: [],
+        });
+      }
+
+      const summary = partnerMap.get(pId)!;
+      summary.totalExpectedProfit += netProfitAdmin;
+      summary.invoiceCount += 1;
+      summary.invoices.push({
+        id: row.invoice.id,
+        number: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+        clientName: row.clientName,
+        clientBill,
+        netProfitAdmin,
+        scheme,
+        createdAt: row.invoice.createdAt,
+      });
+    }
+
+    return Array.from(partnerMap.values())
+      .map(s => ({
+        ...s,
+        invoices: s.invoices.sort((a, b) => {
+          if (!a.createdAt || !b.createdAt) return 0;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        }),
+      }))
+      .filter(s => s.totalExpectedProfit > 0)
+      .sort((a, b) => b.totalExpectedProfit - a.totalExpectedProfit);
+  }
   
   async getAdminDashboardStats(year?: number, month?: number): Promise<{
     yearlySummary: {

@@ -1428,6 +1428,17 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Expected admin profit for unpaid invoices - admin's pending earnings by partner
+  app.get("/api/expected-admin-profit", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const data = await storage.getExpectedAdminProfit();
+      res.json(data);
+    } catch (error) {
+      console.error("Get expected admin profit error:", error);
+      res.status(500).json({ error: "Failed to get expected admin profit data" });
+    }
+  });
+
   /**
    * UNIFIED FINANCIAL SUMMARY ENDPOINT
    * Single source of truth for all financial data across all roles.

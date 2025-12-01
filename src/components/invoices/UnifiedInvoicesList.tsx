@@ -297,8 +297,8 @@ export const UnifiedInvoicesList = ({
           partnerFilter={partnerFilter}
           onPartnerChange={setPartnerFilter}
           partners={partners}
-          showClientFilter={true}
-          showPartnerFilter={role === 'admin' || role === 'assistant'}
+          showClientFilter={!clientId}
+          showPartnerFilter={(role === 'admin' || role === 'assistant') && !partnerId}
         />
 
         {filteredInvoices.length === 0 ? (
@@ -382,8 +382,8 @@ export const UnifiedInvoicesList = ({
           partnerFilter={partnerFilter}
           onPartnerChange={setPartnerFilter}
           partners={partners}
-          showClientFilter={true}
-          showPartnerFilter={role === 'admin' || role === 'assistant'}
+          showClientFilter={!clientId}
+          showPartnerFilter={(role === 'admin' || role === 'assistant') && !partnerId}
         />
 
         {filteredInvoices.length === 0 ? (

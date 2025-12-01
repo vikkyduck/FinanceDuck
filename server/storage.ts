@@ -3870,6 +3870,20 @@ export class DatabaseStorage implements IStorage {
       { clientBill: recurring.amount }
     );
 
+    // Create default expense if specified in recurring template
+    const defaultExpenses = Number(recurring.defaultExpenses) || 0;
+    if (defaultExpenses > 0 && invoice?.id) {
+      await this.createInvoiceExpense({
+        invoiceId: invoice.id,
+        description: 'Расходы по умолчанию',
+        amount: String(defaultExpenses),
+        paidByAdmin: true,
+        createdBy: recurring.createdBy,
+      });
+      // Recalculate invoice after adding expense
+      await this.recalculateInvoiceExpenses(invoice.id);
+    }
+
     const newNextDate = this.calculateNextInvoiceDate(recurring.nextInvoiceDate, recurring.frequency);
     
     const shouldDeactivate = recurring.endDate && new Date(newNextDate) > new Date(recurring.endDate);
@@ -3915,6 +3929,8 @@ export class DatabaseStorage implements IStorage {
     
     const dayOfMonth = parseInt(recurring.dayOfMonth) || 1;
     currentDate.setDate(dayOfMonth);
+    
+    const defaultExpenses = Number(recurring.defaultExpenses) || 0;
 
     while (currentDate <= today) {
       if (recurring.endDate && currentDate > new Date(recurring.endDate)) {
@@ -3941,6 +3957,19 @@ export class DatabaseStorage implements IStorage {
         },
         { clientBill: recurring.amount }
       );
+
+      // Create default expense if specified in recurring template
+      if (defaultExpenses > 0 && invoice?.id) {
+        await this.createInvoiceExpense({
+          invoiceId: invoice.id,
+          description: 'Расходы по умолчанию',
+          amount: String(defaultExpenses),
+          paidByAdmin: true,
+          createdBy: recurring.createdBy,
+        });
+        // Recalculate invoice after adding expense
+        await this.recalculateInvoiceExpenses(invoice.id);
+      }
 
       createdInvoices.push(invoice);
 

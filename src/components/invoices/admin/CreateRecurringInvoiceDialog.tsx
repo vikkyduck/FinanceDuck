@@ -39,6 +39,7 @@ export function CreateRecurringInvoiceDialog({
     scheme: "agency_30" as "agency_30" | "commission_based" | "partner_10" | "partner_15",
     partnerCommissionRate: "",
     amount: "",
+    defaultExpenses: "",
     description: "",
     frequency: "monthly",
     dayOfMonth: "1",
@@ -101,6 +102,7 @@ export function CreateRecurringInvoiceDialog({
           ? parseFloat(formData.partnerCommissionRate) 
           : null,
         amount: parseFloat(formData.amount) || 0,
+        defaultExpenses: formData.defaultExpenses ? parseFloat(formData.defaultExpenses) : 0,
         description: formData.description || null,
         frequency: formData.frequency,
         dayOfMonth: parseInt(formData.dayOfMonth),
@@ -120,6 +122,7 @@ export function CreateRecurringInvoiceDialog({
         scheme: "agency_30",
         partnerCommissionRate: "",
         amount: "",
+        defaultExpenses: "",
         description: "",
         frequency: "monthly",
         dayOfMonth: "1",
@@ -188,6 +191,22 @@ export function CreateRecurringInvoiceDialog({
               required
               data-testid="input-amount"
             />
+          </div>
+
+          <div>
+            <Label>Расходы по умолчанию</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              value={formData.defaultExpenses}
+              onChange={(e) => setFormData({ ...formData, defaultExpenses: e.target.value })}
+              data-testid="input-default-expenses"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Расходы автоматически вычитаются из чистой прибыли
+            </p>
           </div>
 
           <div>

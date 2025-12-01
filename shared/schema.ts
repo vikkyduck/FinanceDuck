@@ -183,6 +183,7 @@ export const recurringInvoices = pgTable("recurring_invoices", {
   scheme: invoiceSchemeEnum("scheme").notNull(),
   partnerCommissionRate: numeric("partner_commission_rate", { precision: 5, scale: 2 }),
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  defaultExpenses: numeric("default_expenses", { precision: 15, scale: 2 }).default("0"),
   description: text("description"),
   frequency: frequencyEnum("frequency").default('monthly').notNull(),
   dayOfMonth: numeric("day_of_month", { precision: 2, scale: 0 }).default("1").notNull(),

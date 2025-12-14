@@ -3,6 +3,96 @@ import { storage } from "./storage";
 import { AccessToken, UserRole } from "../shared/schema";
 import { backupService } from "./backupService";
 
+// Login rate limiter - tracks failed attempts by access code
+interface LoginAttempt {
+  count: number;
+  lastAttempt: number;
+  lockedUntil?: number;
+}
+
+const loginAttempts = new Map<string, LoginAttempt>();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const ATTEMPT_WINDOW_MS = 60 * 60 * 1000; // 1 hour window for attempts
+
+function getLoginAttemptStatus(code: string): { isLocked: boolean; attemptsRemaining: number; lockedUntil?: number } {
+  const upperCode = code.toUpperCase();
+  const attempt = loginAttempts.get(upperCode);
+  const now = Date.now();
+  
+  if (!attempt) {
+    return { isLocked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
+  }
+  
+  // Check if locked
+  if (attempt.lockedUntil && now < attempt.lockedUntil) {
+    return { isLocked: true, attemptsRemaining: 0, lockedUntil: attempt.lockedUntil };
+  }
+  
+  // Check if attempt window expired
+  if (now - attempt.lastAttempt > ATTEMPT_WINDOW_MS) {
+    loginAttempts.delete(upperCode);
+    return { isLocked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
+  }
+  
+  // Check if lockout expired
+  if (attempt.lockedUntil && now >= attempt.lockedUntil) {
+    loginAttempts.delete(upperCode);
+    return { isLocked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
+  }
+  
+  return { isLocked: false, attemptsRemaining: Math.max(0, MAX_LOGIN_ATTEMPTS - attempt.count) };
+}
+
+function recordFailedLogin(code: string): { attemptsRemaining: number; lockedUntil?: number } {
+  const upperCode = code.toUpperCase();
+  const now = Date.now();
+  let attempt = loginAttempts.get(upperCode);
+  
+  if (!attempt || now - attempt.lastAttempt > ATTEMPT_WINDOW_MS) {
+    attempt = { count: 1, lastAttempt: now };
+  } else {
+    attempt.count++;
+    attempt.lastAttempt = now;
+  }
+  
+  // Lock if exceeded max attempts
+  if (attempt.count >= MAX_LOGIN_ATTEMPTS) {
+    attempt.lockedUntil = now + LOCKOUT_DURATION_MS;
+  }
+  
+  loginAttempts.set(upperCode, attempt);
+  
+  return {
+    attemptsRemaining: Math.max(0, MAX_LOGIN_ATTEMPTS - attempt.count),
+    lockedUntil: attempt.lockedUntil
+  };
+}
+
+function clearLoginAttempts(code: string): boolean {
+  const upperCode = code.toUpperCase();
+  return loginAttempts.delete(upperCode);
+}
+
+function clearAllLoginAttempts(): number {
+  const count = loginAttempts.size;
+  loginAttempts.clear();
+  return count;
+}
+
+function getLockedCodes(): { code: string; lockedUntil: number; attempts: number }[] {
+  const now = Date.now();
+  const locked: { code: string; lockedUntil: number; attempts: number }[] = [];
+  
+  loginAttempts.forEach((attempt, code) => {
+    if (attempt.lockedUntil && now < attempt.lockedUntil) {
+      locked.push({ code, lockedUntil: attempt.lockedUntil, attempts: attempt.count });
+    }
+  });
+  
+  return locked;
+}
+
 export function registerHealthCheck(app: Express) {
   app.get("/", (req: Request, res: Response, next: NextFunction) => {
     const userAgent = req.headers['user-agent'] || '';
@@ -244,6 +334,48 @@ function requireRole(...roles: UserRole[]) {
 }
 
 export function registerRoutes(app: Express): void {
+  // Admin endpoint to unlock a locked access code
+  app.post("/api/admin/unlock-user", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { code } = req.body;
+      
+      if (!code) {
+        return res.status(400).json({ error: "Code is required" });
+      }
+      
+      const cleared = clearLoginAttempts(code);
+      res.json({ 
+        success: true, 
+        message: cleared ? `Unlocked code: ${code.toUpperCase()}` : `Code ${code.toUpperCase()} was not locked`
+      });
+    } catch (error) {
+      console.error("Unlock user error:", error);
+      res.status(500).json({ error: "Failed to unlock user" });
+    }
+  });
+  
+  // Admin endpoint to view all locked codes
+  app.get("/api/admin/locked-codes", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const locked = getLockedCodes();
+      res.json({ locked, count: locked.length });
+    } catch (error) {
+      console.error("Get locked codes error:", error);
+      res.status(500).json({ error: "Failed to get locked codes" });
+    }
+  });
+  
+  // Admin endpoint to clear all login attempts
+  app.post("/api/admin/clear-all-lockouts", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const count = clearAllLoginAttempts();
+      res.json({ success: true, message: `Cleared ${count} login attempt records` });
+    } catch (error) {
+      console.error("Clear all lockouts error:", error);
+      res.status(500).json({ error: "Failed to clear lockouts" });
+    }
+  });
+
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { code } = req.body;
@@ -256,15 +388,36 @@ export function registerRoutes(app: Express): void {
         });
       }
       
+      // Check if code is locked due to too many failed attempts
+      const attemptStatus = getLoginAttemptStatus(code);
+      if (attemptStatus.isLocked) {
+        const lockedUntil = new Date(attemptStatus.lockedUntil!).toISOString();
+        return res.status(429).json({
+          success: false,
+          error: "account_locked",
+          message: "Слишком много неудачных попыток. Попробуйте позже.",
+          locked_until: lockedUntil,
+          attempts_remaining: 0
+        });
+      }
+      
       const token = await storage.verifyAccessCode(code);
       
       if (!token) {
+        // Record failed attempt
+        const result = recordFailedLogin(code);
+        
         return res.status(401).json({ 
           success: false,
           error: "invalid_code",
-          message: "Неверный код доступа"
+          message: "Неверный код доступа",
+          attempts_remaining: result.attemptsRemaining,
+          locked_until: result.lockedUntil ? new Date(result.lockedUntil).toISOString() : undefined
         });
       }
+      
+      // Clear any failed attempts on successful login
+      clearLoginAttempts(code);
       
       const session = await storage.createSession(
         token.id,

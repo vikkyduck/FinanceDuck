@@ -211,7 +211,7 @@ export interface IStorage {
   // Assistant bonus payments
   getAssistantBonusPayments(): Promise<AssistantBonusPayment[]>;
   createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment>;
-  getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number }>;
+  getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number; totalEarned: number; totalPaid: number }>;
   markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
   
   // Signed acts methods
@@ -3622,62 +3622,42 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number }> {
-    const unpaidInvoices = await db.select({
-      invoiceId: invoiceCalculations.invoiceId,
-    })
-    .from(invoiceCalculations)
-    .innerJoin(invoices, eq(invoices.id, invoiceCalculations.invoiceId))
-    .where(
-      and(
-        eq(invoiceCalculations.assistantBonusPaid, false),
-        eq(invoices.status, 'paid')
-      )
-    );
-
-    const invoiceIds = unpaidInvoices.map(row => row.invoiceId);
+  async getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number; totalEarned: number; totalPaid: number }> {
+    // Get all acts statistics (excluding hidden invoices)
+    const stats = await this.getActsStatistics(true);
+    const executorActs = stats.executorActs;
+    const companyActs = stats.companyActs;
+    const totalEarned = (executorActs * 1000) + (companyActs * 2000);
     
-    if (invoiceIds.length === 0) {
-      return { total: 0, invoiceCount: 0, invoiceIds: [], executorActs: 0, companyActs: 0 };
-    }
-
-    const executorResult = await db.select({ count: sql<number>`count(*)` })
-      .from(signedActs)
-      .where(and(
-        eq(signedActs.actType, 'executor'),
-        inArray(signedActs.invoiceId, invoiceIds)
-      ));
-    const executorActs = Number(executorResult[0]?.count || 0);
-
-    const companyResult = await db.select({ count: sql<number>`count(*)` })
-      .from(signedActs)
-      .where(and(
-        eq(signedActs.actType, 'company'),
-        inArray(signedActs.invoiceId, invoiceIds)
-      ));
-    const companyActs = Number(companyResult[0]?.count || 0);
-
-    const total = (executorActs * 1000) + (companyActs * 2000);
+    // Get total already paid from payment history
+    const paymentsResult = await db.select({ 
+      totalPaid: sql<string>`COALESCE(SUM(amount::numeric), 0)` 
+    }).from(assistantBonusPayments);
+    const totalPaid = parseFloat(paymentsResult[0]?.totalPaid || '0');
     
+    // Unpaid = earned - paid
+    const unpaidTotal = Math.max(0, totalEarned - totalPaid);
+    
+    // Get invoices with acts for reference
     const invoicesWithActs = await db.selectDistinct({ invoiceId: signedActs.invoiceId })
       .from(signedActs)
-      .where(inArray(signedActs.invoiceId, invoiceIds));
+      .innerJoin(invoices, eq(invoices.id, signedActs.invoiceId))
+      .where(eq(invoices.status, 'paid'));
 
     return { 
-      total, 
+      total: unpaidTotal, 
       invoiceCount: invoicesWithActs.length, 
       invoiceIds: invoicesWithActs.map(r => r.invoiceId),
       executorActs,
-      companyActs
+      companyActs,
+      totalEarned,
+      totalPaid
     };
   }
 
   async markBonusesAsPaid(invoiceIds: string[]): Promise<void> {
-    if (invoiceIds.length === 0) return;
-    
-    await db.update(invoiceCalculations)
-      .set({ assistantBonusPaid: true, updatedAt: new Date() })
-      .where(inArray(invoiceCalculations.invoiceId, invoiceIds));
+    // No longer needed - payments are tracked via assistant_bonus_payments table
+    // Kept for backwards compatibility but does nothing
   }
 
   async getDraftsStats(): Promise<DraftsStats> {

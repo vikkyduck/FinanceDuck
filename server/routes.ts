@@ -1255,13 +1255,23 @@ export function registerRoutes(app: Express): void {
       
       // Log action
       if (role === "assistant" || role === "admin") {
+        const client = invoiceData.clientId ? await storage.getClient(invoiceData.clientId) : null;
+        const partner = invoiceData.partnerId ? await storage.getPartner(invoiceData.partnerId) : null;
+        const invoiceNumber = fullInvoice?.invoiceNumber || invoice.id;
+        
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_invoice",
           entityType: "invoice",
           entityId: invoice.id,
-          description: `Создан счёт: ${invoiceData.description || invoice.id}`,
-          details: JSON.stringify({ clientId: invoiceData.clientId, partnerId: invoiceData.partnerId, amount: invoiceData.clientBill }),
+          description: `Создан счёт: ${invoiceNumber}`,
+          details: JSON.stringify({ 
+            invoiceNumber,
+            clientName: client?.name,
+            partnerName: partner?.name,
+            clientBill: invoiceData.clientBill,
+            status: invoice.status
+          }),
           ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
           userAgent: req.headers['user-agent'] || null,
         });
@@ -1296,13 +1306,21 @@ export function registerRoutes(app: Express): void {
       
       // Log action
       if (role === "assistant" || role === "admin") {
+        const client = fullInvoice?.clientId ? await storage.getClient(fullInvoice.clientId) : null;
+        const invoiceNumber = fullInvoice?.invoiceNumber || id;
+        
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_invoice",
           entityType: "invoice",
           entityId: id,
-          description: `Обновлён счёт: ${invoice.description || id}`,
-          details: JSON.stringify(invoiceData),
+          description: `Обновлён счёт: ${client?.name || invoiceNumber}`,
+          details: JSON.stringify({ 
+            invoiceNumber,
+            clientName: client?.name,
+            status: fullInvoice?.status,
+            ...invoiceData
+          }),
           ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
           userAgent: req.headers['user-agent'] || null,
         });
@@ -1417,6 +1435,35 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/invoices/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
+      
+      // Get invoice info before deleting for logging
+      const invoice = await storage.getInvoice(id);
+      
+      // Log action before delete
+      if (role === "assistant" || role === "admin") {
+        const invoiceNumber = invoice?.invoiceNumber || id;
+        const clientName = invoice?.clientId ? (await storage.getClient(invoice.clientId))?.name : null;
+        const partnerName = invoice?.partnerId ? (await storage.getPartner(invoice.partnerId))?.name : null;
+        
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "delete_invoice",
+          entityType: "invoice",
+          entityId: id,
+          description: `Удалён счёт: ${invoiceNumber}`,
+          details: JSON.stringify({ 
+            invoiceNumber, 
+            clientName, 
+            partnerName,
+            clientBill: invoice?.clientBill,
+            status: invoice?.status
+          }),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       await storage.deleteInvoice(id);
       res.json({ success: true });
     } catch (error) {

@@ -67,9 +67,9 @@ export const WorkingCapitalManager = () => {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Working Capital</CardTitle>
-          <CardDescription>Загрузка...</CardDescription>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Working Capital</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Загрузка...</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -78,15 +78,15 @@ export const WorkingCapitalManager = () => {
   if (error || !balance) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-muted-foreground" />
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground shrink-0" />
             Working Capital
           </CardTitle>
-          <CardDescription>Данные недоступны</CardDescription>
+          <CardDescription className="text-xs sm:text-sm">Данные недоступны</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Функция временно недоступна. Обратитесь к администратору.
           </p>
         </CardContent>
@@ -100,13 +100,13 @@ export const WorkingCapitalManager = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-2">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg flex-wrap">
               Working Capital
               {isLowBalance && (
-                <span className="text-sm font-normal text-destructive">(Низкий баланс!)</span>
+                <span className="text-xs sm:text-sm font-normal text-destructive">(Низкий баланс!)</span>
               )}
             </CardTitle>
             <CardDescription>
@@ -127,10 +127,10 @@ export const WorkingCapitalManager = () => {
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
         {!isEditing ? (
-          <div className="space-y-4">
-            <div className={`text-4xl font-bold ${isLowBalance ? 'text-destructive' : 'text-primary'}`}>
+          <div className="space-y-3 sm:space-y-4">
+            <div className={`text-2xl sm:text-4xl font-bold ${isLowBalance ? 'text-destructive' : 'text-primary'}`}>
               {formatCurrency(currentAmount)}
             </div>
             {balance.notes && (

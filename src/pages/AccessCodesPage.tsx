@@ -42,28 +42,30 @@ const AccessCodesPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <Settings className="h-8 w-8" />
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Settings className="h-5 w-5 sm:h-6 sm:w-6 md:h-8 md:w-8" />
             Система
           </h1>
-          <p className="text-muted-foreground">Управление доступом и резервными копиями</p>
+          <p className="text-sm sm:text-base text-muted-foreground">Управление доступом и резервными копиями</p>
         </div>
 
-        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="access-codes" className="gap-2" data-testid="tab-access-codes">
-              <Key className="h-4 w-4" />
-              Коды доступа
+        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-4 sm:space-y-6">
+          <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1 p-1">
+            <TabsTrigger value="access-codes" className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none" data-testid="tab-access-codes">
+              <Key className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">Коды</span>
+              <span className="xs:hidden">Коды</span>
             </TabsTrigger>
-            <TabsTrigger value="backups" className="gap-2" data-testid="tab-backups">
-              <Database className="h-4 w-4" />
-              Бэкапы
+            <TabsTrigger value="backups" className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none" data-testid="tab-backups">
+              <Database className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>Бэкапы</span>
             </TabsTrigger>
-            <TabsTrigger value="logs" className="gap-2" data-testid="tab-logs">
-              <History className="h-4 w-4" />
-              Журнал действий
+            <TabsTrigger value="logs" className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none" data-testid="tab-logs">
+              <History className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Журнал</span>
+              <span className="sm:hidden">Лог</span>
             </TabsTrigger>
           </TabsList>
 

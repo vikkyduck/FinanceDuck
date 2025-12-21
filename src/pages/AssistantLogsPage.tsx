@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { apiGet } from "@/lib/api";
+import type { AssistantActionLog } from "@shared/schema";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -20,17 +22,7 @@ import {
   Globe
 } from "lucide-react";
 
-interface AssistantActionLog {
-  id: string;
-  accessTokenId: string | null;
-  actionType: string;
-  entityType: string | null;
-  entityId: string | null;
-  description: string;
-  details: string | null;
-  ipAddress: string | null;
-  userAgent: string | null;
-  createdAt: string;
+interface AssistantActionLogWithDetails extends AssistantActionLog {
   tokenCode?: string;
 }
 
@@ -92,7 +84,7 @@ function getActionIcon(actionType: string) {
   return Clock;
 }
 
-function ActionLogCard({ log }: { log: AssistantActionLog }) {
+function ActionLogCard({ log }: { log: AssistantActionLogWithDetails }) {
   const Icon = getActionIcon(log.actionType);
   const formattedDate = format(new Date(log.createdAt), "d MMM yyyy, HH:mm:ss", { locale: ru });
   
@@ -176,17 +168,11 @@ export default function AssistantLogsPage() {
   const [page, setPage] = useState(0);
   const pageSize = 50;
 
-  const { data, isLoading, refetch, isFetching } = useQuery<{ logs: AssistantActionLog[]; total: number }>({
+  const { data, isLoading, refetch, isFetching } = useQuery<{ logs: AssistantActionLogWithDetails[]; total: number }>({
     queryKey: ["/api/assistant-logs", page, pageSize],
-    queryFn: async () => {
-      const response = await fetch(`/api/assistant-logs?limit=${pageSize}&offset=${page * pageSize}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch logs");
-      }
-      return response.json();
-    },
+    queryFn: () => apiGet<{ logs: AssistantActionLogWithDetails[]; total: number }>(
+      `/assistant-logs?limit=${pageSize}&offset=${page * pageSize}`
+    ),
     staleTime: 30000,
   });
 

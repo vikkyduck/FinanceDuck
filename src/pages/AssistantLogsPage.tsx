@@ -108,6 +108,8 @@ function formatChangedFields(details: string | null): { field: string; value: st
     const fieldLabels: Record<string, string> = {
       clientName: "Клиент",
       partnerName: "Партнёр",
+      invoiceNumber: "Номер счёта",
+      invoiceStatus: "Статус",
       amount: "Сумма",
       clientBill: "Счёт клиента",
       description: "Описание",
@@ -120,6 +122,13 @@ function formatChangedFields(details: string | null): { field: string; value: st
       notes: "Заметки",
       actualPaymentDate: "Факт. дата оплаты",
       hideFromAssistant: "Скрыто от ассистента",
+    };
+    
+    const statusLabels: Record<string, string> = {
+      draft: "Черновик",
+      sent: "Отправлен",
+      paid: "Оплачен",
+      cancelled: "Отменён",
     };
     
     const hiddenFields = [
@@ -139,6 +148,8 @@ function formatChangedFields(details: string | null): { field: string; value: st
         displayValue = value ? "Да" : "Нет";
       } else if (typeof value === "object") {
         continue;
+      } else if (key === "status" || key === "invoiceStatus") {
+        displayValue = statusLabels[String(value)] || String(value);
       } else {
         displayValue = String(value);
       }

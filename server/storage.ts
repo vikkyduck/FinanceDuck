@@ -4404,9 +4404,10 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
 
-    // Collect all client and partner IDs from log details
+    // Collect all client, partner, and invoice IDs from log details
     const clientIds = new Set<string>();
     const partnerIds = new Set<string>();
+    const invoiceIds = new Set<string>();
     
     for (const row of logsData) {
       if (row.log.details) {
@@ -4414,13 +4415,19 @@ export class DatabaseStorage implements IStorage {
           const parsed = JSON.parse(row.log.details);
           if (parsed.clientId) clientIds.add(parsed.clientId);
           if (parsed.partnerId) partnerIds.add(parsed.partnerId);
+          if (parsed.invoiceId) invoiceIds.add(parsed.invoiceId);
         } catch {}
+      }
+      // Also check entityId for invoice actions
+      if (row.log.entityId && row.log.actionType.includes('invoice')) {
+        invoiceIds.add(row.log.entityId);
       }
     }
     
-    // Fetch client and partner names
+    // Fetch client, partner, and invoice data
     const clientMap = new Map<string, string>();
     const partnerMap = new Map<string, string>();
+    const invoiceMap = new Map<string, { number: string; status: string }>();
     
     if (clientIds.size > 0) {
       const clientsData = await db.select({ id: clients.id, name: clients.name })
@@ -4440,9 +4447,26 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Enrich logs with names
+    if (invoiceIds.size > 0) {
+      const invoicesData = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, status: invoices.status })
+        .from(invoices)
+        .where(inArray(invoices.id, Array.from(invoiceIds)));
+      for (const inv of invoicesData) {
+        invoiceMap.set(inv.id, { number: inv.invoiceNumber || inv.id, status: inv.status });
+      }
+    }
+    
+    // Enrich logs with names and invoice numbers
     const logs: AssistantActionLogWithDetails[] = logsData.map(row => {
       let enrichedDetails = row.log.details;
+      let enrichedDescription = row.log.description;
+      
+      // Replace invoice UUID in description with invoice number
+      if (row.log.entityId && invoiceMap.has(row.log.entityId)) {
+        const invData = invoiceMap.get(row.log.entityId)!;
+        enrichedDescription = enrichedDescription.replace(row.log.entityId, invData.number);
+      }
+      
       if (row.log.details) {
         try {
           const parsed = JSON.parse(row.log.details);
@@ -4452,12 +4476,22 @@ export class DatabaseStorage implements IStorage {
           if (parsed.partnerId && partnerMap.has(parsed.partnerId)) {
             parsed.partnerName = partnerMap.get(parsed.partnerId);
           }
+          if (parsed.invoiceId && invoiceMap.has(parsed.invoiceId)) {
+            const invData = invoiceMap.get(parsed.invoiceId)!;
+            parsed.invoiceNumber = invData.number;
+            parsed.invoiceStatus = invData.status;
+          }
+          // Add status from entityId invoice if action is about invoice
+          if (row.log.entityId && invoiceMap.has(row.log.entityId) && !parsed.status) {
+            parsed.invoiceStatus = invoiceMap.get(row.log.entityId)!.status;
+          }
           enrichedDetails = JSON.stringify(parsed);
         } catch {}
       }
       
       return {
         ...row.log,
+        description: enrichedDescription,
         details: enrichedDetails,
         tokenCode: row.tokenCode || undefined,
         tokenRole: row.tokenRole || undefined,

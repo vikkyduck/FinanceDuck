@@ -545,7 +545,23 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/partners", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
+      const role = req.user?.role || "client";
       const partner = await storage.createPartner(req.body);
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "create_partner",
+          entityType: "partner",
+          entityId: partner.id,
+          description: `Создан партнёр: ${partner.name}`,
+          details: JSON.stringify(req.body),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       res.status(201).json(partner);
     } catch (error) {
       console.error("Create partner error:", error);
@@ -556,10 +572,26 @@ export function registerRoutes(app: Express): void {
   app.patch("/api/partners/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const partner = await storage.updatePartner(id, req.body);
       if (!partner) {
         return res.status(404).json({ error: "Partner not found" });
       }
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "update_partner",
+          entityType: "partner",
+          entityId: id,
+          description: `Обновлён партнёр: ${partner.name}`,
+          details: JSON.stringify(req.body),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       res.json(partner);
     } catch (error) {
       console.error("Update partner error:", error);
@@ -646,6 +678,21 @@ export function registerRoutes(app: Express): void {
     try {
       const role = req.user?.role || "client";
       const client = await storage.createClient(req.body);
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "create_client",
+          entityType: "client",
+          entityId: client.id,
+          description: `Создан клиент: ${client.name}`,
+          details: JSON.stringify(req.body),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       const filtered = stripPartnerInfoFromClient(client, role);
       res.status(201).json(filtered);
     } catch (error) {
@@ -662,6 +709,21 @@ export function registerRoutes(app: Express): void {
       if (!client) {
         return res.status(404).json({ error: "Client not found" });
       }
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "update_client",
+          entityType: "client",
+          entityId: id,
+          description: `Обновлён клиент: ${client.name}`,
+          details: JSON.stringify(req.body),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       const filtered = stripPartnerInfoFromClient(client, role);
       res.json(filtered);
     } catch (error) {
@@ -1190,6 +1252,21 @@ export function registerRoutes(app: Express): void {
       // Reload full invoice with calculations, partner, client
       const fullInvoice = await storage.getInvoice(invoice.id);
       const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "create_invoice",
+          entityType: "invoice",
+          entityId: invoice.id,
+          description: `Создан счёт: ${invoiceData.description || invoice.id}`,
+          details: JSON.stringify({ clientId: invoiceData.clientId, partnerId: invoiceData.partnerId, amount: invoiceData.clientBill }),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       res.status(201).json(filtered);
     } catch (error) {
       console.error("Create invoice error:", error);
@@ -1216,6 +1293,21 @@ export function registerRoutes(app: Express): void {
       // Reload full invoice with recalculated values
       const fullInvoice = await storage.getInvoice(id);
       const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "update_invoice",
+          entityType: "invoice",
+          entityId: id,
+          description: `Обновлён счёт: ${invoice.description || id}`,
+          details: JSON.stringify(invoiceData),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       res.json(filtered);
     } catch (error) {
       console.error("Update invoice error:", error);
@@ -1237,11 +1329,27 @@ export function registerRoutes(app: Express): void {
   app.post("/api/invoices/:id/expenses", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const expense = await storage.createInvoiceExpense({
         ...req.body,
         invoiceId: id,
         createdBy: req.user!.token.id,
       });
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "create_expense",
+          entityType: "expense",
+          entityId: expense.id,
+          description: `Создан расход: ${req.body.description || expense.id}`,
+          details: JSON.stringify({ invoiceId: id, amount: req.body.amount, paidByPartner: req.body.paidByPartner }),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       res.status(201).json(expense);
     } catch (error) {
       console.error("Create expense error:", error);
@@ -1252,10 +1360,26 @@ export function registerRoutes(app: Express): void {
   app.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
       const expense = await storage.updateInvoiceExpense(id, req.body);
       if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
       }
+      
+      // Log assistant action
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "update_expense",
+          entityType: "expense",
+          entityId: id,
+          description: `Обновлён расход: ${expense.description || id}`,
+          details: JSON.stringify(req.body),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       res.json(expense);
     } catch (error) {
       console.error("Update expense error:", error);
@@ -1266,6 +1390,22 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      const role = req.user?.role || "client";
+      
+      // Log assistant action before delete
+      if (role === "assistant") {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "delete_expense",
+          entityType: "expense",
+          entityId: id,
+          description: `Удалён расход: ${id}`,
+          details: null,
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+      }
+      
       await storage.deleteInvoiceExpense(id);
       res.json({ success: true });
     } catch (error) {

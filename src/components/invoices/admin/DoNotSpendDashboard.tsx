@@ -159,18 +159,18 @@ export const DoNotSpendDashboard = ({
     <div className={cn("space-y-6", className)}>
       {hasAgency30Data && (
         <div
-          className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-2xl p-6 shadow-standard"
+          className="bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-2xl p-4 sm:p-6 shadow-standard"
           data-testid="do-not-spend-dashboard"
         >
           {showTitle && (
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg">
-                  <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-1.5 sm:p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg shrink-0">
+                  <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3
-                    className="text-[18px] font-semibold text-foreground"
+                    className="text-sm sm:text-[18px] font-semibold text-foreground"
                     style={{ letterSpacing: "-0.2px" }}
                   >
                     {titleText}
@@ -180,10 +180,10 @@ export const DoNotSpendDashboard = ({
                   </p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right">
                 <Badge 
                   variant="outline" 
-                  className="text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 bg-amber-100/50 dark:bg-amber-900/30"
+                  className="text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 bg-amber-100/50 dark:bg-amber-900/30 text-xs sm:text-sm"
                 >
                   {formatCurrency(totalRemaining)}
                 </Badge>
@@ -295,7 +295,7 @@ export const DoNotSpendDashboard = ({
           </Table>
 
           <div className="mt-4 pt-4 border-t border-amber-200/50 dark:border-amber-800/30">
-            <div className="flex items-center justify-between text-sm flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm gap-2">
               <span className="text-muted-foreground">
                 Эта сумма уменьшается по мере добавления расходов
               </span>
@@ -309,17 +309,17 @@ export const DoNotSpendDashboard = ({
 
       {hasPartnerSchemeData && (
         <div
-          className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-2xl p-6 shadow-standard"
+          className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-2xl p-4 sm:p-6 shadow-standard"
           data-testid="partner-scheme-do-not-spend-dashboard"
         >
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
-                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-1.5 sm:p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg shrink-0">
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3
-                  className="text-[18px] font-semibold text-foreground"
+                  className="text-sm sm:text-[18px] font-semibold text-foreground"
                   style={{ letterSpacing: "-0.2px" }}
                 >
                   Партнёрские схемы
@@ -329,10 +329,10 @@ export const DoNotSpendDashboard = ({
                 </p>
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <Badge 
                 variant="outline" 
-                className="text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 bg-blue-100/50 dark:bg-blue-900/30"
+                className="text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-700 bg-blue-100/50 dark:bg-blue-900/30 text-xs sm:text-sm"
               >
                 {formatCurrency(totalPartnerSchemeDoNotSpend)}
               </Badge>
@@ -443,7 +443,7 @@ export const DoNotSpendDashboard = ({
             </Table>
 
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">
-            <div className="flex items-center justify-between text-sm flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm gap-2">
               <span className="text-muted-foreground">
                 Деньги зарезервированы на расходы проекта
               </span>
@@ -456,9 +456,9 @@ export const DoNotSpendDashboard = ({
       )}
 
       {(hasAgency30Data && hasPartnerSchemeData) && (
-        <div className="bg-gradient-to-r from-amber-100/50 to-blue-100/50 dark:from-amber-950/30 dark:to-blue-950/30 border border-muted-foreground/10 rounded-xl p-4 text-center">
-          <span className="text-sm text-muted-foreground">Общая сумма резерва: </span>
-          <span className="text-lg font-bold text-foreground">
+        <div className="bg-gradient-to-r from-amber-100/50 to-blue-100/50 dark:from-amber-950/30 dark:to-blue-950/30 border border-muted-foreground/10 rounded-xl p-3 sm:p-4 text-center">
+          <span className="text-xs sm:text-sm text-muted-foreground">Общая сумма резерва: </span>
+          <span className="text-sm sm:text-lg font-bold text-foreground break-words">
             {formatCurrency(grandTotal)}
           </span>
         </div>

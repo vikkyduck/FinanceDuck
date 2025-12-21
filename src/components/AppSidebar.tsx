@@ -7,7 +7,8 @@ import {
   Home,
   TrendingDown,
   UserCheck,
-  Settings
+  Key,
+  Database
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -130,7 +131,8 @@ export function AppSidebar() {
       groups.push({
         label: "Система",
         items: [
-          { title: "Система", url: "/access-codes", icon: Settings },
+          { title: "Коды доступа", url: "/access-codes", icon: Key },
+          { title: "Бэкапы", url: "/access-codes?tab=backups", icon: Database },
         ]
       });
     }

@@ -4,9 +4,20 @@ import { Key, Database, Settings } from "lucide-react";
 import { AccessCodesManager } from "@/components/admin/AccessCodesManager";
 import { BackupManager } from "@/components/admin/BackupManager";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useSearchParams } from "react-router-dom";
 
 const AccessCodesPage = () => {
   const { role, loading } = useUserRole();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentTab = searchParams.get('tab') || 'access-codes';
+
+  const handleTabChange = (value: string) => {
+    if (value === 'access-codes') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ tab: value });
+    }
+  };
 
   if (loading) {
     return (
@@ -39,7 +50,7 @@ const AccessCodesPage = () => {
           <p className="text-muted-foreground">Управление доступом и резервными копиями</p>
         </div>
 
-        <Tabs defaultValue="access-codes" className="space-y-6">
+        <Tabs value={currentTab} onValueChange={handleTabChange} className="space-y-6">
           <TabsList>
             <TabsTrigger value="access-codes" className="gap-2" data-testid="tab-access-codes">
               <Key className="h-4 w-4" />

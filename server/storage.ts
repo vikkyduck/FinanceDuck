@@ -4448,11 +4448,22 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (invoiceIds.size > 0) {
-      const invoicesData = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, status: invoices.status })
+      // Fetch invoices with client info via join
+      const invoicesData = await db.select({ 
+        id: invoices.id, 
+        invoiceNumber: invoices.invoiceNumber, 
+        status: invoices.status,
+        clientId: invoices.clientId,
+        description: invoices.description,
+        clientName: clients.name
+      })
         .from(invoices)
+        .leftJoin(clients, eq(invoices.clientId, clients.id))
         .where(inArray(invoices.id, Array.from(invoiceIds)));
       for (const inv of invoicesData) {
-        invoiceMap.set(inv.id, { number: inv.invoiceNumber || inv.id, status: inv.status });
+        // Use invoice number, or client name, or description as fallback
+        const displayName = inv.invoiceNumber || inv.clientName || inv.description || inv.id;
+        invoiceMap.set(inv.id, { number: displayName, status: inv.status });
       }
     }
     
@@ -4461,7 +4472,7 @@ export class DatabaseStorage implements IStorage {
       let enrichedDetails = row.log.details;
       let enrichedDescription = row.log.description;
       
-      // Replace invoice UUID in description with invoice number
+      // Replace invoice UUID in description with readable name
       if (row.log.entityId && invoiceMap.has(row.log.entityId)) {
         const invData = invoiceMap.get(row.log.entityId)!;
         enrichedDescription = enrichedDescription.replace(row.log.entityId, invData.number);

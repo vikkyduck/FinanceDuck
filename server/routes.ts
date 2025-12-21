@@ -2513,7 +2513,17 @@ export function registerRoutes(app: Express): void {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
-      const result = await storage.getAssistantActionLogs(limit, offset);
+      const role = req.query.role as 'admin' | 'assistant' | undefined;
+      const dateFrom = req.query.dateFrom as string | undefined;
+      const dateTo = req.query.dateTo as string | undefined;
+      
+      const result = await storage.getAssistantActionLogs({
+        limit,
+        offset,
+        role: role || null,
+        dateFrom: dateFrom || null,
+        dateTo: dateTo || null,
+      });
       res.json(result);
     } catch (error: any) {
       console.error("Get assistant logs error:", error);

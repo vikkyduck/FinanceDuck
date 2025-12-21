@@ -6,7 +6,7 @@ import {
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment, InsertAssistantActionLog,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType, AssistantActionType
 } from "../shared/schema";
-import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or, type SQL } from "drizzle-orm";
 import { randomBytes } from "crypto";
 
 /**
@@ -246,11 +246,20 @@ export interface IStorage {
   
   // Assistant action logs
   logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog>;
-  getAssistantActionLogs(limit?: number, offset?: number): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }>;
+  getAssistantActionLogs(filters: AssistantActionLogFilters): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }>;
+}
+
+export interface AssistantActionLogFilters {
+  limit?: number;
+  offset?: number;
+  role?: 'admin' | 'assistant' | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
 }
 
 export interface AssistantActionLogWithDetails extends AssistantActionLog {
   tokenCode?: string;
+  tokenRole?: string;
 }
 
 export interface WorkingCapitalData {
@@ -4347,18 +4356,50 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getAssistantActionLogs(limit: number = 100, offset: number = 0): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }> {
-    const [countResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(assistantActionLogs);
+  async getAssistantActionLogs(filters: AssistantActionLogFilters): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }> {
+    const { limit = 100, offset = 0, role, dateFrom, dateTo } = filters;
     
-    const logsData = await db
+    // Build where conditions
+    const conditions: SQL<unknown>[] = [];
+    if (role) {
+      conditions.push(eq(accessTokens.role, role));
+    }
+    if (dateFrom) {
+      conditions.push(sql`${assistantActionLogs.createdAt} >= ${dateFrom}::timestamp`);
+    }
+    if (dateTo) {
+      conditions.push(sql`${assistantActionLogs.createdAt} <= ${dateTo}::timestamp + interval '1 day'`);
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    // Count query
+    const countQuery = db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(assistantActionLogs)
+      .leftJoin(accessTokens, eq(assistantActionLogs.accessTokenId, accessTokens.id));
+    
+    if (whereClause) {
+      countQuery.where(whereClause);
+    }
+    
+    const [countResult] = await countQuery;
+    
+    // Data query
+    const dataQuery = db
       .select({
         log: assistantActionLogs,
         tokenCode: accessTokens.code,
+        tokenRole: accessTokens.role,
       })
       .from(assistantActionLogs)
-      .leftJoin(accessTokens, eq(assistantActionLogs.accessTokenId, accessTokens.id))
+      .leftJoin(accessTokens, eq(assistantActionLogs.accessTokenId, accessTokens.id));
+    
+    if (whereClause) {
+      dataQuery.where(whereClause);
+    }
+    
+    const logsData = await dataQuery
       .orderBy(desc(assistantActionLogs.createdAt))
       .limit(limit)
       .offset(offset);
@@ -4366,6 +4407,7 @@ export class DatabaseStorage implements IStorage {
     const logs: AssistantActionLogWithDetails[] = logsData.map(row => ({
       ...row.log,
       tokenCode: row.tokenCode || undefined,
+      tokenRole: row.tokenRole || undefined,
     }));
 
     return {

@@ -110,17 +110,17 @@ export const KeyMetricsCards = () => {
         className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 animate-fade-in"
         style={{ animationDelay: `${delay}ms` }}
       >
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-4 gap-2">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+        <CardContent className="pt-4 sm:pt-6 pb-4 sm:pb-6">
+          <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground uppercase tracking-wide truncate">
                 {title}
               </p>
               {tooltip && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
                       <p className="text-sm">{tooltip}</p>
@@ -129,23 +129,23 @@ export const KeyMetricsCards = () => {
                 </TooltipProvider>
               )}
             </div>
-            <div className="p-2 rounded-lg bg-primary/10">
-              <Icon className="h-5 w-5 text-primary" />
+            <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+              <Icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
           </div>
           
           <div className="space-y-2">
-            <p className={`text-4xl font-bold tracking-tight ${valueClassName || ''}`}>
+            <p className={`text-xl sm:text-2xl md:text-4xl font-bold tracking-tight ${valueClassName || ''}`}>
               {formatCurrency(value)}
             </p>
             
             {showTrend && trend !== undefined && (
-              <div className={`flex items-center gap-1 text-sm font-medium ${
+              <div className={`flex flex-wrap items-center gap-1 text-xs sm:text-sm font-medium ${
                 isPositive ? 'text-green-600' : 'text-red-600'
               }`}>
-                <TrendIcon className="h-4 w-4" />
+                <TrendIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                 <span>{Math.abs(trend).toFixed(1)}%</span>
-                <span className="text-muted-foreground ml-1">от прошлого месяца</span>
+                <span className="text-muted-foreground">от прошлого месяца</span>
               </div>
             )}
           </div>
@@ -155,7 +155,7 @@ export const KeyMetricsCards = () => {
   };
 
   return (
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
       <MetricCard
         title="Выручка"
         value={revenue}

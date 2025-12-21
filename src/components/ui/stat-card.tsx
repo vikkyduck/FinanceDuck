@@ -46,7 +46,7 @@ export const StatCard = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <div className={cn("text-3xl font-semibold tracking-tight", valueClassName)}>
+        <div className={cn("text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight break-words", valueClassName)}>
           {value}
         </div>
         {description && (

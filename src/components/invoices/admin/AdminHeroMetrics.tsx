@@ -51,24 +51,24 @@ export const AdminHeroMetrics = ({ period = 'month' }: AdminHeroMetricsProps) =>
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-emerald-500/20 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-emerald-600" />
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
+              <div className="p-2 sm:p-3 bg-emerald-500/20 rounded-lg">
+                <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
               </div>
-              <span className="text-sm font-medium text-muted-foreground">
+              <span className="text-xs sm:text-sm font-medium text-muted-foreground">
                 {period === 'month' ? 'За месяц' : period === 'year' ? 'За год' : 'Все время'}
               </span>
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            <h3 className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">
               Чистая прибыль
             </h3>
-            <p className="text-3xl font-bold text-emerald-600" data-testid="value-net-profit">
+            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-emerald-600" data-testid="value-net-profit">
               {formatCurrency(netProfit)}
             </p>
-            <div className="flex gap-4 mt-2 text-xs">
+            <div className="flex flex-col sm:flex-row gap-1 sm:gap-4 mt-2 text-xs">
               <span className="text-muted-foreground">
                 Получено: <span className="text-emerald-600 font-medium">{formatCurrency(receivedProfit)}</span>
               </span>
@@ -80,35 +80,35 @@ export const AdminHeroMetrics = ({ period = 'month' }: AdminHeroMetricsProps) =>
         </Card>
 
         <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500/10 to-blue-600/10 hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-blue-500/20 rounded-lg">
-                <Wallet className="h-6 w-6 text-blue-600" />
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
+              <div className="p-2 sm:p-3 bg-blue-500/20 rounded-lg">
+                <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
               </div>
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            <h3 className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">
               Оборот (выставлено)
             </h3>
-            <p className="text-3xl font-bold text-blue-600" data-testid="value-total-revenue">
+            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-blue-600" data-testid="value-total-revenue">
               {formatCurrency(stats.totalClientBill)}
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500/10 to-purple-600/10 hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-purple-500/20 rounded-lg">
-                <Calendar className="h-6 w-6 text-purple-600" />
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
+              <div className="p-2 sm:p-3 bg-purple-500/20 rounded-lg">
+                <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600" />
               </div>
               {overdueWarning && (
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
+                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
               )}
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            <h3 className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">
               К оплате
             </h3>
-            <p className="text-3xl font-bold text-purple-600" data-testid="value-pending">
+            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-purple-600" data-testid="value-pending">
               {formatCurrency(stats.pendingClientBill)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -118,16 +118,16 @@ export const AdminHeroMetrics = ({ period = 'month' }: AdminHeroMetricsProps) =>
         </Card>
 
         <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-500/10 to-amber-600/10 hover:shadow-xl transition-shadow">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-amber-500/20 rounded-lg">
-                <FileText className="h-6 w-6 text-amber-600" />
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2">
+              <div className="p-2 sm:p-3 bg-amber-500/20 rounded-lg">
+                <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-amber-600" />
               </div>
             </div>
-            <h3 className="text-sm font-medium text-muted-foreground mb-2">
+            <h3 className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 sm:mb-2">
               Расходы исполнителей
             </h3>
-            <p className="text-3xl font-bold text-amber-600" data-testid="value-expenses">
+            <p className="text-xl sm:text-2xl md:text-3xl font-bold text-amber-600" data-testid="value-expenses">
               {formatCurrency(stats.totalExpenses)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">

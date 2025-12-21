@@ -97,48 +97,48 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
 
   return (
     <Card className="border-0 shadow-lg bg-gradient-to-br from-primary/5 via-background to-accent/5 overflow-hidden">
-      <CardContent className="p-8">
-        <div className="space-y-6">
+      <CardContent className="p-4 sm:p-6 md:p-8">
+        <div className="space-y-4 sm:space-y-6">
           {/* Hero Number */}
           <div>
-            <p className="text-sm text-muted-foreground font-medium mb-2">
+            <p className="text-xs sm:text-sm text-muted-foreground font-medium mb-1 sm:mb-2">
               Переведено от клиентов в {selectedYear}
             </p>
-            <h2 className="text-5xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               {stats.total.toLocaleString('ru-RU')} ₽
             </h2>
           </div>
 
           {/* Sub Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 border border-border/50">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Receipt className="h-5 w-5 text-primary" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="flex items-center sm:items-start gap-3 p-3 sm:p-4 rounded-lg bg-background/50 border border-border/50">
+              <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+                <Receipt className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.count}</p>
+              <div className="min-w-0">
+                <p className="text-lg sm:text-2xl font-bold">{stats.count}</p>
                 <p className="text-xs text-muted-foreground">Оплаченных счетов</p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 border border-border/50">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <Wallet className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+            <div className="flex items-center sm:items-start gap-3 p-3 sm:p-4 rounded-lg bg-background/50 border border-border/50">
+              <div className="p-2 rounded-lg bg-orange-500/10 shrink-0">
+                <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">
+              <div className="min-w-0">
+                <p className="text-lg sm:text-2xl font-bold break-words">
                   {stats.totalExpenses.toLocaleString('ru-RU')} ₽
                 </p>
                 <p className="text-xs text-muted-foreground">Проведено расходов</p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 border border-border/50">
-              <div className="p-2 rounded-lg bg-accent/10">
-                <DollarSign className="h-5 w-5 text-accent-foreground" />
+            <div className="flex items-center sm:items-start gap-3 p-3 sm:p-4 rounded-lg bg-background/50 border border-border/50">
+              <div className="p-2 rounded-lg bg-accent/10 shrink-0">
+                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-accent-foreground" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">
+              <div className="min-w-0">
+                <p className="text-lg sm:text-2xl font-bold break-words">
                   {Math.round(stats.average).toLocaleString('ru-RU')} ₽
                 </p>
                 <p className="text-xs text-muted-foreground">Средний чек</p>
@@ -146,16 +146,16 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
             </div>
 
             {stats.bestMonth && (
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-background/50 border border-border/50">
-                <div className="p-2 rounded-lg bg-green-500/10">
-                  <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="flex items-center sm:items-start gap-3 p-3 sm:p-4 rounded-lg bg-background/50 border border-border/50">
+                <div className="p-2 rounded-lg bg-green-500/10 shrink-0">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
                 </div>
-                <div>
-                  <p className="text-2xl font-bold">
+                <div className="min-w-0">
+                  <p className="text-lg sm:text-2xl font-bold">
                     {(stats.bestMonth.amount / 1000000).toFixed(1)}М ₽
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Лучший месяц — {stats.bestMonth.name}
+                    Лучший — {stats.bestMonth.name}
                   </p>
                 </div>
               </div>

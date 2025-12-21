@@ -9,7 +9,6 @@ import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
 import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
 import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
 import { ManageAccessCodesDialog } from "./admin/ManageAccessCodesDialog";
-import { AssistantBonusManager } from "./admin/AssistantBonusManager";
 import { PartnerPaymentsManager } from "./admin/PartnerPaymentsManager";
 import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { AdminCashFlowForecast } from "./admin/AdminCashFlowForecast";
@@ -55,7 +54,6 @@ export const AdminDashboard = () => {
       cashFlow: true,
       recurringInvoices: true,
       invoicesList: true,
-      bonuses: true,
       partnerPayments: true,
       partnerPaymentsTable: false,
     }
@@ -200,15 +198,6 @@ export const AdminDashboard = () => {
 
         <TabsContent value="team" className="space-y-6">
           <div className="space-y-6">
-            <CollapsibleSection
-              id="bonuses"
-              title="Бонусы ассистенту"
-              isExpanded={isExpanded("bonuses")}
-              onToggle={() => toggleSection("bonuses")}
-            >
-              <AssistantBonusManager />
-            </CollapsibleSection>
-
             <CollapsibleSection
               id="partnerPayments"
               title="Расчёты с партнёрами (карточки)"

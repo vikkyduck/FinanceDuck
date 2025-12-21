@@ -15,8 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiGet } from "@/lib/api";
 import type { AssistantActionLog } from "@shared/schema";
+import { AssistantBonusManager } from "@/components/invoices/admin/AssistantBonusManager";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -27,7 +29,9 @@ import {
   RefreshCcw,
   Clock,
   Filter,
-  X
+  X,
+  Wallet,
+  History
 } from "lucide-react";
 
 interface AssistantActionLogWithDetails extends AssistantActionLog {
@@ -247,6 +251,7 @@ function LoadingSkeleton() {
 }
 
 export default function AssistantLogsPage() {
+  const [activeTab, setActiveTab] = useState("bonuses");
   const [page, setPage] = useState(0);
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -294,146 +299,165 @@ export default function AssistantLogsPage() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-semibold" data-testid="text-page-title">
-              История действий
+              Ассистент
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Журнал действий администраторов и ассистентов
+              Управление бонусами и история действий
             </p>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            data-testid="button-refresh"
-          >
-            <RefreshCcw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-            Обновить
-          </Button>
         </div>
 
-        <Card>
-          <CardContent className="py-3 px-4">
-            <div className="flex items-end gap-4 flex-wrap">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Filter className="w-4 h-4" />
-                <span>Фильтры:</span>
-              </div>
-              
-              <div className="space-y-1">
-                <Label htmlFor="role-filter" className="text-xs">Роль</Label>
-                <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(0); }}>
-                  <SelectTrigger id="role-filter" className="w-[140px]" data-testid="select-role-filter">
-                    <SelectValue placeholder="Все роли" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Все роли</SelectItem>
-                    <SelectItem value="admin">Админ</SelectItem>
-                    <SelectItem value="assistant">Ассистент</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="space-y-1">
-                <Label htmlFor="date-from" className="text-xs">С даты</Label>
-                <Input
-                  id="date-from"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
-                  className="w-[140px]"
-                  data-testid="input-date-from"
-                />
-              </div>
-              
-              <div className="space-y-1">
-                <Label htmlFor="date-to" className="text-xs">По дату</Label>
-                <Input
-                  id="date-to"
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
-                  className="w-[140px]"
-                  data-testid="input-date-to"
-                />
-              </div>
-              
-              {hasFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="text-muted-foreground"
-                  data-testid="button-clear-filters"
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  Сбросить
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="bonuses" className="gap-2" data-testid="tab-bonuses">
+              <Wallet className="h-4 w-4" />
+              Бонусы
+            </TabsTrigger>
+            <TabsTrigger value="logs" className="gap-2" data-testid="tab-logs">
+              <History className="h-4 w-4" />
+              История действий
+            </TabsTrigger>
+          </TabsList>
 
-      <div className="flex-1 px-6 pb-6 overflow-hidden">
-        <Card className="h-full flex flex-col">
-          <CardHeader className="flex-shrink-0 flex flex-row items-center justify-between gap-4 py-3">
-            <CardTitle className="text-base font-medium">
-              Журнал действий
-              {data && (
-                <span className="text-sm font-normal text-muted-foreground ml-2">
-                  ({data.total} записей)
-                </span>
-              )}
-            </CardTitle>
-            
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setPage(p => Math.max(0, p - 1))}
-                  disabled={page === 0 || isFetching}
-                  data-testid="button-prev-page"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-sm text-muted-foreground min-w-[80px] text-center">
-                  {page + 1} / {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                  disabled={page >= totalPages - 1 || isFetching}
-                  data-testid="button-next-page"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </CardHeader>
-          
-          <CardContent className="flex-1 p-0 overflow-auto">
-            {isLoading ? (
-              <LoadingSkeleton />
-            ) : data?.logs.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Нет записей в журнале</p>
-                <p className="text-xs mt-1">
-                  {hasFilters ? "Попробуйте изменить фильтры" : "Действия будут отображаться здесь"}
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {data?.logs.map((log) => (
-                  <ActionLogCard key={log.id} log={log} />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          <TabsContent value="bonuses" className="mt-4">
+            <AssistantBonusManager />
+          </TabsContent>
+
+          <TabsContent value="logs" className="mt-4 space-y-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <Card className="flex-1">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-end gap-4 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Filter className="w-4 h-4" />
+                      <span>Фильтры:</span>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="role-filter" className="text-xs">Роль</Label>
+                      <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(0); }}>
+                        <SelectTrigger id="role-filter" className="w-[140px]" data-testid="select-role-filter">
+                          <SelectValue placeholder="Все роли" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Все роли</SelectItem>
+                          <SelectItem value="admin">Админ</SelectItem>
+                          <SelectItem value="assistant">Ассистент</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="date-from" className="text-xs">С даты</Label>
+                      <Input
+                        id="date-from"
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+                        className="w-[140px]"
+                        data-testid="input-date-from"
+                      />
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="date-to" className="text-xs">По дату</Label>
+                      <Input
+                        id="date-to"
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+                        className="w-[140px]"
+                        data-testid="input-date-to"
+                      />
+                    </div>
+                    
+                    {hasFilters && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearFilters}
+                        className="text-muted-foreground"
+                        data-testid="button-clear-filters"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Сбросить
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => refetch()}
+                disabled={isFetching}
+                data-testid="button-refresh"
+              >
+                <RefreshCcw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+                Обновить
+              </Button>
+            </div>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4 py-3">
+                <CardTitle className="text-base font-medium">
+                  Журнал действий
+                  {data && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({data.total} записей)
+                    </span>
+                  )}
+                </CardTitle>
+                
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0 || isFetching}
+                      data-testid="button-prev-page"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground min-w-[80px] text-center">
+                      {page + 1} / {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={page >= totalPages - 1 || isFetching}
+                      data-testid="button-next-page"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              
+              <CardContent className="p-0 max-h-[60vh] overflow-auto">
+                {isLoading ? (
+                  <LoadingSkeleton />
+                ) : data?.logs.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>Нет записей в журнале</p>
+                    <p className="text-xs mt-1">
+                      {hasFilters ? "Попробуйте изменить фильтры" : "Действия будут отображаться здесь"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {data?.logs.map((log) => (
+                      <ActionLogCard key={log.id} log={log} />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

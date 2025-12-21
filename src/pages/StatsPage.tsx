@@ -7,7 +7,6 @@ import { MonthlyFinancialTable } from "@/components/invoices/admin/MonthlyFinanc
 import { OverduePaymentsAlert } from "@/components/invoices/admin/OverduePaymentsAlert";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/useAuth";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LazyMonthlySalesChart,
   LazyRevenueForecastChart,
@@ -42,7 +41,6 @@ const StatsPage = () => {
     }
   );
 
-  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
   if (isLoading) {
     return (
@@ -72,36 +70,21 @@ const StatsPage = () => {
         <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-3xl" />
         
         <div className="relative px-8 pt-16 pb-12">
-          <div className="flex items-end justify-between animate-fade-in">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border border-primary/20">
-                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-sm font-medium text-primary">Обновляется в реальном времени</span>
-              </div>
-              
-              <h1 className="text-6xl font-bold tracking-tight">
-                <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Аналитика
-                </span>
-              </h1>
-              
-              <p className="text-xl text-muted-foreground max-w-2xl">
-                Полный контроль над финансовыми показателями и прогнозами
-              </p>
+          <div className="animate-fade-in space-y-4">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border border-primary/20">
+              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-sm font-medium text-primary">Обновляется в реальном времени</span>
             </div>
             
-            <Select value={selectedYear.toString()} onValueChange={(val) => setSelectedYear(parseInt(val))}>
-              <SelectTrigger className="w-40 glass border-primary/20 shadow-lg">
-                <SelectValue placeholder="Год" />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <h1 className="text-6xl font-bold tracking-tight">
+              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                Аналитика
+              </span>
+            </h1>
+            
+            <p className="text-xl text-muted-foreground max-w-2xl">
+              Полный контроль над финансовыми показателями и прогнозами
+            </p>
           </div>
         </div>
       </div>

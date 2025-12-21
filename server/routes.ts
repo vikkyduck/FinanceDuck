@@ -2367,4 +2367,17 @@ export function registerRoutes(app: Express): void {
       res.status(500).json({ error: error.message || "Failed to delete backup" });
     }
   });
+
+  // Assistant action logs (admin only)
+  app.get("/api/assistant-logs", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const result = await storage.getAssistantActionLogs(limit, offset);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Get assistant logs error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch assistant action logs" });
+    }
+  });
 }

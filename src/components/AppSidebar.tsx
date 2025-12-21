@@ -6,7 +6,8 @@ import {
   BarChart3, 
   LogOut, 
   Home,
-  TrendingDown
+  TrendingDown,
+  UserCheck
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -119,6 +120,7 @@ export function AppSidebar() {
         items: [
           { title: "Клиенты", url: "/clients", icon: Users },
           { title: "Партнёры", url: "/partners", icon: Building },
+          ...(role === "admin" ? [{ title: "Ассистент", url: "/assistant-logs", icon: UserCheck }] : []),
         ]
       });
     }

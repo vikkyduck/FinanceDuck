@@ -81,7 +81,7 @@ const StatsPage = () => {
               
               <h1 className="text-6xl font-bold tracking-tight">
                 <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Статистика
+                  Аналитика
                 </span>
               </h1>
               
@@ -106,69 +106,57 @@ const StatsPage = () => {
         </div>
       </div>
 
-      <div className="space-y-10 pb-12">
-
-        {/* Dashboard Metrics - Yearly Summary, Cash Flow, Sales, Efficiency */}
-        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-          <AdminDashboardMetrics />
-        </div>
-
-        {/* Critical Alerts - If any */}
-        <div className="animate-fade-in" style={{ animationDelay: '200ms' }}>
-          <OverduePaymentsAlert />
-        </div>
-
-        <Tabs defaultValue="overview" className="space-y-8 animate-fade-in" style={{ animationDelay: '300ms' }}>
-          <div className="flex items-center justify-between gap-4">
-            <TabsList className="glass-strong border border-primary/10 shadow-lg p-1.5 gap-1 h-auto flex-wrap">
-              <TabsTrigger 
-                value="overview"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-                data-testid="tab-overview"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Сводка
-              </TabsTrigger>
-              <TabsTrigger 
-                value="invoices"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-                data-testid="tab-invoices"
-              >
-                <Receipt className="h-4 w-4" />
-                Счета
-              </TabsTrigger>
-              <TabsTrigger 
-                value="sales"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                Продажи
-              </TabsTrigger>
-              <TabsTrigger 
-                value="backups"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-                data-testid="tab-backups"
-              >
-                <Database className="h-4 w-4" />
-                Бэкапы
-              </TabsTrigger>
-            </TabsList>
-            <div className="flex gap-1 shrink-0">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={expandAll} data-testid="button-expand-all">
-                    <Maximize2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Развернуть все</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={collapseAll} data-testid="button-collapse-all">
-                    <Minimize2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Свернуть все</TooltipContent>
+      <Tabs defaultValue="overview" className="space-y-8 pb-12">
+        <div className="flex items-center justify-between gap-4 animate-fade-in">
+          <TabsList className="glass-strong border border-primary/10 shadow-lg p-1.5 gap-1 h-auto flex-wrap">
+            <TabsTrigger 
+              value="overview"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              data-testid="tab-overview"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Сводка
+            </TabsTrigger>
+            <TabsTrigger 
+              value="invoices"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              data-testid="tab-invoices"
+            >
+              <Receipt className="h-4 w-4" />
+              Счета
+            </TabsTrigger>
+            <TabsTrigger 
+              value="sales"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Продажи
+            </TabsTrigger>
+            <TabsTrigger 
+              value="backups"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              data-testid="tab-backups"
+            >
+              <Database className="h-4 w-4" />
+              Бэкапы
+            </TabsTrigger>
+          </TabsList>
+          <div className="flex gap-1 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={expandAll} data-testid="button-expand-all">
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Развернуть все</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={collapseAll} data-testid="button-collapse-all">
+                  <Minimize2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Свернуть все</TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -262,8 +250,7 @@ const StatsPage = () => {
             </TabsContent>
           </AnimatePresence>
 
-        </Tabs>
-      </div>
+      </Tabs>
     </DashboardLayout>
   );
 };

@@ -89,7 +89,7 @@ export function GlobalCommandPalette() {
   const pages = [
     { title: "Главная", url: "/", icon: Home },
     { title: "Счета", url: "/invoices", icon: FileText },
-    { title: "Статистика", url: "/stats", icon: BarChart3 },
+    { title: "Аналитика", url: "/stats", icon: BarChart3 },
     ...(role === "admin"
       ? [
           { title: "Клиенты", url: "/clients", icon: Users },

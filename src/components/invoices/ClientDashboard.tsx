@@ -35,7 +35,7 @@ export const ClientDashboard = () => {
         
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-4">
-            <CardTitle className="text-2xl">Статистика</CardTitle>
+            <CardTitle className="text-2xl">Обзор</CardTitle>
           </CardHeader>
           <CardContent>
             <ClientStats />

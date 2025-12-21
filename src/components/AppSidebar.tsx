@@ -106,7 +106,7 @@ export function AppSidebar() {
           badgeVariant: "secondary" as const
         }] : []),
         ...(role === "admin" ? [{
-          title: "Статистика",
+          title: "Аналитика",
           url: "/stats",
           icon: BarChart3,
         }] : []),

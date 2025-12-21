@@ -62,14 +62,14 @@ export const AdminDashboard = () => {
         <CardContent className="py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <p className="font-medium">Статистика и аналитика</p>
+              <p className="font-medium">Аналитика</p>
               <p className="text-sm text-muted-foreground">
-                Сводка, деньги, счета, прогнозы, план-факт
+                Сводка, счета, прогнозы, продажи, план-факт
               </p>
             </div>
             <Button onClick={() => navigate('/stats')} variant="default">
               <BarChart3 className="h-4 w-4 mr-2" />
-              Открыть статистику
+              Открыть аналитику
             </Button>
           </div>
         </CardContent>

@@ -4471,33 +4471,47 @@ export class DatabaseStorage implements IStorage {
     const logs: AssistantActionLogWithDetails[] = logsData.map(row => {
       let enrichedDetails = row.log.details;
       let enrichedDescription = row.log.description;
+      let parsedDetails: any = null;
       
-      // Replace invoice UUID in description with readable name
-      if (row.log.entityId && invoiceMap.has(row.log.entityId)) {
-        const invData = invoiceMap.get(row.log.entityId)!;
-        enrichedDescription = enrichedDescription.replace(row.log.entityId, invData.number);
-      }
-      
+      // Parse details first to get stored names
       if (row.log.details) {
         try {
-          const parsed = JSON.parse(row.log.details);
-          if (parsed.clientId && clientMap.has(parsed.clientId)) {
-            parsed.clientName = clientMap.get(parsed.clientId);
-          }
-          if (parsed.partnerId && partnerMap.has(parsed.partnerId)) {
-            parsed.partnerName = partnerMap.get(parsed.partnerId);
-          }
-          if (parsed.invoiceId && invoiceMap.has(parsed.invoiceId)) {
-            const invData = invoiceMap.get(parsed.invoiceId)!;
-            parsed.invoiceNumber = invData.number;
-            parsed.invoiceStatus = invData.status;
-          }
-          // Add status from entityId invoice if action is about invoice
-          if (row.log.entityId && invoiceMap.has(row.log.entityId) && !parsed.status) {
-            parsed.invoiceStatus = invoiceMap.get(row.log.entityId)!.status;
-          }
-          enrichedDetails = JSON.stringify(parsed);
+          parsedDetails = JSON.parse(row.log.details);
         } catch {}
+      }
+      
+      // Replace invoice UUID in description with readable name
+      if (row.log.entityId && row.log.entityType === "invoice") {
+        if (invoiceMap.has(row.log.entityId)) {
+          // Invoice exists - use data from database
+          const invData = invoiceMap.get(row.log.entityId)!;
+          enrichedDescription = enrichedDescription.replace(row.log.entityId, invData.number);
+        } else if (parsedDetails) {
+          // Invoice deleted - use stored names from details
+          const displayName = parsedDetails.invoiceNumber || parsedDetails.clientName || parsedDetails.description;
+          if (displayName) {
+            enrichedDescription = enrichedDescription.replace(row.log.entityId, displayName);
+          }
+        }
+      }
+      
+      if (parsedDetails) {
+        if (parsedDetails.clientId && clientMap.has(parsedDetails.clientId)) {
+          parsedDetails.clientName = clientMap.get(parsedDetails.clientId);
+        }
+        if (parsedDetails.partnerId && partnerMap.has(parsedDetails.partnerId)) {
+          parsedDetails.partnerName = partnerMap.get(parsedDetails.partnerId);
+        }
+        if (parsedDetails.invoiceId && invoiceMap.has(parsedDetails.invoiceId)) {
+          const invData = invoiceMap.get(parsedDetails.invoiceId)!;
+          parsedDetails.invoiceNumber = invData.number;
+          parsedDetails.invoiceStatus = invData.status;
+        }
+        // Add status from entityId invoice if action is about invoice
+        if (row.log.entityId && invoiceMap.has(row.log.entityId) && !parsedDetails.status) {
+          parsedDetails.invoiceStatus = invoiceMap.get(row.log.entityId)!.status;
+        }
+        enrichedDetails = JSON.stringify(parsedDetails);
       }
       
       return {

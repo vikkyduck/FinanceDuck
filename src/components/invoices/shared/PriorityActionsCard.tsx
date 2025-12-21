@@ -141,16 +141,16 @@ export const PriorityActionsCard = () => {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
-                  className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                  className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
                   data-testid={`priority-action-${action.id}`}
                 >
-                  <div className="flex items-start gap-3 flex-1">
-                    <div className="p-2 rounded-full bg-destructive/10">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="p-2 rounded-full bg-destructive/10 shrink-0">
                       <Icon className="w-4 h-4 text-destructive" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">{action.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className="text-xs text-muted-foreground break-words">
                         {action.description}
                       </p>
                       {action.amount && action.amount > 0 && (
@@ -164,7 +164,7 @@ export const PriorityActionsCard = () => {
                     size="sm"
                     variant="outline"
                     onClick={() => handleAction(action)}
-                    className="ml-2"
+                    className="shrink-0 self-end sm:self-auto"
                     disabled={markPaidMutation.isPending}
                     data-testid={`btn-action-${action.id}`}
                   >

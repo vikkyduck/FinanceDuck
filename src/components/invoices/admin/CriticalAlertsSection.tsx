@@ -189,11 +189,11 @@ export const CriticalAlertsSection = () => {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${severityColors[alert.severity]} hover:shadow-sm transition-all`}
+                    className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border ${severityColors[alert.severity]} hover:shadow-sm transition-all`}
                     data-testid={`alert-${alert.type}-${alert.id}`}
                   >
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className={`p-2 rounded-full ${
+                      <div className={`p-2 rounded-full shrink-0 ${
                         alert.severity === "critical" ? "bg-destructive/20" :
                         alert.severity === "high" ? "bg-orange-500/20" :
                         "bg-yellow-500/20"
@@ -206,7 +206,7 @@ export const CriticalAlertsSection = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm">{alert.title}</p>
-                        <p className="text-xs text-muted-foreground truncate">{alert.description}</p>
+                        <p className="text-xs text-muted-foreground break-words">{alert.description}</p>
                         {alert.amount && alert.amount > 0 && (
                           <p className="text-xs font-medium mt-0.5">{formatCurrency(alert.amount)}</p>
                         )}
@@ -216,7 +216,7 @@ export const CriticalAlertsSection = () => {
                       variant="ghost"
                       size="sm"
                       onClick={alert.action}
-                      className="shrink-0 ml-2"
+                      className="shrink-0 self-end sm:self-auto"
                       data-testid={`button-action-${alert.id}`}
                     >
                       {alert.actionLabel}

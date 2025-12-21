@@ -314,16 +314,16 @@ export const AdminDashboardMetrics = () => {
               <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
                 За {selectedYear} год (прибыль: {formatCurrency(stats.yearlySummary.totalProfit)})
               </h4>
-              <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кря</p>
-                  <p className="text-lg sm:text-2xl font-bold text-amber-600 dark:text-amber-400 break-words" data-testid="text-yearly-krya">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+                <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Доля Кря</p>
+                  <p className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-yearly-krya">
                     {formatCurrency(stats.ownerShares.yearlyKrya)}
                   </p>
                 </div>
-                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кота</p>
-                  <p className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400 break-words" data-testid="text-yearly-kot">
+                <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Доля Кота</p>
+                  <p className="text-base sm:text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-yearly-kot">
                     {formatCurrency(stats.ownerShares.yearlyKot)}
                   </p>
                 </div>
@@ -335,16 +335,16 @@ export const AdminDashboardMetrics = () => {
               <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
                 {MONTH_NAMES[selectedMonth]} (прибыль: {formatCurrency(stats.monthlyProfit)})
               </h4>
-              <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кря</p>
-                  <p className="text-lg sm:text-2xl font-bold text-amber-600 dark:text-amber-400 break-words" data-testid="text-monthly-krya">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
+                <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Доля Кря</p>
+                  <p className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-monthly-krya">
                     {formatCurrency(stats.ownerShares.monthlyKrya)}
                   </p>
                 </div>
-                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
-                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кота</p>
-                  <p className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400 break-words" data-testid="text-monthly-kot">
+                <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Доля Кота</p>
+                  <p className="text-base sm:text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-monthly-kot">
                     {formatCurrency(stats.ownerShares.monthlyKot)}
                   </p>
                 </div>

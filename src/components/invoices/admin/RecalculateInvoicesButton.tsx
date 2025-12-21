@@ -41,18 +41,17 @@ export const RecalculateInvoicesButton = () => {
   return (
     <Button
       variant="outline"
-      size="lg"
       onClick={handleRecalculate}
       disabled={isRecalculating}
       className="border-primary/20"
       data-testid="button-recalculate"
     >
       {isRecalculating ? (
-        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+        <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2 animate-spin" />
       ) : (
-        <Calculator className="h-5 w-5 mr-2" />
+        <Calculator className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
       )}
-      {isRecalculating ? "Пересчитываю..." : "Пересчитать все счета"}
+      <span className="text-xs sm:text-sm">{isRecalculating ? "Пересчитываю..." : "Пересчитать все счета"}</span>
     </Button>
   );
 };

@@ -33,11 +33,11 @@ export const AdminDashboard = () => {
   return (
     <DashboardLayout>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-1">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-1">
           {greeting}, Кот и Кря
         </h1>
-        <p className="text-muted-foreground">Обзор за текущий месяц</p>
+        <p className="text-sm sm:text-base text-muted-foreground">Обзор за текущий месяц</p>
       </div>
 
       {/* Sticky Action Bar */}

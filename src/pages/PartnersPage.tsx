@@ -38,11 +38,11 @@ const PartnersPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Партнёры</h1>
-            <p className="text-muted-foreground">Управление партнёрами и расчётами</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Партнёры</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Управление партнёрами и расчётами</p>
           </div>
           <Button 
             onClick={() => {
@@ -61,14 +61,14 @@ const PartnersPage = () => {
 
         {isAdmin ? (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="debts" className="gap-2" data-testid="tab-debts">
-                <Wallet className="h-4 w-4" />
-                Расчёты (карточки)
+            <TabsList className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+              <TabsTrigger value="debts" className="gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-debts">
+                <Wallet className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Расчёты </span>(карточки)
               </TabsTrigger>
-              <TabsTrigger value="table" className="gap-2" data-testid="tab-table">
-                <Table className="h-4 w-4" />
-                Расчёты (таблица)
+              <TabsTrigger value="table" className="gap-1 sm:gap-2 text-xs sm:text-sm" data-testid="tab-table">
+                <Table className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Расчёты </span>(таблица)
               </TabsTrigger>
             </TabsList>
 

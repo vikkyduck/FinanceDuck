@@ -326,17 +326,19 @@ export const AccessCodesManager = () => {
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <div className="border rounded-lg">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Код</TableHead>
-                    <TableHead>Роль</TableHead>
-                    <TableHead>Привязка</TableHead>
-                    <TableHead>Последнее использование</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <div className="min-w-[500px] px-4 sm:px-0">
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs sm:text-sm">Код</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Роль</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Привязка</TableHead>
+                        <TableHead className="text-xs sm:text-sm">Последнее использование</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
                 <TableBody>
                   {tokens.length === 0 ? (
                     <TableRow>
@@ -370,9 +372,11 @@ export const AccessCodesManager = () => {
                       </TableRow>
                     ))
                   )}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+              </div>
             </div>
+          </div>
           )}
         </CardContent>
       </Card>

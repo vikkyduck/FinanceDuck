@@ -206,13 +206,13 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col w-[95vw] sm:w-full">
         <DialogHeader>
-          <DialogTitle className="text-2xl flex items-center gap-2">
-            <FileSpreadsheet className="h-6 w-6 text-primary" />
+          <DialogTitle className="text-xl sm:text-2xl flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
             Экспорт данных в Excel
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm">
             Выберите какие данные экспортировать и примените фильтры при необходимости.
           </DialogDescription>
         </DialogHeader>
@@ -234,7 +234,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                   {filters.export_types.length === exportTypeOptions.length ? 'Снять все' : 'Выбрать все'}
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {exportTypeOptions.map((type) => {
                   const Icon = type.icon;
                   return (
@@ -280,7 +280,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                   <h3 className="text-sm font-semibold mb-3 text-foreground/90">
                     Фильтр по запланированной дате оплаты
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">От</Label>
                       <DatePicker
@@ -304,7 +304,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                   <h3 className="text-sm font-semibold mb-3 text-foreground/90">
                     Фильтр по фактической дате оплаты
                   </h3>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">От</Label>
                       <DatePicker
@@ -342,7 +342,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                     {filters.statuses.length === statusOptions.length ? 'Снять все' : 'Выбрать все'}
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {statusOptions.map((status) => (
                     <div key={status.value} className="flex items-center space-x-2">
                       <Checkbox

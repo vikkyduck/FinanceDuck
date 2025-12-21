@@ -36,11 +36,11 @@ const ClientsPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Клиенты</h1>
-            <p className="text-muted-foreground">Управление базой клиентов</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Клиенты</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Управление базой клиентов</p>
           </div>
           <Button 
             onClick={() => {

@@ -418,49 +418,50 @@ export const UnifiedInvoicesList = ({
           </div>
         )}
         
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent border-b">
-                {enableDelete && (
-                  <TableHead className="w-[50px]">
-                    <Checkbox
-                      checked={selectedInvoices.length === invoices.length && invoices.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                      aria-label="Выбрать все"
-                    />
-                  </TableHead>
-                )}
-                <TableHead className="font-semibold">Номер</TableHead>
-                <TableHead className="font-semibold">Клиент</TableHead>
-                {(role === 'admin' || role === 'assistant') && (
-                  <TableHead className="font-semibold">Партнёр</TableHead>
-                )}
-                <TableHead className="font-semibold">Сумма</TableHead>
-                {role === 'partner' && (
-                  <>
-                    <TableHead className="font-semibold">Расходы</TableHead>
-                    <TableHead className="font-semibold">Моя доля</TableHead>
-                    <TableHead className="font-semibold">Доля админа</TableHead>
-                    <TableHead className="font-semibold">Остаток</TableHead>
-                  </>
-                )}
-                {role === 'admin' && (
-                  <>
-                    <TableHead className="font-semibold">Расходы</TableHead>
-                    <TableHead className="font-semibold">Прибыль</TableHead>
-                    <TableHead className="font-semibold">Долг партнёра</TableHead>
-                  </>
-                )}
-                <TableHead className="font-semibold">Статус</TableHead>
-                {(role === 'admin' || role === 'assistant') && (
-                  <TableHead className="font-semibold">Комментарий</TableHead>
-                )}
-                <TableHead className="font-semibold">План. дата</TableHead>
-                <TableHead className="font-semibold">Оплачен</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[800px] px-4 sm:px-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-b">
+                  {enableDelete && (
+                    <TableHead className="w-[50px]">
+                      <Checkbox
+                        checked={selectedInvoices.length === invoices.length && invoices.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Выбрать все"
+                      />
+                    </TableHead>
+                  )}
+                  <TableHead className="text-xs sm:text-sm font-semibold">Номер</TableHead>
+                  <TableHead className="text-xs sm:text-sm font-semibold">Клиент</TableHead>
+                  {(role === 'admin' || role === 'assistant') && (
+                    <TableHead className="text-xs sm:text-sm font-semibold">Партнёр</TableHead>
+                  )}
+                  <TableHead className="text-xs sm:text-sm font-semibold">Сумма</TableHead>
+                  {role === 'partner' && (
+                    <>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Расходы</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Моя доля</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Доля админа</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Остаток</TableHead>
+                    </>
+                  )}
+                  {role === 'admin' && (
+                    <>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Расходы</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Прибыль</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Долг партнёра</TableHead>
+                    </>
+                  )}
+                  <TableHead className="text-xs sm:text-sm font-semibold">Статус</TableHead>
+                  {(role === 'admin' || role === 'assistant') && (
+                    <TableHead className="text-xs sm:text-sm font-semibold">Комментарий</TableHead>
+                  )}
+                  <TableHead className="text-xs sm:text-sm font-semibold">План. дата</TableHead>
+                  <TableHead className="text-xs sm:text-sm font-semibold">Оплачен</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
             <TableBody>
               {displayInvoices.map((invoice, index) => {
                 return (
@@ -586,8 +587,9 @@ export const UnifiedInvoicesList = ({
                   </TableRow>
                 );
               })}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
         </div>
         </>
         )}

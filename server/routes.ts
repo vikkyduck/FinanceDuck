@@ -1257,14 +1257,15 @@ export function registerRoutes(app: Express): void {
       if (role === "assistant" || role === "admin") {
         const client = invoiceData.clientId ? await storage.getClient(invoiceData.clientId) : null;
         const partner = invoiceData.partnerId ? await storage.getPartner(invoiceData.partnerId) : null;
-        const invoiceNumber = fullInvoice?.invoiceNumber || invoice.id;
+        const invoiceNumber = fullInvoice?.invoiceNumber;
+        const displayName = invoiceNumber || client?.name || invoice.id;
         
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_invoice",
           entityType: "invoice",
           entityId: invoice.id,
-          description: `Создан счёт: ${invoiceNumber}`,
+          description: `Создан счёт: ${displayName}`,
           details: JSON.stringify({ 
             invoiceNumber,
             clientName: client?.name,
@@ -1442,16 +1443,17 @@ export function registerRoutes(app: Express): void {
       
       // Log action before delete
       if (role === "assistant" || role === "admin") {
-        const invoiceNumber = invoice?.invoiceNumber || id;
+        const invoiceNumber = invoice?.invoiceNumber;
         const clientName = invoice?.clientId ? (await storage.getClient(invoice.clientId))?.name : null;
         const partnerName = invoice?.partnerId ? (await storage.getPartner(invoice.partnerId))?.name : null;
+        const displayName = invoiceNumber || clientName || id;
         
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "delete_invoice",
           entityType: "invoice",
           entityId: id,
-          description: `Удалён счёт: ${invoiceNumber}`,
+          description: `Удалён счёт: ${displayName}`,
           details: JSON.stringify({ 
             invoiceNumber, 
             clientName, 

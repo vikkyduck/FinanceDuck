@@ -147,31 +147,31 @@ export const AdminDashboardMetrics = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-background/50 rounded-lg">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="text-center p-3 sm:p-4 bg-background/50 rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Оборот</p>
               </div>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400" data-testid="text-yearly-revenue">
+              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400 break-words" data-testid="text-yearly-revenue">
                 {formatCurrency(stats.yearlySummary.totalRevenue)}
               </p>
             </div>
-            <div className="text-center p-4 bg-background/50 rounded-lg">
+            <div className="text-center p-3 sm:p-4 bg-background/50 rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Чистая прибыль</p>
               </div>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-yearly-profit">
+              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 break-words" data-testid="text-yearly-profit">
                 {formatCurrency(stats.yearlySummary.totalProfit)}
               </p>
             </div>
-            <div className="text-center p-4 bg-background/50 rounded-lg">
+            <div className="text-center p-3 sm:p-4 bg-background/50 rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <Percent className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Рентабельность</p>
               </div>
-              <p className={`text-2xl font-bold ${stats.yearlySummary.netProfitMargin >= 20 ? 'text-green-600 dark:text-green-400' : stats.yearlySummary.netProfitMargin >= 10 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-yearly-margin">
+              <p className={`text-xl sm:text-2xl font-bold ${stats.yearlySummary.netProfitMargin >= 20 ? 'text-green-600 dark:text-green-400' : stats.yearlySummary.netProfitMargin >= 10 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-yearly-margin">
                 {stats.yearlySummary.netProfitMargin.toFixed(1)}%
               </p>
             </div>
@@ -209,31 +209,31 @@ export const AdminDashboardMetrics = () => {
               Чистая прибыль ({MONTH_NAMES[selectedMonth]})
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
+          <CardContent className="space-y-2 sm:space-y-3">
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-muted-foreground">Получено</span>
-              <span className="font-semibold text-green-600" data-testid="text-cashflow-received">
+              <span className="font-semibold text-green-600 text-sm sm:text-base" data-testid="text-cashflow-received">
                 {formatCurrency(stats.monthlyCashFlow.received)}
               </span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-muted-foreground">Ожидается</span>
-              <span className="font-semibold text-amber-600" data-testid="text-cashflow-expected">
+              <span className="font-semibold text-amber-600 text-sm sm:text-base" data-testid="text-cashflow-expected">
                 {formatCurrency(stats.monthlyCashFlow.expected)}
               </span>
             </div>
             {(stats.monthlyCashFlow.recurring || 0) > 0 && (
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm text-muted-foreground">Регулярные</span>
-                <span className="font-semibold text-blue-600" data-testid="text-cashflow-recurring">
+                <span className="font-semibold text-blue-600 text-sm sm:text-base" data-testid="text-cashflow-recurring">
                   {formatCurrency(stats.monthlyCashFlow.recurring || 0)}
                 </span>
               </div>
             )}
             <div className="pt-2 border-t">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm font-medium">Итого</span>
-                <span className="font-bold" data-testid="text-cashflow-total">
+                <span className="font-bold text-sm sm:text-base" data-testid="text-cashflow-total">
                   {formatCurrency(stats.monthlyCashFlow.received + stats.monthlyCashFlow.expected + (stats.monthlyCashFlow.recurring || 0))}
                 </span>
               </div>
@@ -249,16 +249,16 @@ export const AdminDashboardMetrics = () => {
               Продажи ({MONTH_NAMES[selectedMonth]})
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
+          <CardContent className="space-y-2 sm:space-y-3">
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-muted-foreground">Количество</span>
               <Badge variant="secondary" data-testid="badge-drafts-count">
                 {stats.monthlySales.draftsCount} шт.
               </Badge>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-muted-foreground">Сумма</span>
-              <span className="font-semibold" data-testid="text-drafts-total">
+              <span className="font-semibold text-sm sm:text-base" data-testid="text-drafts-total">
                 {formatCurrency(stats.monthlySales.draftsTotal)}
               </span>
             </div>
@@ -276,9 +276,9 @@ export const AdminDashboardMetrics = () => {
               Коэффициент эффективности
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2 sm:space-y-3">
             <div className="text-center">
-              <p className="text-3xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-efficiency-ratio">
+              <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-efficiency-ratio">
                 {stats.leverage.ratio.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -286,13 +286,13 @@ export const AdminDashboardMetrics = () => {
               </p>
             </div>
             <div className="pt-2 border-t space-y-1 text-sm">
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
                 <span className="text-muted-foreground">Другие партнёры</span>
-                <span data-testid="text-efficiency-others">{formatCurrency(stats.leverage.othersProfit)}</span>
+                <span className="text-sm sm:text-base" data-testid="text-efficiency-others">{formatCurrency(stats.leverage.othersProfit)}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
                 <span className="text-muted-foreground">Вика Уткина</span>
-                <span data-testid="text-efficiency-vika">{formatCurrency(stats.leverage.vikaProfit)}</span>
+                <span className="text-sm sm:text-base" data-testid="text-efficiency-vika">{formatCurrency(stats.leverage.vikaProfit)}</span>
               </div>
             </div>
           </CardContent>
@@ -302,28 +302,28 @@ export const AdminDashboardMetrics = () => {
       {/* Owner Shares Card - Full Width */}
       <Card className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/20" data-testid="card-owner-shares">
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Users className="h-5 w-5 text-amber-600" />
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
             Доли (50/50)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Yearly Shares */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-muted-foreground">
-                За {selectedYear} год (чистая прибыль: {formatCurrency(stats.yearlySummary.totalProfit)})
+            <div className="space-y-2 sm:space-y-3">
+              <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
+                За {selectedYear} год (прибыль: {formatCurrency(stats.yearlySummary.totalProfit)})
               </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-background/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-1">Доля Кря</p>
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-yearly-krya">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кря</p>
+                  <p className="text-lg sm:text-2xl font-bold text-amber-600 dark:text-amber-400 break-words" data-testid="text-yearly-krya">
                     {formatCurrency(stats.ownerShares.yearlyKrya)}
                   </p>
                 </div>
-                <div className="text-center p-4 bg-background/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-1">Доля Кота</p>
-                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-yearly-kot">
+                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кота</p>
+                  <p className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400 break-words" data-testid="text-yearly-kot">
                     {formatCurrency(stats.ownerShares.yearlyKot)}
                   </p>
                 </div>
@@ -331,20 +331,20 @@ export const AdminDashboardMetrics = () => {
             </div>
             
             {/* Monthly Shares */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-muted-foreground">
-                {MONTH_NAMES[selectedMonth]} {selectedYear} (чистая прибыль: {formatCurrency(stats.monthlyProfit)})
+            <div className="space-y-2 sm:space-y-3">
+              <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
+                {MONTH_NAMES[selectedMonth]} (прибыль: {formatCurrency(stats.monthlyProfit)})
               </h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-4 bg-background/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-1">Доля Кря</p>
-                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-monthly-krya">
+              <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кря</p>
+                  <p className="text-lg sm:text-2xl font-bold text-amber-600 dark:text-amber-400 break-words" data-testid="text-monthly-krya">
                     {formatCurrency(stats.ownerShares.monthlyKrya)}
                   </p>
                 </div>
-                <div className="text-center p-4 bg-background/50 rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-1">Доля Кота</p>
-                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-monthly-kot">
+                <div className="text-center p-2 sm:p-4 bg-background/50 rounded-lg">
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">Доля Кота</p>
+                  <p className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400 break-words" data-testid="text-monthly-kot">
                     {formatCurrency(stats.ownerShares.monthlyKot)}
                   </p>
                 </div>

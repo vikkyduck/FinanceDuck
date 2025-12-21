@@ -207,7 +207,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
           <DialogHeader>
             <DialogTitle>Управление партнерами</DialogTitle>
           </DialogHeader>

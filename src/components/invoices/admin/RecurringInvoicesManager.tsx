@@ -165,10 +165,10 @@ export function RecurringInvoicesManager() {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Автоматическое выставление счетов</CardTitle>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Автоматическое выставление счетов</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
           <div className="space-y-4">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
@@ -180,10 +180,10 @@ export function RecurringInvoicesManager() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-2">
           <div className="space-y-1">
-            <CardTitle>Автоматическое выставление счетов</CardTitle>
+            <CardTitle className="text-base sm:text-lg">Автоматическое выставление счетов</CardTitle>
             {dueInvoices.length > 0 && (
               <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
                 <AlertCircle className="h-4 w-4" />
@@ -211,21 +211,21 @@ export function RecurringInvoicesManager() {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
         {recurringInvoices.length === 0 ? (
-          <p className="text-muted-foreground">Нет активных расписаний. Нажмите "Добавить расписание" для создания автоматического выставления счетов.</p>
+          <p className="text-sm sm:text-base text-muted-foreground">Нет активных расписаний. Нажмите "Добавить расписание" для создания автоматического выставления счетов.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {recurringInvoices.map((recurring) => {
               const isDue = new Date(recurring.nextInvoiceDate) <= new Date();
               
               return (
                 <div
                   key={recurring.id}
-                  className={`border rounded-lg p-4 space-y-3 ${isDue && recurring.isActive ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20' : ''}`}
+                  className={`border rounded-lg p-3 sm:p-4 space-y-2 sm:space-y-3 ${isDue && recurring.isActive ? 'border-amber-500 bg-amber-50/50 dark:bg-amber-950/20' : ''}`}
                   data-testid={`recurring-invoice-${recurring.id}`}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{recurring.clients?.name || "Клиент"}</span>

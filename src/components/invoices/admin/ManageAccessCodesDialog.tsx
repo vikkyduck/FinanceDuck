@@ -229,7 +229,7 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto w-[95vw] sm:w-full">
         <DialogHeader>
           <DialogTitle>Управление кодами доступа</DialogTitle>
           <DialogDescription>

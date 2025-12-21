@@ -181,7 +181,7 @@ export const AssistantBonusCard = () => {
       </Card>
 
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg w-[95vw] sm:w-full">
           <DialogHeader>
             <DialogTitle>История выплат бонусов</DialogTitle>
           </DialogHeader>

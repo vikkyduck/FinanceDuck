@@ -289,7 +289,7 @@ export const ActionLogsManager = () => {
   };
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-3 sm:space-y-4 overflow-x-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <Card className="flex-1">
           <CardContent className="py-2 px-3 sm:py-3 sm:px-4">
@@ -299,11 +299,11 @@ export const ActionLogsManager = () => {
                 <span>Фильтры:</span>
               </div>
               
-              <div className="grid grid-cols-3 sm:flex gap-2 sm:gap-4">
-                <div className="space-y-1">
+              <div className="flex flex-wrap gap-2 sm:gap-4">
+                <div className="space-y-1 min-w-0">
                   <Label htmlFor="role-filter" className="text-xs">Роль</Label>
                   <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(0); }}>
-                    <SelectTrigger id="role-filter" className="w-full sm:w-[120px]" data-testid="select-role-filter">
+                    <SelectTrigger id="role-filter" className="w-20 sm:w-[100px]" data-testid="select-role-filter">
                       <SelectValue placeholder="Все" />
                     </SelectTrigger>
                     <SelectContent>
@@ -314,26 +314,26 @@ export const ActionLogsManager = () => {
                   </Select>
                 </div>
                 
-                <div className="space-y-1">
-                  <Label htmlFor="date-from" className="text-xs">С даты</Label>
+                <div className="space-y-1 min-w-0 flex-1 max-w-[120px] sm:max-w-[130px]">
+                  <Label htmlFor="date-from" className="text-xs">С</Label>
                   <Input
                     id="date-from"
                     type="date"
                     value={dateFrom}
                     onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
-                    className="w-full sm:w-[130px]"
+                    className="w-full text-xs sm:text-sm"
                     data-testid="input-date-from"
                   />
                 </div>
                 
-                <div className="space-y-1">
-                  <Label htmlFor="date-to" className="text-xs">По дату</Label>
+                <div className="space-y-1 min-w-0 flex-1 max-w-[120px] sm:max-w-[130px]">
+                  <Label htmlFor="date-to" className="text-xs">По</Label>
                   <Input
                     id="date-to"
                     type="date"
                     value={dateTo}
                     onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
-                    className="w-full sm:w-[130px]"
+                    className="w-full text-xs sm:text-sm"
                     data-testid="input-date-to"
                   />
                 </div>

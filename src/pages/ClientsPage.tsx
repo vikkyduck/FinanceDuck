@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Plus, Users } from "lucide-react";
 import { ManageClientsDialog } from "@/components/invoices/assistant/ManageClientsDialog";
+import { ClientLTVReport } from "@/components/invoices/admin/ClientLTVReport";
 import { useUserRole } from "@/hooks/useUserRole";
 
 const ClientsPage = () => {
@@ -31,10 +32,12 @@ const ClientsPage = () => {
     );
   }
 
+  const isAdmin = role === 'admin';
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Клиенты</h1>
             <p className="text-muted-foreground">Управление базой клиентов</p>
@@ -47,28 +50,35 @@ const ClientsPage = () => {
               setTimeout(() => setIsOpening(false), 500);
             }}
             disabled={isOpening}
+            data-testid="button-manage-clients"
           >
             <Plus className="mr-2 h-4 w-4" />
             Управление клиентами
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              База клиентов
-            </CardTitle>
-            <CardDescription>
-              Просмотр и редактирование информации о клиентах
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Нажмите кнопку "Управление клиентами" для просмотра, добавления или редактирования клиентов.
-            </p>
-          </CardContent>
-        </Card>
+        {isAdmin && (
+          <ClientLTVReport />
+        )}
+
+        {!isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                База клиентов
+              </CardTitle>
+              <CardDescription>
+                Просмотр и редактирование информации о клиентах
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Нажмите кнопку "Управление клиентами" для просмотра, добавления или редактирования клиентов.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <ManageClientsDialog 
           open={manageClientsOpen} 

@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2, FileText } from "lucide-react";
+import { BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AdminInvoicesList } from "./admin/AdminInvoicesList";
-import { ClientLTVReport } from "./admin/ClientLTVReport";
 import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
 import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
 import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
@@ -59,7 +58,6 @@ export const AdminDashboard = () => {
       bonuses: true,
       partnerPayments: true,
       partnerPaymentsTable: false,
-      clientLTV: true,
     }
   );
 
@@ -124,10 +122,6 @@ export const AdminDashboard = () => {
             <TabsTrigger value="team" className="gap-2">
               <UsersIcon className="h-4 w-4" />
               Команда
-            </TabsTrigger>
-            <TabsTrigger value="clients" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Клиенты
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-1 shrink-0">
@@ -235,16 +229,6 @@ export const AdminDashboard = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="clients" className="space-y-6">
-          <CollapsibleSection
-            id="clientLTV"
-            title="LTV клиентов"
-            isExpanded={isExpanded("clientLTV")}
-            onToggle={() => toggleSection("clientLTV")}
-          >
-            <ClientLTVReport />
-          </CollapsibleSection>
-        </TabsContent>
       </Tabs>
 
       <CreateInvoiceDialog 

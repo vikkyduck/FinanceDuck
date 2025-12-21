@@ -202,6 +202,44 @@ export const recurringInvoices = pgTable("recurring_invoices", {
   index("idx_recurring_invoices_active").on(table.isActive),
 ]);
 
+export const assistantActionTypeEnum = pgEnum('assistant_action_type', [
+  'create_invoice',
+  'update_invoice', 
+  'delete_invoice',
+  'create_expense',
+  'update_expense',
+  'delete_expense',
+  'create_client',
+  'update_client',
+  'delete_client',
+  'create_partner',
+  'update_partner',
+  'delete_partner',
+  'upload_act',
+  'delete_act',
+  'create_recurring_invoice',
+  'update_recurring_invoice',
+  'delete_recurring_invoice',
+  'other'
+]);
+
+export const assistantActionLogs = pgTable("assistant_action_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accessTokenId: uuid("access_token_id").references(() => accessTokens.id, { onDelete: 'set null' }),
+  actionType: assistantActionTypeEnum("action_type").notNull(),
+  entityType: text("entity_type"),
+  entityId: uuid("entity_id"),
+  description: text("description").notNull(),
+  details: text("details"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_assistant_action_logs_token").on(table.accessTokenId),
+  index("idx_assistant_action_logs_type").on(table.actionType),
+  index("idx_assistant_action_logs_created").on(table.createdAt),
+]);
+
 export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = typeof partners.$inferInsert;
 export type Client = typeof clients.$inferSelect;
@@ -225,8 +263,11 @@ export type AccessToken = typeof accessTokens.$inferSelect;
 export type UserSession = typeof userSessions.$inferSelect;
 export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
 export type InsertRecurringInvoice = typeof recurringInvoices.$inferInsert;
+export type AssistantActionLog = typeof assistantActionLogs.$inferSelect;
+export type InsertAssistantActionLog = typeof assistantActionLogs.$inferInsert;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
 export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'commission_based';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 export type ActType = 'executor' | 'company';
 export type Frequency = 'monthly' | 'quarterly' | 'yearly';
+export type AssistantActionType = 'create_invoice' | 'update_invoice' | 'delete_invoice' | 'create_expense' | 'update_expense' | 'delete_expense' | 'create_client' | 'update_client' | 'delete_client' | 'create_partner' | 'update_partner' | 'delete_partner' | 'upload_act' | 'delete_act' | 'create_recurring_invoice' | 'update_recurring_invoice' | 'delete_recurring_invoice' | 'other';

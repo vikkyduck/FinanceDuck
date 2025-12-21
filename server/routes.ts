@@ -548,8 +548,8 @@ export function registerRoutes(app: Express): void {
       const role = req.user?.role || "client";
       const partner = await storage.createPartner(req.body);
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_partner",
@@ -578,8 +578,8 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Partner not found" });
       }
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_partner",
@@ -679,8 +679,8 @@ export function registerRoutes(app: Express): void {
       const role = req.user?.role || "client";
       const client = await storage.createClient(req.body);
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_client",
@@ -710,8 +710,8 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Client not found" });
       }
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_client",
@@ -1253,8 +1253,8 @@ export function registerRoutes(app: Express): void {
       const fullInvoice = await storage.getInvoice(invoice.id);
       const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_invoice",
@@ -1294,8 +1294,8 @@ export function registerRoutes(app: Express): void {
       const fullInvoice = await storage.getInvoice(id);
       const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_invoice",
@@ -1336,8 +1336,8 @@ export function registerRoutes(app: Express): void {
         createdBy: req.user!.token.id,
       });
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_expense",
@@ -1366,8 +1366,8 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Expense not found" });
       }
       
-      // Log assistant action
-      if (role === "assistant") {
+      // Log action
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_expense",
@@ -1392,8 +1392,8 @@ export function registerRoutes(app: Express): void {
       const { id } = req.params;
       const role = req.user?.role || "client";
       
-      // Log assistant action before delete
-      if (role === "assistant") {
+      // Log action before delete
+      if (role === "assistant" || role === "admin") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "delete_expense",

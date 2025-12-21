@@ -4480,14 +4480,34 @@ export class DatabaseStorage implements IStorage {
         } catch {}
       }
       
-      // Replace invoice UUID in description with readable name
+      // FIRST: Enrich parsedDetails with names from database (for old logs that only have IDs)
+      if (parsedDetails) {
+        if (parsedDetails.clientId && clientMap.has(parsedDetails.clientId) && !parsedDetails.clientName) {
+          parsedDetails.clientName = clientMap.get(parsedDetails.clientId);
+        }
+        if (parsedDetails.partnerId && partnerMap.has(parsedDetails.partnerId) && !parsedDetails.partnerName) {
+          parsedDetails.partnerName = partnerMap.get(parsedDetails.partnerId);
+        }
+        if (parsedDetails.invoiceId && invoiceMap.has(parsedDetails.invoiceId)) {
+          const invData = invoiceMap.get(parsedDetails.invoiceId)!;
+          if (!parsedDetails.invoiceNumber) parsedDetails.invoiceNumber = invData.number;
+          parsedDetails.invoiceStatus = invData.status;
+        }
+        // Add status from entityId invoice if action is about invoice
+        if (row.log.entityId && invoiceMap.has(row.log.entityId) && !parsedDetails.status) {
+          parsedDetails.invoiceStatus = invoiceMap.get(row.log.entityId)!.status;
+        }
+        enrichedDetails = JSON.stringify(parsedDetails);
+      }
+      
+      // THEN: Replace invoice UUID in description with readable name
       if (row.log.entityId && row.log.entityType === "invoice") {
         // Helper to check if string looks like UUID
         const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
         
         let displayName: string | null = null;
         
-        // First try stored details (captured at action time - most reliable)
+        // Try stored/enriched details (now includes names from DB for old logs)
         if (parsedDetails) {
           displayName = parsedDetails.invoiceNumber || parsedDetails.clientName || parsedDetails.partnerName || parsedDetails.description || null;
         }
@@ -4505,25 +4525,6 @@ export class DatabaseStorage implements IStorage {
         if (displayName && enrichedDescription.includes(row.log.entityId)) {
           enrichedDescription = enrichedDescription.replace(row.log.entityId, displayName);
         }
-      }
-      
-      if (parsedDetails) {
-        if (parsedDetails.clientId && clientMap.has(parsedDetails.clientId)) {
-          parsedDetails.clientName = clientMap.get(parsedDetails.clientId);
-        }
-        if (parsedDetails.partnerId && partnerMap.has(parsedDetails.partnerId)) {
-          parsedDetails.partnerName = partnerMap.get(parsedDetails.partnerId);
-        }
-        if (parsedDetails.invoiceId && invoiceMap.has(parsedDetails.invoiceId)) {
-          const invData = invoiceMap.get(parsedDetails.invoiceId)!;
-          parsedDetails.invoiceNumber = invData.number;
-          parsedDetails.invoiceStatus = invData.status;
-        }
-        // Add status from entityId invoice if action is about invoice
-        if (row.log.entityId && invoiceMap.has(row.log.entityId) && !parsedDetails.status) {
-          parsedDetails.invoiceStatus = invoiceMap.get(row.log.entityId)!.status;
-        }
-        enrichedDetails = JSON.stringify(parsedDetails);
       }
       
       return {

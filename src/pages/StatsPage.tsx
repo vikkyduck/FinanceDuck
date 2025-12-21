@@ -24,7 +24,7 @@ import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Maximize2, Minimize2, BarChart3, Receipt, TrendingUp, ShoppingCart, CalendarRange, Database } from "lucide-react";
+import { Maximize2, Minimize2, BarChart3, Receipt, ShoppingCart, Database } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 const StatsPage = () => {
@@ -138,25 +138,11 @@ const StatsPage = () => {
                 Счета
               </TabsTrigger>
               <TabsTrigger 
-                value="forecast"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-              >
-                <TrendingUp className="h-4 w-4" />
-                Прогноз выручки
-              </TabsTrigger>
-              <TabsTrigger 
                 value="sales"
                 className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
               >
                 <ShoppingCart className="h-4 w-4" />
                 Продажи
-              </TabsTrigger>
-              <TabsTrigger 
-                value="planning"
-                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-              >
-                <CalendarRange className="h-4 w-4" />
-                План-факт
               </TabsTrigger>
               <TabsTrigger 
                 value="backups"
@@ -246,41 +232,18 @@ const StatsPage = () => {
           </AnimatePresence>
 
           <AnimatePresence mode="wait">
-            <TabsContent value="forecast" className="space-y-8 mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <LazyRevenueForecastChart monthsAhead={6} />
-                <RevenueForecastTable />
-              </motion.div>
-            </TabsContent>
-          </AnimatePresence>
-
-          <AnimatePresence mode="wait">
             <TabsContent value="sales" className="space-y-8 mt-8">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
+                className="space-y-8"
               >
+                <LazyRevenueForecastChart monthsAhead={6} />
+                <RevenueForecastTable />
                 <LazySalesStatistics year={selectedYear} />
                 <LazyMonthlySalesChart year={selectedYear} />
-              </motion.div>
-            </TabsContent>
-          </AnimatePresence>
-
-          <AnimatePresence mode="wait">
-            <TabsContent value="planning" className="space-y-8 mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
                 <MonthlyFinancialTable year={selectedYear} />
               </motion.div>
             </TabsContent>

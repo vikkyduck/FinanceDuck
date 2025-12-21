@@ -4482,16 +4482,28 @@ export class DatabaseStorage implements IStorage {
       
       // Replace invoice UUID in description with readable name
       if (row.log.entityId && row.log.entityType === "invoice") {
-        if (invoiceMap.has(row.log.entityId)) {
-          // Invoice exists - use data from database
+        // Helper to check if string looks like UUID
+        const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+        
+        let displayName: string | null = null;
+        
+        // First try stored details (captured at action time - most reliable)
+        if (parsedDetails) {
+          displayName = parsedDetails.invoiceNumber || parsedDetails.clientName || parsedDetails.partnerName || parsedDetails.description || null;
+        }
+        
+        // Fall back to database data if no stored name
+        if (!displayName && invoiceMap.has(row.log.entityId)) {
           const invData = invoiceMap.get(row.log.entityId)!;
-          enrichedDescription = enrichedDescription.replace(row.log.entityId, invData.number);
-        } else if (parsedDetails) {
-          // Invoice deleted - use stored names from details
-          const displayName = parsedDetails.invoiceNumber || parsedDetails.clientName || parsedDetails.description;
-          if (displayName) {
-            enrichedDescription = enrichedDescription.replace(row.log.entityId, displayName);
+          // Only use if it's not a UUID
+          if (!isUUID(invData.number)) {
+            displayName = invData.number;
           }
+        }
+        
+        // Replace UUID in description with readable name
+        if (displayName && enrichedDescription.includes(row.log.entityId)) {
+          enrichedDescription = enrichedDescription.replace(row.log.entityId, displayName);
         }
       }
       

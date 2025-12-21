@@ -1258,7 +1258,7 @@ export function registerRoutes(app: Express): void {
         const client = invoiceData.clientId ? await storage.getClient(invoiceData.clientId) : null;
         const partner = invoiceData.partnerId ? await storage.getPartner(invoiceData.partnerId) : null;
         const invoiceNumber = fullInvoice?.invoiceNumber;
-        const displayName = invoiceNumber || client?.name || invoice.id;
+        const displayName = invoiceNumber || client?.name || partner?.name || fullInvoice?.description || invoice.id;
         
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
@@ -1270,6 +1270,7 @@ export function registerRoutes(app: Express): void {
             invoiceNumber,
             clientName: client?.name,
             partnerName: partner?.name,
+            description: fullInvoice?.description,
             clientBill: invoiceData.clientBill,
             status: invoice.status
           }),
@@ -1308,17 +1309,21 @@ export function registerRoutes(app: Express): void {
       // Log action
       if (role === "assistant" || role === "admin") {
         const client = fullInvoice?.clientId ? await storage.getClient(fullInvoice.clientId) : null;
-        const invoiceNumber = fullInvoice?.invoiceNumber || id;
+        const partner = fullInvoice?.partnerId ? await storage.getPartner(fullInvoice.partnerId) : null;
+        const invoiceNumber = fullInvoice?.invoiceNumber;
+        const displayName = invoiceNumber || client?.name || partner?.name || fullInvoice?.description || id;
         
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_invoice",
           entityType: "invoice",
           entityId: id,
-          description: `Обновлён счёт: ${client?.name || invoiceNumber}`,
+          description: `Обновлён счёт: ${displayName}`,
           details: JSON.stringify({ 
             invoiceNumber,
             clientName: client?.name,
+            partnerName: partner?.name,
+            description: fullInvoice?.description,
             status: fullInvoice?.status,
             ...invoiceData
           }),
@@ -1446,7 +1451,7 @@ export function registerRoutes(app: Express): void {
         const invoiceNumber = invoice?.invoiceNumber;
         const clientName = invoice?.clientId ? (await storage.getClient(invoice.clientId))?.name : null;
         const partnerName = invoice?.partnerId ? (await storage.getPartner(invoice.partnerId))?.name : null;
-        const displayName = invoiceNumber || clientName || id;
+        const displayName = invoiceNumber || clientName || partnerName || invoice?.description || id;
         
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
@@ -1458,6 +1463,7 @@ export function registerRoutes(app: Express): void {
             invoiceNumber, 
             clientName, 
             partnerName,
+            description: invoice?.description,
             clientBill: invoice?.clientBill,
             status: invoice?.status
           }),

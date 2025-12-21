@@ -141,7 +141,7 @@ const AppContent = () => {
         <div className="flex min-h-screen w-full">
           <AppSidebar />
           <div className="flex-1 flex flex-col">
-            <header className="h-12 border-b border-border bg-background/80 backdrop-blur-xl flex items-center px-6 sticky top-0 z-40">
+            <header className="h-12 border-b border-border bg-background/80 backdrop-blur-xl flex items-center px-3 sm:px-4 md:px-6 sticky top-0 z-40">
               <SidebarTrigger />
             </header>
             <main className="flex-1">

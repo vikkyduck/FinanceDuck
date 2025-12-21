@@ -14,10 +14,35 @@ import {
   LazySalesStatistics,
 } from "./StatsPageLazy";
 import { BackupManager } from "@/components/admin/BackupManager";
+import { DoNotSpendDashboard } from "@/components/invoices/admin/DoNotSpendDashboard";
+import { ExpectedAdminProfitDashboard } from "@/components/invoices/admin/ExpectedAdminProfitDashboard";
+import { AdminCashFlowForecast } from "@/components/invoices/admin/AdminCashFlowForecast";
+import { RecurringInvoicesManager } from "@/components/invoices/admin/RecurringInvoicesManager";
+import { AdminInvoicesList } from "@/components/invoices/admin/AdminInvoicesList";
+import { useViewMode } from "@/hooks/useViewMode";
+import { useCollapsibleSections } from "@/hooks/useCollapsibleSections";
+import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Maximize2, Minimize2, BarChart3, Building2, Receipt, TrendingUp, ShoppingCart, CalendarRange, Database } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 const StatsPage = () => {
   const { role, isLoading } = useAuth();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const { viewMode, setViewMode } = useViewMode();
+  const [searchParams] = useSearchParams();
+  const showAlerts = searchParams.get('alerts') === 'true';
+
+  const { isExpanded, toggleSection, expandAll, collapseAll } = useCollapsibleSections(
+    "stats-page-sections",
+    {
+      cashFlow: true,
+      recurringInvoices: true,
+      invoicesList: true,
+    }
+  );
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
@@ -58,7 +83,7 @@ const StatsPage = () => {
               
               <h1 className="text-6xl font-bold tracking-tight">
                 <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Аналитика
+                  Статистика
                 </span>
               </h1>
               
@@ -95,34 +120,160 @@ const StatsPage = () => {
           <OverduePaymentsAlert />
         </div>
 
-        <Tabs defaultValue="forecast" className="space-y-8 animate-fade-in" style={{ animationDelay: '300ms' }}>
-          <TabsList className="glass-strong border border-primary/10 shadow-lg p-1.5 gap-1 h-auto">
-            <TabsTrigger 
-              value="forecast"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
-            >
-              Прогноз выручки
-            </TabsTrigger>
-            <TabsTrigger 
-              value="sales"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
-            >
-              Продажи
-            </TabsTrigger>
-            <TabsTrigger 
-              value="planning"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
-            >
-              План-факт
-            </TabsTrigger>
-            <TabsTrigger 
-              value="backups"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium"
-              data-testid="tab-backups"
-            >
-              Бэкапы
-            </TabsTrigger>
-          </TabsList>
+        <Tabs defaultValue="overview" className="space-y-8 animate-fade-in" style={{ animationDelay: '300ms' }}>
+          <div className="flex items-center justify-between gap-4">
+            <TabsList className="glass-strong border border-primary/10 shadow-lg p-1.5 gap-1 h-auto flex-wrap">
+              <TabsTrigger 
+                value="overview"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+                data-testid="tab-overview"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Сводка
+              </TabsTrigger>
+              <TabsTrigger 
+                value="finances"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+                data-testid="tab-finances"
+              >
+                <Building2 className="h-4 w-4" />
+                Деньги
+              </TabsTrigger>
+              <TabsTrigger 
+                value="invoices"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+                data-testid="tab-invoices"
+              >
+                <Receipt className="h-4 w-4" />
+                Счета
+              </TabsTrigger>
+              <TabsTrigger 
+                value="forecast"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              >
+                <TrendingUp className="h-4 w-4" />
+                Прогноз выручки
+              </TabsTrigger>
+              <TabsTrigger 
+                value="sales"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Продажи
+              </TabsTrigger>
+              <TabsTrigger 
+                value="planning"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              >
+                <CalendarRange className="h-4 w-4" />
+                План-факт
+              </TabsTrigger>
+              <TabsTrigger 
+                value="backups"
+                className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+                data-testid="tab-backups"
+              >
+                <Database className="h-4 w-4" />
+                Бэкапы
+              </TabsTrigger>
+            </TabsList>
+            <div className="flex gap-1 shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={expandAll} data-testid="button-expand-all">
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Развернуть все</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={collapseAll} data-testid="button-collapse-all">
+                    <Minimize2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Свернуть все</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+
+          <AnimatePresence mode="wait">
+            <TabsContent value="overview" className="space-y-6 mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-6"
+              >
+                <DoNotSpendDashboard />
+                <ExpectedAdminProfitDashboard />
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
+
+          <AnimatePresence mode="wait">
+            <TabsContent value="finances" className="space-y-6 mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-6"
+              >
+                <CollapsibleSection
+                  id="cashFlow"
+                  title="Прогноз денежных потоков"
+                  isExpanded={isExpanded("cashFlow")}
+                  onToggle={() => toggleSection("cashFlow")}
+                >
+                  <AdminCashFlowForecast />
+                </CollapsibleSection>
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
+
+          <AnimatePresence mode="wait">
+            <TabsContent value="invoices" className="space-y-6 mt-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-6"
+              >
+                <CollapsibleSection
+                  id="recurringInvoices"
+                  title="Автоматические счета"
+                  isExpanded={isExpanded("recurringInvoices")}
+                  onToggle={() => toggleSection("recurringInvoices")}
+                >
+                  <RecurringInvoicesManager />
+                </CollapsibleSection>
+
+                <CollapsibleSection
+                  id="invoicesList"
+                  title="Все счета"
+                  isExpanded={isExpanded("invoicesList")}
+                  onToggle={() => toggleSection("invoicesList")}
+                  headerActions={
+                    <ViewModeToggle 
+                      value={viewMode}
+                      onValueChange={setViewMode}
+                      className="hidden sm:flex"
+                    />
+                  }
+                >
+                  <div className="px-0 -mx-6">
+                    <AdminInvoicesList 
+                      viewMode={viewMode}
+                      initialStatusFilter={showAlerts ? 'overdue' : undefined}
+                    />
+                  </div>
+                </CollapsibleSection>
+              </motion.div>
+            </TabsContent>
+          </AnimatePresence>
 
           <AnimatePresence mode="wait">
             <TabsContent value="forecast" className="space-y-8 mt-8">

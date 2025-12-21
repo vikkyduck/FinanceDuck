@@ -4404,11 +4404,65 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
 
-    const logs: AssistantActionLogWithDetails[] = logsData.map(row => ({
-      ...row.log,
-      tokenCode: row.tokenCode || undefined,
-      tokenRole: row.tokenRole || undefined,
-    }));
+    // Collect all client and partner IDs from log details
+    const clientIds = new Set<string>();
+    const partnerIds = new Set<string>();
+    
+    for (const row of logsData) {
+      if (row.log.details) {
+        try {
+          const parsed = JSON.parse(row.log.details);
+          if (parsed.clientId) clientIds.add(parsed.clientId);
+          if (parsed.partnerId) partnerIds.add(parsed.partnerId);
+        } catch {}
+      }
+    }
+    
+    // Fetch client and partner names
+    const clientMap = new Map<string, string>();
+    const partnerMap = new Map<string, string>();
+    
+    if (clientIds.size > 0) {
+      const clientsData = await db.select({ id: clients.id, name: clients.name })
+        .from(clients)
+        .where(inArray(clients.id, Array.from(clientIds)));
+      for (const c of clientsData) {
+        clientMap.set(c.id, c.name);
+      }
+    }
+    
+    if (partnerIds.size > 0) {
+      const partnersData = await db.select({ id: partners.id, name: partners.name })
+        .from(partners)
+        .where(inArray(partners.id, Array.from(partnerIds)));
+      for (const p of partnersData) {
+        partnerMap.set(p.id, p.name);
+      }
+    }
+    
+    // Enrich logs with names
+    const logs: AssistantActionLogWithDetails[] = logsData.map(row => {
+      let enrichedDetails = row.log.details;
+      if (row.log.details) {
+        try {
+          const parsed = JSON.parse(row.log.details);
+          if (parsed.clientId && clientMap.has(parsed.clientId)) {
+            parsed.clientName = clientMap.get(parsed.clientId);
+          }
+          if (parsed.partnerId && partnerMap.has(parsed.partnerId)) {
+            parsed.partnerName = partnerMap.get(parsed.partnerId);
+          }
+          enrichedDetails = JSON.stringify(parsed);
+        } catch {}
+      }
+      
+      return {
+        ...row.log,
+        details: enrichedDetails,
+        tokenCode: row.tokenCode || undefined,
+        tokenRole: row.tokenRole || undefined,
+      };
+    });
 
     return {
       logs,

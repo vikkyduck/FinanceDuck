@@ -106,15 +106,14 @@ function formatChangedFields(details: string | null): { field: string; value: st
     const result: { field: string; value: string }[] = [];
     
     const fieldLabels: Record<string, string> = {
-      clientId: "Клиент",
-      partnerId: "Партнёр",
+      clientName: "Клиент",
+      partnerName: "Партнёр",
       amount: "Сумма",
       clientBill: "Счёт клиента",
       description: "Описание",
       status: "Статус",
       paymentDate: "Дата оплаты",
       paidByPartner: "Оплачено партнёром",
-      invoiceId: "ID счёта",
       name: "Название",
       email: "Email",
       phone: "Телефон",
@@ -126,7 +125,7 @@ function formatChangedFields(details: string | null): { field: string; value: st
     const hiddenFields = [
       "partnerCommissionRate", "partnerCommissionFormula", "commissionScheme",
       "partnerPaymentFormula", "clientPaymentFormula", "id", "createdAt", "updatedAt",
-      "accessTokenId", "createdBy"
+      "accessTokenId", "createdBy", "clientId", "partnerId", "invoiceId"
     ];
     
     for (const [key, value] of Object.entries(parsed)) {
@@ -183,11 +182,6 @@ function ActionLogCard({ log }: { log: AssistantActionLogWithDetails }) {
                 className="text-xs"
               >
                 {ROLE_LABELS[log.tokenRole] || log.tokenRole}
-              </Badge>
-            )}
-            {log.tokenCode && (
-              <Badge variant="outline" className="font-mono text-xs">
-                {log.tokenCode}
               </Badge>
             )}
           </div>

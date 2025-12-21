@@ -54,11 +54,11 @@ export const MonthlySalesChart = ({ year }: MonthlySalesChartProps) => {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Продажи по месяцам</CardTitle>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Продажи по месяцам</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="h-80 flex items-end justify-between gap-2 pt-8">
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <div className="h-[240px] sm:h-80 flex items-end justify-between gap-1 sm:gap-2 pt-8">
             {Array.from({ length: 12 }).map((_, i) => (
               <Skeleton 
                 key={i} 
@@ -83,32 +83,37 @@ export const MonthlySalesChart = ({ year }: MonthlySalesChartProps) => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Продажи по месяцам</CardTitle>
-        <p className="text-sm text-muted-foreground">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">Продажи по месяцам</CardTitle>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Сумма новых счетов за {year} год
         </p>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis 
-              dataKey="month" 
-              className="text-xs"
-            />
-            <YAxis 
-              className="text-xs"
-              tickFormatter={(value) => `${(value / 1000).toFixed(0)}к`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend 
-              wrapperStyle={{ paddingTop: "20px" }}
-              formatter={() => "Продано"}
-            />
-            <Bar dataKey="sales" fill="hsl(var(--chart-1))" name="sales" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="h-[280px] sm:h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis 
+                dataKey="month" 
+                className="text-xs"
+                tick={{ fontSize: 10 }}
+              />
+              <YAxis 
+                className="text-xs"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(value) => `${(value / 1000).toFixed(0)}к`}
+                width={35}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend 
+                wrapperStyle={{ paddingTop: "10px", fontSize: '12px' }}
+                formatter={() => "Продано"}
+              />
+              <Bar dataKey="sales" fill="hsl(var(--chart-1))" name="sales" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

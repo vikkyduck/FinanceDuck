@@ -48,11 +48,11 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Детализация по месяцам</CardTitle>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Детализация по месяцам</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="py-8 text-center text-muted-foreground">Загрузка...</div>
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <div className="py-8 text-center text-muted-foreground text-sm">Загрузка...</div>
         </CardContent>
       </Card>
     );
@@ -80,42 +80,44 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Детализация по месяцам</CardTitle>
-        <p className="text-sm text-muted-foreground">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">Детализация по месяцам</CardTitle>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Подробный анализ финансовых показателей за {year} год
         </p>
       </CardHeader>
-      <CardContent>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Месяц</TableHead>
-                <TableHead className="text-right">Продано</TableHead>
-                <TableHead className="text-right">Поступило</TableHead>
-                <TableHead className="text-right">Расходы</TableHead>
-                <TableHead className="text-right">Чистая прибыль</TableHead>
-                <TableHead className="text-right">Рост</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tableData.map((row, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{row.month}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(row.totalSold)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(row.totalReceived)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{formatCurrency(row.expenses)}</TableCell>
-                  <TableCell className="text-right font-semibold text-primary">
-                    {formatCurrency(row.netProfit)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <GrowthIndicator value={row.growthPercent} />
-                  </TableCell>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="rounded-md border overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[600px] px-4 sm:px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs sm:text-sm">Месяц</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Продано</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Поступило</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Расходы</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Чистая прибыль</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Рост</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {tableData.map((row, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="text-xs sm:text-sm font-medium">{row.month}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalSold)}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalReceived)}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right text-muted-foreground">{formatCurrency(row.expenses)}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right font-semibold text-primary">
+                      {formatCurrency(row.netProfit)}
+                    </TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right">
+                      <GrowthIndicator value={row.growthPercent} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </CardContent>
     </Card>

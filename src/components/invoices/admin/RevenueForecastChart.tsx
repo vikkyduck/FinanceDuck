@@ -46,15 +46,15 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Прогноз выручки</CardTitle>
-          <Skeleton className="h-4 w-96" />
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Прогноз выручки</CardTitle>
+          <Skeleton className="h-4 w-48 sm:w-96" />
         </CardHeader>
-        <CardContent>
-          <div className="h-[400px] space-y-4">
-            <div className="flex justify-between items-end h-full">
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <div className="h-[280px] sm:h-[400px] space-y-4">
+            <div className="flex justify-between items-end h-full gap-1 sm:gap-2">
               {[1, 2, 3, 4, 5, 6].map((i) => (
-                <Skeleton key={i} className="w-16" style={{ height: `${Math.random() * 60 + 40}%` }} />
+                <Skeleton key={i} className="flex-1" style={{ height: `${Math.random() * 60 + 40}%` }} />
               ))}
             </div>
           </div>
@@ -71,37 +71,41 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Прогноз выручки</CardTitle>
-        <p className="text-sm text-muted-foreground">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">Прогноз выручки</CardTitle>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Ожидаемые и полученные поступления на следующие {monthsAhead} месяцев
         </p>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="month" className="text-xs" />
-            <YAxis 
-              className="text-xs"
-              tickFormatter={(value) => `${(value / 1000).toFixed(0)}к`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar 
-              dataKey="expected" 
-              name="Ожидается"
-              fill="hsl(var(--chart-1))" 
-              stackId="a"
-            />
-            <Bar 
-              dataKey="received" 
-              name="Получено"
-              fill="hsl(var(--chart-2))" 
-              stackId="a"
-            />
-          </BarChart>
-        </ResponsiveContainer>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="h-[280px] sm:h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 10 }} />
+              <YAxis 
+                className="text-xs"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(value) => `${(value / 1000).toFixed(0)}к`}
+                width={35}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
+              <Bar 
+                dataKey="expected" 
+                name="Ожидается"
+                fill="hsl(var(--chart-1))" 
+                stackId="a"
+              />
+              <Bar 
+                dataKey="received" 
+                name="Получено"
+                fill="hsl(var(--chart-2))" 
+                stackId="a"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

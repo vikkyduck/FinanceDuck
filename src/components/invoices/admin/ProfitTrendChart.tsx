@@ -54,11 +54,11 @@ export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Динамика прибыли</CardTitle>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg">Динамика прибыли</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Skeleton className="h-80 w-full" />
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <Skeleton className="h-[240px] sm:h-80 w-full" />
         </CardContent>
       </Card>
     );
@@ -78,32 +78,36 @@ export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Динамика прибыли</CardTitle>
-        <p className="text-sm text-muted-foreground">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">Динамика прибыли</CardTitle>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Накопительная чистая прибыль за {year} год
         </p>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis dataKey="month" className="text-xs" />
-            <YAxis 
-              className="text-xs"
-              tickFormatter={(value) => `${(value / 1000).toFixed(0)}к`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Line 
-              type="monotone" 
-              dataKey="cumulative" 
-              stroke="hsl(var(--chart-3))" 
-              strokeWidth={3}
-              dot={{ fill: "hsl(var(--chart-3))", r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="h-[280px] sm:h-[400px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 10 }} />
+              <YAxis 
+                className="text-xs"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(value) => `${(value / 1000).toFixed(0)}к`}
+                width={35}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              <Line 
+                type="monotone" 
+                dataKey="cumulative" 
+                stroke="hsl(var(--chart-3))" 
+                strokeWidth={2}
+                dot={{ fill: "hsl(var(--chart-3))", r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   );

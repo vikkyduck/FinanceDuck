@@ -136,15 +136,17 @@ export const ExpectedCommissionDashboard = ({
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent border-green-200/50 dark:border-green-800/30">
-            <TableHead className="text-xs w-8"></TableHead>
-            <TableHead className="text-xs">{role === 'partner' ? 'Клиент' : 'Партнёр'}</TableHead>
-            <TableHead className="text-xs text-center">Счетов</TableHead>
-            <TableHead className="text-xs text-right">Ожидается</TableHead>
-          </TableRow>
-        </TableHeader>
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="min-w-[350px] px-4 sm:px-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent border-green-200/50 dark:border-green-800/30">
+                <TableHead className="text-xs w-8"></TableHead>
+                <TableHead className="text-xs">{role === 'partner' ? 'Клиент' : 'Партнёр'}</TableHead>
+                <TableHead className="text-xs text-center">Счетов</TableHead>
+                <TableHead className="text-xs text-right">Ожидается</TableHead>
+              </TableRow>
+            </TableHeader>
         <TableBody>
           {summaries.map((summary) => {
             const isExpanded = expandedPartners.has(summary.partnerId);
@@ -215,8 +217,10 @@ export const ExpectedCommissionDashboard = ({
               </Fragment>
             );
           })}
-        </TableBody>
-      </Table>
+          </TableBody>
+        </Table>
+      </div>
+    </div>
 
       <div className="mt-4 pt-4 border-t border-green-200/50 dark:border-green-800/30">
         <div className="flex items-center justify-between text-sm flex-wrap gap-2">

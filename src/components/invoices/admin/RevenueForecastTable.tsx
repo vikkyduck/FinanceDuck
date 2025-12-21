@@ -68,45 +68,49 @@ export const RevenueForecastTable = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Детализация прогноза выручки</CardTitle>
-        <p className="text-sm text-muted-foreground">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">Детализация прогноза выручки</CardTitle>
+        <p className="text-xs sm:text-sm text-muted-foreground">
           Помесячная разбивка ожидаемых и полученных средств
         </p>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Месяц</TableHead>
-              <TableHead className="text-right">Ожидается</TableHead>
-              <TableHead className="text-right">Получено</TableHead>
-              <TableHead className="text-right font-semibold">Итого</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tableData.map((row, index) => (
-              <TableRow key={index}>
-                <TableCell className="font-medium">{row.month}</TableCell>
-                <TableCell className="text-right text-chart-1">
-                  {formatCurrency(row.expected)}
-                </TableCell>
-                <TableCell className="text-right text-chart-2">
-                  {formatCurrency(row.received)}
-                </TableCell>
-                <TableCell className="text-right font-semibold">
-                  {formatCurrency(row.total)}
-                </TableCell>
-              </TableRow>
-            ))}
-            <TableRow className="bg-muted/50 font-semibold">
-              <TableCell>Итого</TableCell>
-              <TableCell className="text-right">{formatCurrency(totals.expected)}</TableCell>
-              <TableCell className="text-right">{formatCurrency(totals.received)}</TableCell>
-              <TableCell className="text-right">{formatCurrency(totals.total)}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[400px] px-4 sm:px-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs sm:text-sm">Месяц</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Ожидается</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right">Получено</TableHead>
+                  <TableHead className="text-xs sm:text-sm text-right font-semibold">Итого</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableData.map((row, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="text-xs sm:text-sm font-medium">{row.month}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right text-chart-1">
+                      {formatCurrency(row.expected)}
+                    </TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right text-chart-2">
+                      {formatCurrency(row.received)}
+                    </TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right font-semibold">
+                      {formatCurrency(row.total)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-muted/50 font-semibold">
+                  <TableCell className="text-xs sm:text-sm">Итого</TableCell>
+                  <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(totals.expected)}</TableCell>
+                  <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(totals.received)}</TableCell>
+                  <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(totals.total)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

@@ -191,17 +191,19 @@ export const DoNotSpendDashboard = ({
             </div>
           )}
 
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent border-amber-200/50 dark:border-amber-800/30">
-                <TableHead className="text-xs w-8"></TableHead>
-                <TableHead className="text-xs">Клиент</TableHead>
-                <TableHead className="text-xs text-center">Счетов</TableHead>
-                <TableHead className="text-xs text-right">Бюджет (70%)</TableHead>
-                <TableHead className="text-xs text-right">Потрачено</TableHead>
-                <TableHead className="text-xs text-right">Остаток</TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[500px] px-4 sm:px-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent border-amber-200/50 dark:border-amber-800/30">
+                    <TableHead className="text-xs w-8"></TableHead>
+                    <TableHead className="text-xs">Клиент</TableHead>
+                    <TableHead className="text-xs text-center">Счетов</TableHead>
+                    <TableHead className="text-xs text-right">Бюджет</TableHead>
+                    <TableHead className="text-xs text-right">Потрачено</TableHead>
+                    <TableHead className="text-xs text-right">Остаток</TableHead>
+                  </TableRow>
+                </TableHeader>
             <TableBody>
               {summaries.map((summary) => {
                 const isExpanded = expandedClients.has(summary.clientId);
@@ -291,8 +293,10 @@ export const DoNotSpendDashboard = ({
                   </Fragment>
                 );
               })}
-            </TableBody>
-          </Table>
+              </TableBody>
+            </Table>
+          </div>
+        </div>
 
           <div className="mt-4 pt-4 border-t border-amber-200/50 dark:border-amber-800/30">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm gap-2">
@@ -339,17 +343,19 @@ export const DoNotSpendDashboard = ({
             </div>
           </div>
 
-          <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
-                  <TableHead className="text-xs w-8"></TableHead>
-                  <TableHead className="text-xs">Партнёр</TableHead>
-                  <TableHead className="text-xs text-center">Счетов</TableHead>
-                  <TableHead className="text-xs text-right">План. расходы</TableHead>
-                  <TableHead className="text-xs text-right">Потрачено</TableHead>
-                  <TableHead className="text-xs text-right">Остаток</TableHead>
-                </TableRow>
-              </TableHeader>
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="min-w-[500px] px-4 sm:px-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
+                    <TableHead className="text-xs w-8"></TableHead>
+                    <TableHead className="text-xs">Партнёр</TableHead>
+                    <TableHead className="text-xs text-center">Счетов</TableHead>
+                    <TableHead className="text-xs text-right">План. расходы</TableHead>
+                    <TableHead className="text-xs text-right">Потрачено</TableHead>
+                    <TableHead className="text-xs text-right">Остаток</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {partnerSchemeSummaries.map((summary) => {
                   const isExpanded = expandedPartners.has(summary.partnerId);
@@ -439,8 +445,10 @@ export const DoNotSpendDashboard = ({
                     </Fragment>
                   );
                 })}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
+          </div>
 
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm gap-2">

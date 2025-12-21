@@ -101,11 +101,11 @@ export const AdminCashFlowForecast = () => {
   if (loading) {
     return (
       <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-48" />
+        <CardHeader className="p-4 sm:p-6">
+          <Skeleton className="h-5 sm:h-6 w-40 sm:w-48" />
         </CardHeader>
-        <CardContent>
-          <Skeleton className="h-64 w-full" />
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+          <Skeleton className="h-48 sm:h-64 w-full" />
         </CardContent>
       </Card>
     );
@@ -125,33 +125,33 @@ export const AdminCashFlowForecast = () => {
       transition={{ duration: 0.3 }}
     >
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
             Прогноз чистой прибыли
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-xs sm:text-sm">
             Прогноз чистой прибыли на следующие 6 месяцев
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <DollarSign className="h-4 w-4" />
-                Текущий баланс
+        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4 sm:space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
+            <div className="p-3 sm:p-4 rounded-lg bg-primary/5 border border-primary/20">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="truncate">Текущий баланс</span>
               </div>
-              <p className="text-2xl font-bold text-primary">
+              <p className="text-lg sm:text-2xl font-bold text-primary break-words">
                 {formatCurrency(currentBalance)}
               </p>
             </div>
             
-            <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <TrendingUp className="h-4 w-4" />
-                Средний приход/мес
+            <div className="p-3 sm:p-4 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="truncate">Приход/мес</span>
               </div>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+              <p className="text-lg sm:text-2xl font-bold text-green-600 dark:text-green-400 break-words">
                 {formatCurrency(
                   forecast.length > 0 
                     ? forecast.reduce((sum, m) => sum + m.totalExpected, 0) / forecast.length
@@ -160,12 +160,12 @@ export const AdminCashFlowForecast = () => {
               </p>
             </div>
             
-            <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <Calendar className="h-4 w-4" />
-                Recurring/мес
+            <div className="p-3 sm:p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="truncate">Recurring/мес</span>
               </div>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              <p className="text-lg sm:text-2xl font-bold text-blue-600 dark:text-blue-400 break-words">
                 {formatCurrency(
                   forecast.length > 0 
                     ? forecast.reduce((sum, m) => sum + m.recurringIncome, 0) / forecast.length
@@ -174,12 +174,12 @@ export const AdminCashFlowForecast = () => {
               </p>
             </div>
             
-            <div className="p-4 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                <TrendingDown className="h-4 w-4" />
-                Средний расход/мес
+            <div className="p-3 sm:p-4 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground mb-1">
+                <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                <span className="truncate">Расход/мес</span>
               </div>
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+              <p className="text-lg sm:text-2xl font-bold text-orange-600 dark:text-orange-400 break-words">
                 {formatCurrency(
                   forecast.length > 0
                     ? forecast.reduce((sum, m) => sum + m.expectedExpenses, 0) / forecast.length
@@ -190,13 +190,13 @@ export const AdminCashFlowForecast = () => {
           </div>
 
           {(hasNegativeFlow || hasNegativeBalance) && (
-            <div className="p-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <div className="p-3 sm:p-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 flex items-start gap-2 sm:gap-3">
+              <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold text-red-900 dark:text-red-100">
+                <p className="font-semibold text-sm sm:text-base text-red-900 dark:text-red-100">
                   Внимание: прогнозируется отрицательный баланс
                 </p>
-                <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                <p className="text-xs sm:text-sm text-red-700 dark:text-red-300 mt-1">
                   Рекомендуется ускорить получение платежей от клиентов или
                   отложить выплаты партнерам
                 </p>
@@ -204,22 +204,23 @@ export const AdminCashFlowForecast = () => {
             </div>
           )}
 
-          <div className="h-80">
+          <div className="h-[280px] sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={forecast}>
+              <ComposedChart data={forecast} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="month"
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 10 }}
                   angle={-45}
                   textAnchor="end"
-                  height={80}
+                  height={60}
                 />
                 <YAxis
-                  tick={{ fontSize: 12 }}
+                  tick={{ fontSize: 10 }}
                   tickFormatter={(value) =>
                     `${(value / 1000).toFixed(0)}K`
                   }
+                  width={35}
                 />
                 <Tooltip
                   formatter={(value: number) => formatCurrency(value)}
@@ -227,9 +228,10 @@ export const AdminCashFlowForecast = () => {
                     backgroundColor: "rgba(255, 255, 255, 0.95)",
                     border: "1px solid #ccc",
                     borderRadius: "8px",
+                    fontSize: "12px",
                   }}
                 />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
                 
                 <Area
                   type="monotone"
@@ -276,8 +278,8 @@ export const AdminCashFlowForecast = () => {
           </div>
 
           <div className="space-y-2">
-            <h4 className="font-semibold flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
+            <h4 className="font-semibold flex items-center gap-2 text-sm sm:text-base">
+              <Calendar className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
               Помесячная детализация
             </h4>
             <div className="space-y-2">
@@ -287,21 +289,21 @@ export const AdminCashFlowForecast = () => {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className={`p-3 rounded-lg border ${
+                  className={`p-2 sm:p-3 rounded-lg border ${
                     month.netFlow < 0
                       ? "border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/30"
                       : "border-border bg-muted/30"
                   }`}
                 >
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <span className="font-medium">{month.month}</span>
-                    <div className="flex items-center gap-4 text-sm flex-wrap">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
+                    <span className="font-medium text-sm sm:text-base">{month.month}</span>
+                    <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap">
                       <span className="text-green-600 dark:text-green-400">
                         +{formatCurrency(month.expectedIncome)}
                       </span>
                       {month.recurringIncome > 0 && (
                         <span className="text-blue-600 dark:text-blue-400">
-                          +{formatCurrency(month.recurringIncome)} (recurring)
+                          +{formatCurrency(month.recurringIncome)}
                         </span>
                       )}
                       <span className="text-orange-600 dark:text-orange-400">
@@ -315,7 +317,7 @@ export const AdminCashFlowForecast = () => {
                         {month.netFlow >= 0 ? "+" : ""}
                         {formatCurrency(month.netFlow)}
                       </span>
-                      <span className="text-muted-foreground">
+                      <span className="text-muted-foreground hidden sm:inline">
                         Баланс: {formatCurrency(month.cumulativeBalance)}
                       </span>
                     </div>

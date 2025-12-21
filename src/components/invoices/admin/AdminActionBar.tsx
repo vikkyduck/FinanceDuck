@@ -18,7 +18,7 @@ export const AdminActionBar = ({
   onManageAccessCodes,
 }: AdminActionBarProps) => {
   return (
-    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b py-3 sm:py-4 -mx-4 px-4 sm:-mx-6 sm:px-6 mb-4 sm:mb-6 overflow-x-hidden">
+    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b py-3 sm:py-4 mb-4 sm:mb-6">
       <div className="flex flex-wrap gap-2 sm:gap-3">
         {/* Primary Actions */}
         <Button onClick={onCreateInvoice} className="shadow-sm">

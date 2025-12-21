@@ -50,7 +50,7 @@ export const PartnerDebtCard = ({
     >
       <div 
         className={cn(
-          "p-5 cursor-pointer",
+          "p-4 sm:p-5 cursor-pointer",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-xl"
         )}
         onClick={onExpand}
@@ -60,19 +60,19 @@ export const PartnerDebtCard = ({
         aria-expanded={isExpanded}
         aria-label={`Просмотр долга партнёра ${summary.partner_name}`}
       >
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <User className="h-5 w-5 text-primary" />
+        <div className="flex items-start justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <User className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
             <div className="min-w-0">
               <div 
-                className="text-[17px] font-semibold text-foreground truncate"
+                className="text-sm sm:text-[17px] font-semibold text-foreground truncate"
                 style={{ letterSpacing: "-0.2px" }}
               >
                 {summary.partner_name}
               </div>
-              <div className="text-[13px] text-muted-foreground">
+              <div className="text-xs sm:text-[13px] text-muted-foreground">
                 {summary.invoice_count} {summary.invoice_count === 1 ? 'счёт' : 
                   summary.invoice_count < 5 ? 'счёта' : 'счетов'}
               </div>
@@ -102,27 +102,27 @@ export const PartnerDebtCard = ({
           )}
         </div>
         
-        <div className="space-y-3">
-          <div className="flex justify-between items-center text-[15px]">
+        <div className="space-y-2 sm:space-y-3">
+          <div className="flex justify-between items-center text-xs sm:text-[15px] gap-2">
             <span className="text-muted-foreground">Общий долг</span>
-            <span className="font-semibold text-foreground">
+            <span className="font-semibold text-foreground break-words text-right">
               {formatCurrency(summary.total_to_transfer)}
             </span>
           </div>
           
-          <div className="flex justify-between items-center text-[15px]">
+          <div className="flex justify-between items-center text-xs sm:text-[15px] gap-2">
             <span className="text-muted-foreground">Оплачено</span>
-            <span className="font-semibold" style={{ color: "#34C759" }}>
+            <span className="font-semibold break-words text-right" style={{ color: "#34C759" }}>
               {formatCurrency(summary.total_paid)}
             </span>
           </div>
           
-          <div className="flex justify-between items-center text-[15px]">
+          <div className="flex justify-between items-center text-xs sm:text-[15px] gap-2">
             <span className="text-muted-foreground">
               {hasOverpayment ? "Переплата" : "Остаток"}
             </span>
             <span 
-              className="font-semibold" 
+              className="font-semibold break-words text-right" 
               style={{ color: summary.remaining > 0 ? "#FF3B30" : hasOverpayment ? "#007AFF" : "#34C759" }}
             >
               {hasOverpayment 

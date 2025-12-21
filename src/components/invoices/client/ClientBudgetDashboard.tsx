@@ -98,24 +98,24 @@ export const ClientBudgetDashboard = () => {
               className="p-4 rounded-md border bg-card"
               data-testid={`project-budget-${project.invoiceId}`}
             >
-              <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
-                <div>
-                  <h3 className="font-medium flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4 mb-3">
+                <div className="min-w-0">
+                  <h3 className="font-medium flex items-center gap-2 text-sm sm:text-base">
                     Счёт № {project.invoiceNumber}
                     {isOverBudget && (
-                      <AlertCircle className="h-4 w-4 text-destructive" />
+                      <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
                     )}
                     {!isOverBudget && !isLowBudget && (
-                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
                     )}
                   </h3>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Партнёр: {project.partnerName}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Бюджет</p>
-                  <p className="font-semibold">{formatCurrency(project.totalBudget)}</p>
+                <div className="text-left sm:text-right">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Бюджет</p>
+                  <p className="font-semibold text-sm sm:text-base break-words">{formatCurrency(project.totalBudget)}</p>
                 </div>
               </div>
 
@@ -131,13 +131,13 @@ export const ClientBudgetDashboard = () => {
                 }
               />
 
-              <div className="flex items-center justify-between gap-2 text-sm flex-wrap">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 text-xs sm:text-sm">
                 <div className="flex items-center gap-1">
-                  <TrendingDown className="h-4 w-4 text-muted-foreground" />
+                  <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
                   <span className="text-muted-foreground">Потрачено:</span>
-                  <span className="font-medium">{formatCurrency(project.spent)}</span>
+                  <span className="font-medium break-words">{formatCurrency(project.spent)}</span>
                 </div>
-                <div className={`font-medium ${isOverBudget ? "text-destructive" : "text-green-600"}`}>
+                <div className={`font-medium break-words ${isOverBudget ? "text-destructive" : "text-green-600"}`}>
                   Остаток: {formatCurrency(project.remaining)}
                 </div>
               </div>

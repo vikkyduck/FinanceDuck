@@ -104,19 +104,19 @@ export const ExpectedCommissionDashboard = ({
     <div
       className={cn(
         "bg-green-50/50 dark:bg-green-950/20 border border-green-200/50 dark:border-green-800/30",
-        "rounded-2xl p-6 shadow-standard",
+        "rounded-2xl p-4 sm:p-6 shadow-standard",
         className
       )}
       data-testid="expected-commission-dashboard"
     >
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
-            <Clock className="h-5 w-5 text-green-600 dark:text-green-400" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="p-1.5 sm:p-2 bg-green-100 dark:bg-green-900/50 rounded-lg shrink-0">
+            <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h3
-              className="text-[18px] font-semibold text-foreground"
+              className="text-sm sm:text-[18px] font-semibold text-foreground"
               style={{ letterSpacing: "-0.2px" }}
             >
               {titleText}
@@ -126,10 +126,10 @@ export const ExpectedCommissionDashboard = ({
             </p>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-left sm:text-right">
           <Badge 
             variant="outline" 
-            className="text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 bg-green-100/50 dark:bg-green-900/30"
+            className="text-green-700 dark:text-green-400 border-green-300 dark:border-green-700 bg-green-100/50 dark:bg-green-900/30 text-xs sm:text-sm"
           >
             {formatCurrency(totalExpected)}
           </Badge>

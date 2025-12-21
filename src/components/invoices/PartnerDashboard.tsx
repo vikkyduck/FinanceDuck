@@ -307,7 +307,7 @@ export const PartnerDashboard = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               <Card 
                 className={cn(
                   "border-2 transition-all duration-200",
@@ -319,14 +319,14 @@ export const PartnerDashboard = () => {
                 onClick={() => canExpand && setShowDebtDetails(!showDebtDetails)}
                 data-testid="card-debt-to-admin"
               >
-                <CardContent className="p-5">
+                <CardContent className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground">
+                    <div className="flex-1 space-y-1 sm:space-y-2 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                         {hasOverpayment ? "Ваш баланс" : "К оплате"}
                       </p>
                       <p className={cn(
-                        "text-3xl font-semibold tracking-tight",
+                        "text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight break-words",
                         hasDebt ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"
                       )} data-testid="text-debt-amount">
                         {hasOverpayment ? `+${formatCurrency(overpayment)}` : formatCurrency(remainingDebt)}
@@ -340,20 +340,20 @@ export const PartnerDashboard = () => {
                       </p>
                     </div>
                     <div className={cn(
-                      "p-2.5 rounded-full",
+                      "p-2 sm:p-2.5 rounded-full shrink-0",
                       hasDebt 
                         ? "bg-red-100 dark:bg-red-900/30" 
                         : "bg-green-100 dark:bg-green-900/30"
                     )}>
                       {hasDebt ? (
-                        <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                        <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 dark:text-red-400" />
                       ) : (
-                        <ArrowUpRight className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 dark:text-green-400" />
                       )}
                     </div>
                   </div>
                   {canExpand && (
-                    <div className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 mt-2 sm:mt-3 text-xs text-muted-foreground">
                       {showDebtDetails ? (
                         <ChevronDown className="h-3.5 w-3.5" />
                       ) : (
@@ -366,69 +366,69 @@ export const PartnerDashboard = () => {
               </Card>
 
               <Card className="transition-all duration-200 hover:shadow-md" data-testid="card-reserved-expenses">
-                <CardContent className="p-5">
+                <CardContent className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground">
+                    <div className="flex-1 space-y-1 sm:space-y-2 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                         Резерв
                       </p>
-                      <p className="text-3xl font-semibold tracking-tight text-blue-600 dark:text-blue-400" data-testid="text-reserved-amount">
+                      <p className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-blue-600 dark:text-blue-400 break-words" data-testid="text-reserved-amount">
                         {formatCurrency(metrics.reservedForExpenses)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         На расходы по проектам
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-full bg-blue-100 dark:bg-blue-900/30">
-                      <Wallet className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <div className="p-2 sm:p-2.5 rounded-full bg-blue-100 dark:bg-blue-900/30 shrink-0">
+                      <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card className="transition-all duration-200 hover:shadow-md" data-testid="card-yearly-commission">
-                <CardContent className="p-5">
+                <CardContent className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground">
+                    <div className="flex-1 space-y-1 sm:space-y-2 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                         Заработано
                       </p>
-                      <p className="text-3xl font-semibold tracking-tight text-primary" data-testid="text-commission-amount">
+                      <p className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-primary break-words" data-testid="text-commission-amount">
                         {formatCurrency(metrics.yearlyCommission)}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         За {currentYear} год
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-full bg-primary/10">
-                      <TrendingUp className="h-5 w-5 text-primary" />
+                    <div className="p-2 sm:p-2.5 rounded-full bg-primary/10 shrink-0">
+                      <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card className="transition-all duration-200 hover:shadow-md" data-testid="card-signed-acts">
-                <CardContent className="p-5">
+                <CardContent className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground">
+                    <div className="flex-1 space-y-1 sm:space-y-2 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                         Акты
                       </p>
-                      <p className="text-3xl font-semibold tracking-tight" data-testid="text-acts-count">
-                        {metrics.signedActsCount}<span className="text-lg text-muted-foreground font-normal"> / {metrics.totalPaidInvoices}</span>
+                      <p className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight" data-testid="text-acts-count">
+                        {metrics.signedActsCount}<span className="text-sm sm:text-lg text-muted-foreground font-normal"> / {metrics.totalPaidInvoices}</span>
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {actsPercentage === 100 ? "Все подписаны" : `${actsPercentage}% подписано`}
                       </p>
                     </div>
                     <div className={cn(
-                      "p-2.5 rounded-full",
+                      "p-2 sm:p-2.5 rounded-full shrink-0",
                       actsPercentage === 100 
                         ? "bg-green-100 dark:bg-green-900/30" 
                         : "bg-amber-100 dark:bg-amber-900/30"
                     )}>
                       <FileCheck className={cn(
-                        "h-5 w-5",
+                        "h-4 w-4 sm:h-5 sm:w-5",
                         actsPercentage === 100 
                           ? "text-green-600 dark:text-green-400" 
                           : "text-amber-600 dark:text-amber-400"
@@ -447,11 +447,11 @@ export const PartnerDashboard = () => {
                   : "border-green-200/50 dark:border-green-800/30 bg-green-50/30 dark:bg-green-950/10"
               )}>
                 <CardContent className="p-5 space-y-4">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-muted-foreground">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 flex-wrap">
+                    <p className="text-xs sm:text-sm font-medium text-muted-foreground">
                       {hasOverpayment ? "Детали переплаты" : "Детали долга"}
                     </p>
-                    <div className="flex items-center gap-4 text-sm">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm">
                       <div>
                         <span className="text-muted-foreground">Начислено: </span>
                         <span className="font-semibold">{formatCurrency(debtDetails.summary.totalDebt)}</span>

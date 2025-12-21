@@ -85,26 +85,26 @@ export const PartnerDebtDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xl font-semibold">Расчёты с партнёрами</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-lg sm:text-xl font-semibold">Расчёты с партнёрами</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             {partnersWithDebt.length} из {summaries.length} партнёров с активным долгом
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground">Общий долг</div>
-            <div className="text-lg font-semibold">{formatCurrency(totalDebt)}</div>
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center sm:gap-4 w-full sm:w-auto">
+          <div className="text-left sm:text-right">
+            <div className="text-xs sm:text-sm text-muted-foreground">Общий долг</div>
+            <div className="text-sm sm:text-lg font-semibold break-words">{formatCurrency(totalDebt)}</div>
           </div>
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground">Оплачено</div>
-            <div className="text-lg font-semibold text-green-600">{formatCurrency(totalPaid)}</div>
+          <div className="text-left sm:text-right">
+            <div className="text-xs sm:text-sm text-muted-foreground">Оплачено</div>
+            <div className="text-sm sm:text-lg font-semibold text-green-600 break-words">{formatCurrency(totalPaid)}</div>
           </div>
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground">Остаток</div>
-            <div className="text-lg font-semibold text-red-600">{formatCurrency(totalRemaining)}</div>
+          <div className="text-left sm:text-right">
+            <div className="text-xs sm:text-sm text-muted-foreground">Остаток</div>
+            <div className="text-sm sm:text-lg font-semibold text-red-600 break-words">{formatCurrency(totalRemaining)}</div>
           </div>
           <Button
             variant="outline"
@@ -119,7 +119,7 @@ export const PartnerDebtDashboard = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         {summaries.map((summary, index) => (
           <div 
             key={summary.partnerId} 

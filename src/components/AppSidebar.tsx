@@ -2,12 +2,12 @@ import {
   FileText, 
   Users, 
   Building, 
-  Key, 
   BarChart3, 
   LogOut, 
   Home,
   TrendingDown,
-  UserCheck
+  UserCheck,
+  Settings
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -130,7 +130,7 @@ export function AppSidebar() {
       groups.push({
         label: "Система",
         items: [
-          { title: "Коды доступа", url: "/access-codes", icon: Key },
+          { title: "Система", url: "/access-codes", icon: Settings },
         ]
       });
     }

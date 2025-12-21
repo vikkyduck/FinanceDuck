@@ -12,7 +12,6 @@ import {
   LazyRevenueForecastChart,
   LazySalesStatistics,
 } from "./StatsPageLazy";
-import { BackupManager } from "@/components/admin/BackupManager";
 import { DoNotSpendDashboard } from "@/components/invoices/admin/DoNotSpendDashboard";
 import { ExpectedAdminProfitDashboard } from "@/components/invoices/admin/ExpectedAdminProfitDashboard";
 import { RecurringInvoicesManager } from "@/components/invoices/admin/RecurringInvoicesManager";
@@ -23,7 +22,7 @@ import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Maximize2, Minimize2, BarChart3, Receipt, ShoppingCart, Database } from "lucide-react";
+import { Maximize2, Minimize2, BarChart3, Receipt, ShoppingCart } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 const StatsPage = () => {
@@ -114,14 +113,6 @@ const StatsPage = () => {
             >
               <ShoppingCart className="h-4 w-4" />
               Продажи
-            </TabsTrigger>
-            <TabsTrigger 
-              value="backups"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
-              data-testid="tab-backups"
-            >
-              <Database className="h-4 w-4" />
-              Бэкапы
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-1 shrink-0">
@@ -216,19 +207,6 @@ const StatsPage = () => {
                 <LazySalesStatistics year={selectedYear} />
                 <LazyMonthlySalesChart year={selectedYear} />
                 <MonthlyFinancialTable year={selectedYear} />
-              </motion.div>
-            </TabsContent>
-          </AnimatePresence>
-
-          <AnimatePresence mode="wait">
-            <TabsContent value="backups" className="space-y-8 mt-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <BackupManager />
               </motion.div>
             </TabsContent>
           </AnimatePresence>

@@ -44,12 +44,13 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
 
   const handleNavigation = useCallback((url: string) => {
-    if (isNavigating || location.pathname === url) return;
+    const currentFullPath = location.pathname + location.search;
+    if (isNavigating || currentFullPath === url) return;
     
     setIsNavigating(true);
     navigate(url);
     setTimeout(() => setIsNavigating(false), 300);
-  }, [isNavigating, location.pathname, navigate]);
+  }, [isNavigating, location.pathname, location.search, navigate]);
 
   const handleSignOut = useCallback(() => {
     if (isNavigating) return;
@@ -143,7 +144,13 @@ export function AppSidebar() {
   };
 
   const menuGroups = getMenuGroups();
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => {
+    const currentFullPath = location.pathname + location.search;
+    if (path.includes('?')) {
+      return currentFullPath === path;
+    }
+    return location.pathname === path && !location.search;
+  };
   
   const totalAlerts = alertCounts.overdueInvoices;
 

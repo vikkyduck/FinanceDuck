@@ -55,8 +55,7 @@ const AccessCodesPage = () => {
           <TabsList className="w-full sm:w-auto flex-wrap h-auto gap-1 p-1">
             <TabsTrigger value="access-codes" className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none" data-testid="tab-access-codes">
               <Key className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              <span className="hidden xs:inline">Коды</span>
-              <span className="xs:hidden">Коды</span>
+              <span>Коды</span>
             </TabsTrigger>
             <TabsTrigger value="backups" className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none" data-testid="tab-backups">
               <Database className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -64,8 +63,7 @@ const AccessCodesPage = () => {
             </TabsTrigger>
             <TabsTrigger value="logs" className="gap-1 sm:gap-2 text-xs sm:text-sm flex-1 sm:flex-none" data-testid="tab-logs">
               <History className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Журнал</span>
-              <span className="sm:hidden">Лог</span>
+              <span>Журнал</span>
             </TabsTrigger>
           </TabsList>
 

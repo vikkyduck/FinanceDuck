@@ -21,9 +21,9 @@ interface StatsGridProps {
 }
 
 const gridColsMap: Record<number, string> = {
-  2: "md:grid-cols-2",
-  3: "md:grid-cols-3",
-  4: "md:grid-cols-2 lg:grid-cols-4",
+  2: "grid-cols-1 sm:grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
 };
 
 export const StatsGrid = ({ 
@@ -54,7 +54,7 @@ export const StatsGrid = ({
   }
 
   return (
-    <div className={cn("grid gap-6", gridClasses)}>
+    <div className={cn("grid gap-3 sm:gap-4 lg:gap-6", gridClasses)}>
       {stats.map((stat, index) => (
         <StatCard
           key={index}

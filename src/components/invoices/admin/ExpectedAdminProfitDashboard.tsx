@@ -106,19 +106,19 @@ export const ExpectedAdminProfitDashboard = ({
     <div
       className={cn(
         "bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-800/30",
-        "rounded-2xl p-6 shadow-standard",
+        "rounded-2xl p-4 sm:p-6 shadow-standard",
         className
       )}
       data-testid="expected-admin-profit-dashboard"
     >
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg">
-            <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="p-1.5 sm:p-2 bg-emerald-100 dark:bg-emerald-900/50 rounded-lg shrink-0">
+            <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h3
-              className="text-[18px] font-semibold text-foreground"
+              className="text-sm sm:text-[18px] font-semibold text-foreground"
               style={{ letterSpacing: "-0.2px" }}
             >
               Ожидаемая прибыль
@@ -128,7 +128,7 @@ export const ExpectedAdminProfitDashboard = ({
             </p>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <Badge 
             variant="outline" 
             className="text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700 bg-emerald-100/50 dark:bg-emerald-900/30"
@@ -138,87 +138,91 @@ export const ExpectedAdminProfitDashboard = ({
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent border-emerald-200/50 dark:border-emerald-800/30">
-            <TableHead className="text-xs w-8"></TableHead>
-            <TableHead className="text-xs">Партнёр</TableHead>
-            <TableHead className="text-xs text-center">Счетов</TableHead>
-            <TableHead className="text-xs text-right">Ожидается</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {summaries.map((summary) => {
-            const isExpanded = expandedPartners.has(summary.partnerId);
-            return (
-              <Fragment key={summary.partnerId}>
-                <TableRow 
-                  className="hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 border-emerald-200/50 dark:border-emerald-800/30 cursor-pointer"
-                  onClick={() => togglePartner(summary.partnerId)}
-                  data-testid={`row-admin-profit-${summary.partnerId}`}
-                >
-                  <TableCell className="text-sm w-8 p-2">
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-3 w-3 text-muted-foreground" />
-                      {summary.partnerName}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-center text-muted-foreground">
-                    {summary.invoiceCount}
-                  </TableCell>
-                  <TableCell className="text-sm text-right">
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                      {formatCurrency(summary.totalExpectedProfit)}
-                    </span>
-                  </TableCell>
-                </TableRow>
-                {isExpanded && summary.invoices.map((invoice) => (
-                  <TableRow 
-                    key={invoice.id}
-                    className="bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/30 dark:border-emerald-800/20"
-                    data-testid={`row-admin-profit-invoice-${invoice.id}`}
-                  >
-                    <TableCell className="p-2"></TableCell>
-                    <TableCell className="text-sm pl-8" colSpan={2}>
-                      <div className="flex items-start gap-2">
-                        <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                        <div className="min-w-0 space-y-1">
-                          <div className="font-medium text-xs flex items-center gap-2">
-                            {invoice.number}
-                            <Badge variant="secondary" className="text-xs">
-                              {getSchemeLabel(invoice.scheme)}
-                            </Badge>
-                          </div>
-                          {invoice.clientName && (
-                            <div className="text-xs text-muted-foreground">
-                              {invoice.clientName}
-                            </div>
-                          )}
-                          <div className="text-xs text-muted-foreground">
-                            Счёт: {formatCurrency(invoice.clientBill)}
-                          </div>
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="min-w-[400px] px-4 sm:px-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent border-emerald-200/50 dark:border-emerald-800/30">
+                <TableHead className="text-xs w-8"></TableHead>
+                <TableHead className="text-xs">Партнёр</TableHead>
+                <TableHead className="text-xs text-center">Счетов</TableHead>
+                <TableHead className="text-xs text-right">Ожидается</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {summaries.map((summary) => {
+                const isExpanded = expandedPartners.has(summary.partnerId);
+                return (
+                  <Fragment key={summary.partnerId}>
+                    <TableRow 
+                      className="hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 border-emerald-200/50 dark:border-emerald-800/30 cursor-pointer"
+                      onClick={() => togglePartner(summary.partnerId)}
+                      data-testid={`row-admin-profit-${summary.partnerId}`}
+                    >
+                      <TableCell className="text-sm w-8 p-2">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3 w-3 text-muted-foreground" />
+                          {summary.partnerName}
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-right">
-                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                        {formatCurrency(invoice.netProfitAdmin)}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </Fragment>
-            );
-          })}
-        </TableBody>
-      </Table>
+                      </TableCell>
+                      <TableCell className="text-sm text-center text-muted-foreground">
+                        {summary.invoiceCount}
+                      </TableCell>
+                      <TableCell className="text-sm text-right">
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                          {formatCurrency(summary.totalExpectedProfit)}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && summary.invoices.map((invoice) => (
+                      <TableRow 
+                        key={invoice.id}
+                        className="bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/30 dark:border-emerald-800/20"
+                        data-testid={`row-admin-profit-invoice-${invoice.id}`}
+                      >
+                        <TableCell className="p-2"></TableCell>
+                        <TableCell className="text-sm pl-8" colSpan={2}>
+                          <div className="flex items-start gap-2">
+                            <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0 space-y-1">
+                              <div className="font-medium text-xs flex items-center gap-2">
+                                {invoice.number}
+                                <Badge variant="secondary" className="text-xs">
+                                  {getSchemeLabel(invoice.scheme)}
+                                </Badge>
+                              </div>
+                              {invoice.clientName && (
+                                <div className="text-xs text-muted-foreground">
+                                  {invoice.clientName}
+                                </div>
+                              )}
+                              <div className="text-xs text-muted-foreground">
+                                Счёт: {formatCurrency(invoice.clientBill)}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-right">
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(invoice.netProfitAdmin)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
 
       <div className="mt-4 pt-4 border-t border-emerald-200/50 dark:border-emerald-800/30">
         <div className="flex items-center justify-between text-sm flex-wrap gap-2">

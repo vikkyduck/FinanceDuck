@@ -121,15 +121,16 @@ export function BackupManager() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
-        <CardTitle className="flex items-center gap-2 text-base font-semibold">
-          <Database className="h-4 w-4" />
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-6 pb-3 sm:pb-4">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+          <Database className="h-4 w-4 shrink-0" />
           Резервные копии
         </CardTitle>
         <Button
           onClick={() => createBackupMutation.mutate()}
           disabled={createBackupMutation.isPending}
           data-testid="button-create-backup"
+          className="w-full sm:w-auto"
         >
           {createBackupMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -139,8 +140,8 @@ export function BackupManager() {
           Создать бэкап
         </Button>
       </CardHeader>
-      <CardContent>
-        <div className="text-sm text-muted-foreground mb-4">
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
           Автоматические бэкапы создаются ежедневно в 3:00. Хранятся последние 7
           автоматических копий.
         </div>
@@ -164,12 +165,12 @@ export function BackupManager() {
             {backups.map((backup) => (
               <div
                 key={backup.id}
-                className="flex items-center justify-between gap-4 p-3 rounded-md border bg-card"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-3 rounded-md border bg-card"
                 data-testid={`backup-item-${backup.id}`}
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium truncate">
+                    <span className="font-medium truncate text-sm sm:text-base">
                       {backup.filename}
                     </span>
                     <Badge
@@ -179,7 +180,7 @@ export function BackupManager() {
                       {backup.type === "auto" ? "Авто" : "Ручной"}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
+                  <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-muted-foreground mt-1 flex-wrap">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {backup.createdAt
@@ -194,7 +195,7 @@ export function BackupManager() {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 self-end sm:self-center">
                   <Button
                     size="icon"
                     variant="ghost"

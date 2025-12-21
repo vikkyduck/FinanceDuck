@@ -64,58 +64,61 @@ const StatsPage = () => {
   return (
     <DashboardLayout>
       {/* Hero Header with Gradient */}
-      <div className="relative -mx-8 -mt-12 mb-12 overflow-hidden">
+      <div className="relative -mx-4 sm:-mx-8 -mt-8 sm:-mt-12 mb-6 sm:mb-12 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/10" />
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-3xl" />
+        <div className="absolute top-0 right-0 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-primary/5 rounded-full blur-3xl" />
         
-        <div className="relative px-8 pt-16 pb-12">
-          <div className="animate-fade-in space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass border border-primary/20">
+        <div className="relative px-4 sm:px-8 pt-8 sm:pt-16 pb-6 sm:pb-12">
+          <div className="animate-fade-in space-y-2 sm:space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full glass border border-primary/20">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-sm font-medium text-primary">Обновляется в реальном времени</span>
+              <span className="text-xs sm:text-sm font-medium text-primary">Обновляется в реальном времени</span>
             </div>
             
-            <h1 className="text-6xl font-bold tracking-tight">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight">
               <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
                 Аналитика
               </span>
             </h1>
             
-            <p className="text-xl text-muted-foreground max-w-2xl">
+            <p className="text-sm sm:text-base md:text-xl text-muted-foreground max-w-2xl">
               Полный контроль над финансовыми показателями и прогнозами
             </p>
           </div>
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-8 pb-12">
-        <div className="flex items-center justify-between gap-4 animate-fade-in">
-          <TabsList className="glass-strong border border-primary/10 shadow-lg p-1.5 gap-1 h-auto flex-wrap">
+      <Tabs defaultValue="overview" className="space-y-4 sm:space-y-8 pb-8 sm:pb-12">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 animate-fade-in">
+          <TabsList className="glass-strong border border-primary/10 shadow-lg p-1 sm:p-1.5 gap-1 h-auto w-full sm:w-auto grid grid-cols-3 sm:inline-flex">
             <TabsTrigger 
               value="overview"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
               data-testid="tab-overview"
             >
-              <BarChart3 className="h-4 w-4" />
-              Сводка
+              <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Сводка</span>
+              <span className="sm:hidden">Сводка</span>
             </TabsTrigger>
             <TabsTrigger 
               value="invoices"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
               data-testid="tab-invoices"
             >
-              <Receipt className="h-4 w-4" />
-              Счета
+              <Receipt className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Счета</span>
+              <span className="sm:hidden">Счета</span>
             </TabsTrigger>
             <TabsTrigger 
               value="sales"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-6 py-3 text-sm font-medium gap-2"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
             >
-              <ShoppingCart className="h-4 w-4" />
-              Продажи
+              <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Продажи</span>
+              <span className="sm:hidden">Продажи</span>
             </TabsTrigger>
           </TabsList>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1 shrink-0 self-end sm:self-auto">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" onClick={expandAll} data-testid="button-expand-all">

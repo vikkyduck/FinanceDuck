@@ -207,18 +207,18 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
           <DialogHeader>
-            <DialogTitle>Управление клиентами</DialogTitle>
+            <DialogTitle className="text-lg sm:text-xl">Управление клиентами</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Добавить клиента</CardTitle>
+              <CardHeader className="pb-3 p-3 sm:p-6 sm:pb-3">
+                <CardTitle className="text-sm sm:text-base">Добавить клиента</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+              <CardContent className="space-y-3 p-3 sm:p-6 pt-0 sm:pt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label>Название *</Label>
                     <Input
@@ -276,9 +276,9 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
+                    <Label className="flex items-center gap-1 text-xs sm:text-sm">
                       <Send className="h-3 w-3" />
                       Telegram
                     </Label>
@@ -290,7 +290,7 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="flex items-center gap-1">
+                    <Label className="flex items-center gap-1 text-xs sm:text-sm">
                       <Phone className="h-3 w-3" />
                       Телефон
                     </Label>
@@ -314,20 +314,22 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
             </Card>
 
             <div className="space-y-2">
-              <h3 className="font-medium text-sm text-muted-foreground">Клиенты ({clients.length})</h3>
+              <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Клиенты ({clients.length})</h3>
               {fetchingData ? (
                 <ClientsTableSkeleton />
               ) : (
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Название</TableHead>
-                        <TableHead>Партнёр</TableHead>
-                        <TableHead>Контакты</TableHead>
-                        <TableHead className="w-[100px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
+                <div className="overflow-x-auto -mx-3 sm:mx-0">
+                  <div className="min-w-[600px] px-3 sm:px-0">
+                    <div className="border rounded-lg overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs sm:text-sm">Название</TableHead>
+                            <TableHead className="text-xs sm:text-sm">Партнёр</TableHead>
+                            <TableHead className="text-xs sm:text-sm">Контакты</TableHead>
+                            <TableHead className="w-[100px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
                     <TableBody>
                       {clients.length === 0 ? (
                         <TableRow>
@@ -495,9 +497,11 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                           </TableRow>
                         ))
                       )}
-                    </TableBody>
-                  </Table>
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
+              </div>
               )}
             </div>
           </div>

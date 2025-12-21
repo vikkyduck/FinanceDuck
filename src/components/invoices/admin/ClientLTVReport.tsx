@@ -79,102 +79,108 @@ export const ClientLTVReport = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+      <CardHeader className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Users className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
               LTV Драконов (Клиентов)
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Чистая прибыль админа по каждому клиенту
             </CardDescription>
           </div>
-          <div className="flex gap-4 text-sm flex-wrap">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
             <div className="text-center">
               <div className="text-muted-foreground">Заработано</div>
-              <div className="text-lg font-semibold text-green-600">{formatCurrency(totals.total_admin_profit)}</div>
+              <div className="text-sm sm:text-lg font-semibold text-green-600">{formatCurrency(totals.total_admin_profit)}</div>
             </div>
             <div className="text-center">
               <div className="text-muted-foreground">В ожидании</div>
-              <div className="text-lg font-semibold text-amber-600">{formatCurrency(totals.potential_profit)}</div>
+              <div className="text-sm sm:text-lg font-semibold text-amber-600">{formatCurrency(totals.potential_profit)}</div>
             </div>
             <div className="text-center">
               <div className="text-muted-foreground">Счетов</div>
-              <div className="text-lg font-semibold">{totals.paid_invoices} / {totals.total_invoices}</div>
+              <div className="text-sm sm:text-lg font-semibold">{totals.paid_invoices} / {totals.total_invoices}</div>
             </div>
           </div>
         </div>
       </CardHeader>
 
-      <CardContent>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Клиент</TableHead>
-                <TableHead className="text-right">Счетов</TableHead>
-                <TableHead 
-                  className="text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
-                  onClick={() => setSortBy('total_admin_profit')}
-                  data-testid="sort-total-profit"
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    Доход (оплачено)
-                    {sortBy === 'total_admin_profit' && <TrendingUp className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead 
-                  className="text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
-                  onClick={() => setSortBy('potential_profit')}
-                  data-testid="sort-potential-profit"
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    В ожидании
-                    {sortBy === 'potential_profit' && <TrendingUp className="h-3 w-3" />}
-                  </div>
-                </TableHead>
-                <TableHead className="text-right">Всего LTV</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedClients.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                    Нет данных по клиентам
-                  </TableCell>
-                </TableRow>
-              ) : (
-                sortedClients.map((client) => {
-                  const totalLTV = client.total_admin_profit + client.potential_profit;
-                  return (
-                    <TableRow key={client.client_id} data-testid={`row-client-${client.client_id}`}>
-                      <TableCell className="font-medium">{client.client_name}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {client.paid_invoices} / {client.total_invoices}
-                      </TableCell>
-                      <TableCell className="text-right font-medium text-green-600">
-                        {formatCurrency(client.total_admin_profit)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {client.potential_profit > 0 ? (
-                          <span className="text-amber-600 font-medium flex items-center justify-end gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatCurrency(client.potential_profit)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {formatCurrency(totalLTV)}
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        <div className="overflow-x-auto -mx-4 sm:mx-0">
+          <div className="min-w-[600px] px-4 sm:px-0">
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs sm:text-sm">Клиент</TableHead>
+                    <TableHead className="text-xs sm:text-sm text-right">Счетов</TableHead>
+                    <TableHead 
+                      className="text-xs sm:text-sm text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
+                      onClick={() => setSortBy('total_admin_profit')}
+                      data-testid="sort-total-profit"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="hidden sm:inline">Доход (оплачено)</span>
+                        <span className="sm:hidden">Доход</span>
+                        {sortBy === 'total_admin_profit' && <TrendingUp className="h-3 w-3" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="text-xs sm:text-sm text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
+                      onClick={() => setSortBy('potential_profit')}
+                      data-testid="sort-potential-profit"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span className="hidden sm:inline">В ожидании</span>
+                        <span className="sm:hidden">Ожид.</span>
+                        {sortBy === 'potential_profit' && <TrendingUp className="h-3 w-3" />}
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-xs sm:text-sm text-right">Всего LTV</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedClients.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        Нет данных по клиентам
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+                  ) : (
+                    sortedClients.map((client) => {
+                      const totalLTV = client.total_admin_profit + client.potential_profit;
+                      return (
+                        <TableRow key={client.client_id} data-testid={`row-client-${client.client_id}`}>
+                          <TableCell className="font-medium">{client.client_name}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {client.paid_invoices} / {client.total_invoices}
+                          </TableCell>
+                          <TableCell className="text-right font-medium text-green-600">
+                            {formatCurrency(client.total_admin_profit)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {client.potential_profit > 0 ? (
+                              <span className="text-amber-600 font-medium flex items-center justify-end gap-1">
+                                <Clock className="h-3 w-3" />
+                                {formatCurrency(client.potential_profit)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {formatCurrency(totalLTV)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

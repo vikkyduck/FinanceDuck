@@ -123,7 +123,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
             transition={{ delay: index * 0.1 }}
           >
             <Card className="hover-scale">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4 sm:p-6">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
                     {metric.label}
@@ -143,8 +143,8 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
                   <Icon className="h-4 w-4 text-primary" />
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
+              <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+                <div className="text-xl sm:text-3xl font-bold">
                   {metric.format === "currency"
                     ? `${metric.value.toLocaleString("ru-RU")} ₽`
                     : `${metric.value.toFixed(1)}%`}

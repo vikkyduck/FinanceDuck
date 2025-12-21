@@ -69,17 +69,17 @@ export const CurrentMonthPlanFact = () => {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle data-testid="text-plan-fact-title">
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg" data-testid="text-plan-fact-title">
           План / Факт: {monthNames[currentMonth - 1]} {currentYear}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs sm:text-sm text-muted-foreground">
           {hasAnyTarget 
             ? "Сравнение плановых и фактических показателей" 
             : "Для отслеживания выполнения плана необходимо задать целевые показатели"}
         </p>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-4 sm:space-y-6">
         {!hasAnyTarget ? (
           <div className="p-6 bg-muted/30 rounded-lg border border-dashed text-center">
             <p className="text-lg font-medium text-muted-foreground">

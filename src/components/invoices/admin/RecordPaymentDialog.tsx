@@ -124,7 +124,7 @@ export const RecordPaymentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[95vw] sm:w-full">
         <DialogHeader>
           <DialogTitle>Записать приход от партнёра</DialogTitle>
         </DialogHeader>

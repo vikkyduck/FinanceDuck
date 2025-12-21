@@ -4352,6 +4352,61 @@ export class DatabaseStorage implements IStorage {
   }
 
   async logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog> {
+    // For update_invoice actions, try to coalesce with recent logs from the same user on the same invoice
+    // Only coalesce if entityId is non-null to avoid merging unrelated updates
+    if (log.actionType === 'update_invoice' && log.entityId && log.accessTokenId) {
+      const COALESCE_WINDOW_SECONDS = 10; // Merge updates within 10 seconds
+      
+      // Find recent log for same entity and action
+      const recentLogs = await db.select()
+        .from(assistantActionLogs)
+        .where(
+          and(
+            eq(assistantActionLogs.accessTokenId, log.accessTokenId),
+            eq(assistantActionLogs.entityId, log.entityId),
+            eq(assistantActionLogs.actionType, 'update_invoice'),
+            sql`${assistantActionLogs.createdAt} > NOW() - INTERVAL '${COALESCE_WINDOW_SECONDS} seconds'`
+          )
+        )
+        .orderBy(desc(assistantActionLogs.createdAt))
+        .limit(1);
+      
+      if (recentLogs.length > 0) {
+        const existingLog = recentLogs[0];
+        
+        // Merge details - new fields override old ones
+        let mergedDetails: any = {};
+        if (existingLog.details) {
+          try {
+            mergedDetails = JSON.parse(existingLog.details);
+          } catch {}
+        }
+        if (log.details) {
+          try {
+            const newDetails = JSON.parse(log.details);
+            mergedDetails = { ...mergedDetails, ...newDetails };
+          } catch {}
+        }
+        
+        // Use the new description if it contains more info (e.g., invoice number)
+        // Prefer description with invoice number over one with just client name
+        const newDescription = log.description || existingLog.description;
+        
+        // Update existing log with merged details, keep original createdAt
+        const [updated] = await db.update(assistantActionLogs)
+          .set({
+            details: JSON.stringify(mergedDetails),
+            description: newDescription,
+            // Keep original createdAt, don't update timestamp
+          })
+          .where(eq(assistantActionLogs.id, existingLog.id))
+          .returning();
+        
+        return updated;
+      }
+    }
+    
+    // No coalescing - create new log entry
     const [created] = await db.insert(assistantActionLogs).values(log).returning();
     return created;
   }

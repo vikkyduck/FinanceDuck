@@ -1,10 +1,10 @@
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
-  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments, recurringInvoices,
-  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment,
-  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment,
-  AccessToken, UserSession, UserRole, InvoiceScheme, ActType
+  invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments, recurringInvoices, assistantActionLogs,
+  Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment, AssistantActionLog,
+  InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment, InsertAssistantActionLog,
+  AccessToken, UserSession, UserRole, InvoiceScheme, ActType, AssistantActionType
 } from "../shared/schema";
 import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or } from "drizzle-orm";
 import { randomBytes } from "crypto";
@@ -243,6 +243,14 @@ export interface IStorage {
   
   // Client LTV
   getClientLTV(): Promise<ClientLTVData[]>;
+  
+  // Assistant action logs
+  logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog>;
+  getAssistantActionLogs(limit?: number, offset?: number): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }>;
+}
+
+export interface AssistantActionLogWithDetails extends AssistantActionLog {
+  tokenCode?: string;
 }
 
 export interface WorkingCapitalData {
@@ -4332,6 +4340,38 @@ export class DatabaseStorage implements IStorage {
     // Сортируем по total_admin_profit (реальной прибыли)
     return Array.from(clientMap.values())
       .sort((a, b) => b.total_admin_profit - a.total_admin_profit);
+  }
+
+  async logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog> {
+    const [created] = await db.insert(assistantActionLogs).values(log).returning();
+    return created;
+  }
+
+  async getAssistantActionLogs(limit: number = 100, offset: number = 0): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }> {
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(assistantActionLogs);
+    
+    const logsData = await db
+      .select({
+        log: assistantActionLogs,
+        tokenCode: accessTokens.code,
+      })
+      .from(assistantActionLogs)
+      .leftJoin(accessTokens, eq(assistantActionLogs.accessTokenId, accessTokens.id))
+      .orderBy(desc(assistantActionLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const logs: AssistantActionLogWithDetails[] = logsData.map(row => ({
+      ...row.log,
+      tokenCode: row.tokenCode || undefined,
+    }));
+
+    return {
+      logs,
+      total: countResult?.count || 0,
+    };
   }
 }
 

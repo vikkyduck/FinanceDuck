@@ -1,4 +1,5 @@
 import { useState, Fragment, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendingUp, ChevronDown, ChevronRight, FileText, Users } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
@@ -52,7 +53,12 @@ export const ExpectedAdminProfitDashboard = ({
   className,
 }: ExpectedAdminProfitDashboardProps) => {
   const { isAuthenticated, role } = useAuth();
+  const navigate = useNavigate();
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
+  
+  const openInvoice = (invoiceId: string) => {
+    navigate(`/invoices?open=${invoiceId}`);
+  };
 
   const { data: summaries = [], isLoading } = useQuery<ExpectedAdminProfitSummary[]>({
     queryKey: ['/api/expected-admin-profit'],
@@ -193,7 +199,13 @@ export const ExpectedAdminProfitDashboard = ({
                             <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                             <div className="min-w-0 space-y-1">
                               <div className="font-medium text-xs flex items-center gap-2">
-                                {invoice.number}
+                                <button
+                                  onClick={() => openInvoice(invoice.id)}
+                                  className="text-primary hover:underline cursor-pointer text-left"
+                                  data-testid={`link-admin-profit-invoice-${invoice.id}`}
+                                >
+                                  {invoice.number}
+                                </button>
                                 <Badge variant="secondary" className="text-xs">
                                   {getSchemeLabel(invoice.scheme)}
                                 </Badge>

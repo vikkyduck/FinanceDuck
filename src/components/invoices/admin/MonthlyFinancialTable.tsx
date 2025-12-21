@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/invoiceCalculations";
@@ -18,10 +19,16 @@ interface MonthlyFinancialTableProps {
 }
 
 export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
+  const navigate = useNavigate();
+  
   const { data, isLoading } = useQuery<MonthlyData[]>({
     queryKey: ['admin-monthly-data', year],
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
   });
+  
+  const openMonthInvoices = (monthNumber: number) => {
+    navigate(`/invoices?month=${monthNumber}&year=${year}`);
+  };
 
   const monthNames = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
@@ -69,6 +76,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
     }
 
     return {
+      monthNumber: row.monthNumber,
       month: monthNames[row.monthNumber - 1],
       totalSold: row.totalSales,
       totalReceived: row.totalSales,
@@ -102,8 +110,13 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
               </TableHeader>
               <TableBody>
                 {tableData.map((row, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="text-xs sm:text-sm font-medium">{row.month}</TableCell>
+                  <TableRow 
+                    key={index}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => openMonthInvoices(row.monthNumber)}
+                    data-testid={`row-month-${row.monthNumber}`}
+                  >
+                    <TableCell className="text-xs sm:text-sm font-medium text-primary hover:underline">{row.month}</TableCell>
                     <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalSold)}</TableCell>
                     <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalReceived)}</TableCell>
                     <TableCell className="text-xs sm:text-sm text-right text-muted-foreground">{formatCurrency(row.expenses)}</TableCell>

@@ -56,6 +56,10 @@ export const UnifiedInvoicesList = ({
 }: UnifiedInvoicesListProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const openInvoiceParam = searchParams.get('open');
+  const clientIdParam = searchParams.get('clientId');
+  const partnerIdParam = searchParams.get('partnerId');
+  const monthParam = searchParams.get('month');
+  const yearParam = searchParams.get('year');
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(openInvoiceParam);
@@ -79,6 +83,8 @@ export const UnifiedInvoicesList = ({
     setClientFilter,
     partnerFilter,
     setPartnerFilter,
+    monthFilter,
+    setMonthFilter,
     clients,
     partners,
     filteredInvoices,
@@ -97,6 +103,20 @@ export const UnifiedInvoicesList = ({
       setDetailsOpen(true);
     }
   }, [openInvoiceParam]);
+
+  // Apply URL filters when component mounts or URL params change
+  useEffect(() => {
+    if (clientIdParam) {
+      setClientFilter(clientIdParam);
+    }
+    if (partnerIdParam) {
+      setPartnerFilter(partnerIdParam);
+    }
+    if (monthParam && yearParam) {
+      const monthValue = `${yearParam}-${monthParam.padStart(2, '0')}`;
+      setMonthFilter(monthValue);
+    }
+  }, [clientIdParam, partnerIdParam, monthParam, yearParam, setClientFilter, setPartnerFilter, setMonthFilter]);
 
   useEffect(() => {
     if (!enableRealtime) return;

@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { PartnerDebtCard } from "./PartnerDebtCard";
 import { PartnerInvoicesDetail } from "./PartnerInvoicesDetail";
 import { RecordPaymentDialog } from "./RecordPaymentDialog";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Plus, Loader2 } from "lucide-react";
+import { RefreshCw, Plus, Loader2, FileText } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { useStaggerAnimation } from "@/hooks/useStaggerAnimation";
 
@@ -23,10 +24,15 @@ interface PartnerDebtSummary {
 }
 
 export const PartnerDebtDashboard = () => {
+  const navigate = useNavigate();
   const [expandedPartnerId, setExpandedPartnerId] = useState<string | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState<PartnerDebtSummary | null>(null);
   const queryClient = useQueryClient();
+  
+  const openPartnerInvoices = (partnerId: string) => {
+    navigate(`/invoices?partnerId=${partnerId}`);
+  };
 
   const { data: summaries = [], isLoading, refetch, isFetching } = useQuery<PartnerDebtSummary[]>({
     queryKey: ["/api/partner-debt"],
@@ -147,16 +153,30 @@ export const PartnerDebtDashboard = () => {
                   partnerName={summary.partnerName}
                   onPaymentRecorded={handlePaymentSuccess}
                 />
-                {summary.totalToTransfer > 0 && (
+                <div className="flex flex-col gap-2">
                   <Button
+                    variant="outline"
                     className="w-full"
-                    onClick={() => handleRecordPayment(summary)}
-                    data-testid={`button-record-payment-card-${summary.partnerId}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPartnerInvoices(summary.partnerId);
+                    }}
+                    data-testid={`button-view-invoices-${summary.partnerId}`}
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Записать приход
+                    <FileText className="h-4 w-4 mr-2" />
+                    Все счета
                   </Button>
-                )}
+                  {summary.totalToTransfer > 0 && (
+                    <Button
+                      className="w-full"
+                      onClick={() => handleRecordPayment(summary)}
+                      data-testid={`button-record-payment-card-${summary.partnerId}`}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Записать приход
+                    </Button>
+                  )}
+                </div>
               </div>
             </PartnerDebtCard>
           </div>

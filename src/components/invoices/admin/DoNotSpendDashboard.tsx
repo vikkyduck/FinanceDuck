@@ -1,4 +1,5 @@
 import { useState, Fragment, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Building2, ChevronDown, ChevronRight, FileText, MessageSquare, Users } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
@@ -75,8 +76,13 @@ export const DoNotSpendDashboard = ({
   className,
 }: DoNotSpendDashboardProps) => {
   const { isAuthenticated, role } = useAuth();
+  const navigate = useNavigate();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
+  
+  const openInvoice = (invoiceId: string) => {
+    navigate(`/invoices?open=${invoiceId}`);
+  };
 
   const { data: summaries = [], isLoading: loadingAgency } = useQuery<DoNotSpendSummary[]>({
     queryKey: ['/api/do-not-spend'],
@@ -253,9 +259,13 @@ export const DoNotSpendDashboard = ({
                           <div className="flex items-start gap-2">
                             <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                             <div className="min-w-0 space-y-1">
-                              <div className="font-medium text-xs">
+                              <button
+                                onClick={() => openInvoice(invoice.id)}
+                                className="font-medium text-xs text-primary hover:underline cursor-pointer text-left"
+                                data-testid={`link-invoice-${invoice.id}`}
+                              >
                                 {invoice.number}
-                              </div>
+                              </button>
                               {invoice.description && (
                                 <div className="text-xs text-muted-foreground" title={invoice.description}>
                                   {invoice.description}
@@ -405,9 +415,13 @@ export const DoNotSpendDashboard = ({
                             <div className="flex items-start gap-2">
                               <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
                               <div className="min-w-0 space-y-1">
-                                <div className="font-medium text-xs">
+                                <button
+                                  onClick={() => openInvoice(invoice.id)}
+                                  className="font-medium text-xs text-primary hover:underline cursor-pointer text-left"
+                                  data-testid={`link-partner-invoice-${invoice.id}`}
+                                >
                                   {invoice.number}
-                                </div>
+                                </button>
                                 {invoice.description && (
                                   <div className="text-xs text-muted-foreground" title={invoice.description}>
                                     {invoice.description}

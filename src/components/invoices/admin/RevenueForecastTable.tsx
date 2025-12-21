@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -21,10 +22,16 @@ interface ForecastData {
 }
 
 export const RevenueForecastTable = () => {
+  const navigate = useNavigate();
+  
   const { data, isLoading } = useQuery<ForecastData[]>({
     queryKey: ['admin-forecast', 6],
     queryFn: () => apiGet<ForecastData[]>('/admin/forecast?months=6'),
   });
+  
+  const openMonthInvoices = (monthIndex: number, year: number) => {
+    navigate(`/invoices?month=${monthIndex}&year=${year}`);
+  };
 
   if (isLoading) {
     return (
@@ -51,6 +58,8 @@ export const RevenueForecastTable = () => {
   }
 
   const tableData = (data || []).map(row => ({
+    monthIndex: row.monthIndex,
+    yearNum: row.yearNum,
     month: `${row.monthName} ${row.yearNum}`,
     expected: row.expectedAmount,
     received: row.receivedAmount,
@@ -88,8 +97,13 @@ export const RevenueForecastTable = () => {
               </TableHeader>
               <TableBody>
                 {tableData.map((row, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="text-xs sm:text-sm font-medium">{row.month}</TableCell>
+                  <TableRow 
+                    key={index}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => openMonthInvoices(row.monthIndex, row.yearNum)}
+                    data-testid={`row-forecast-${row.monthIndex}-${row.yearNum}`}
+                  >
+                    <TableCell className="text-xs sm:text-sm font-medium text-primary hover:underline">{row.month}</TableCell>
                     <TableCell className="text-xs sm:text-sm text-right text-chart-1">
                       {formatCurrency(row.expected)}
                     </TableCell>

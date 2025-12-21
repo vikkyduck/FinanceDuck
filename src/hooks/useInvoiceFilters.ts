@@ -14,6 +14,7 @@ export const useInvoiceFilters = (invoices: any[], initialStatusFilter?: Invoice
   const [sortBy, setSortBy] = useState<SortOption>('date-desc');
   const [clientFilter, setClientFilter] = useState<string>('all');
   const [partnerFilter, setPartnerFilter] = useState<string>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all'); // format: "YYYY-MM" or "all"
 
   // Extract unique clients and partners from invoices
   const { clients, partners } = useMemo(() => {
@@ -64,6 +65,17 @@ export const useInvoiceFilters = (invoices: any[], initialStatusFilter?: Invoice
       result = result.filter(inv => inv.partner_id === partnerFilter);
     }
 
+    // Month filter (format: "YYYY-MM")
+    if (monthFilter !== 'all') {
+      result = result.filter(inv => {
+        const invoiceDate = inv.created_at || inv.issue_date;
+        if (!invoiceDate) return false;
+        const date = new Date(invoiceDate);
+        const invMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        return invMonth === monthFilter;
+      });
+    }
+
     // Status filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'overdue') {
@@ -101,7 +113,7 @@ export const useInvoiceFilters = (invoices: any[], initialStatusFilter?: Invoice
     });
 
     return result;
-  }, [invoices, searchQuery, statusFilter, sortBy, clientFilter, partnerFilter]);
+  }, [invoices, searchQuery, statusFilter, sortBy, clientFilter, partnerFilter, monthFilter]);
 
   const statusCounts = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -131,6 +143,8 @@ export const useInvoiceFilters = (invoices: any[], initialStatusFilter?: Invoice
     setClientFilter,
     partnerFilter,
     setPartnerFilter,
+    monthFilter,
+    setMonthFilter,
     clients,
     partners,
     filteredInvoices: filteredAndSortedInvoices,

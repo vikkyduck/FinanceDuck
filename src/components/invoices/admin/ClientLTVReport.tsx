@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
@@ -24,7 +25,12 @@ interface ClientLTV {
 }
 
 export const ClientLTVReport = () => {
+  const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<'total_admin_profit' | 'potential_profit' | 'total_invoices'>('total_admin_profit');
+
+  const openClientInvoices = (clientId: string) => {
+    navigate(`/invoices?clientId=${clientId}`);
+  };
 
   const { data: clients = [], isLoading, error } = useQuery<ClientLTV[]>({
     queryKey: ["/api/admin/client-ltv"],
@@ -152,8 +158,13 @@ export const ClientLTVReport = () => {
                     sortedClients.map((client) => {
                       const totalLTV = client.total_admin_profit + client.potential_profit;
                       return (
-                        <TableRow key={client.client_id} data-testid={`row-client-${client.client_id}`}>
-                          <TableCell className="font-medium">{client.client_name}</TableCell>
+                        <TableRow 
+                          key={client.client_id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => openClientInvoices(client.client_id)}
+                          data-testid={`row-client-${client.client_id}`}
+                        >
+                          <TableCell className="font-medium text-primary hover:underline">{client.client_name}</TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {client.paid_invoices} / {client.total_invoices}
                           </TableCell>

@@ -8,7 +8,8 @@ import {
   TrendingDown,
   UserCheck,
   Key,
-  Database
+  Database,
+  History
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -133,6 +134,7 @@ export function AppSidebar() {
         items: [
           { title: "Коды доступа", url: "/access-codes", icon: Key },
           { title: "Бэкапы", url: "/access-codes?tab=backups", icon: Database },
+          { title: "Журнал действий", url: "/access-codes?tab=logs", icon: History },
         ]
       });
     }

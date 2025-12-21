@@ -1,8 +1,9 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Key, Database, Settings } from "lucide-react";
+import { Key, Database, Settings, History } from "lucide-react";
 import { AccessCodesManager } from "@/components/admin/AccessCodesManager";
 import { BackupManager } from "@/components/admin/BackupManager";
+import { ActionLogsManager } from "@/components/admin/ActionLogsManager";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useSearchParams } from "react-router-dom";
 
@@ -60,6 +61,10 @@ const AccessCodesPage = () => {
               <Database className="h-4 w-4" />
               Бэкапы
             </TabsTrigger>
+            <TabsTrigger value="logs" className="gap-2" data-testid="tab-logs">
+              <History className="h-4 w-4" />
+              Журнал действий
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="access-codes">
@@ -68,6 +73,10 @@ const AccessCodesPage = () => {
 
           <TabsContent value="backups">
             <BackupManager />
+          </TabsContent>
+
+          <TabsContent value="logs">
+            <ActionLogsManager />
           </TabsContent>
         </Tabs>
       </div>

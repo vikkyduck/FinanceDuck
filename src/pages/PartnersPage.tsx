@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Handshake } from "lucide-react";
+import { Plus, Wallet, Table, Users } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ManagePartnersDialog } from "@/components/invoices/assistant/ManagePartnersDialog";
+import { PartnerDebtDashboard } from "@/components/invoices/admin/PartnerDebtDashboard";
+import { PartnerPaymentsManager } from "@/components/invoices/admin/PartnerPaymentsManager";
 import { useUserRole } from "@/hooks/useUserRole";
 
 const PartnersPage = () => {
   const { role, loading } = useUserRole();
   const [managePartnersOpen, setManagePartnersOpen] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
+  const [activeTab, setActiveTab] = useState("debts");
 
   if (loading) {
     return (
@@ -31,13 +34,15 @@ const PartnersPage = () => {
     );
   }
 
+  const isAdmin = role === 'admin';
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Партнеры</h1>
-            <p className="text-muted-foreground">Управление партнерами</p>
+            <h1 className="text-3xl font-bold tracking-tight">Партнёры</h1>
+            <p className="text-muted-foreground">Управление партнёрами и расчётами</p>
           </div>
           <Button 
             onClick={() => {
@@ -47,28 +52,40 @@ const PartnersPage = () => {
               setTimeout(() => setIsOpening(false), 500);
             }}
             disabled={isOpening}
+            data-testid="button-manage-partners"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Управление партнерами
+            Управление партнёрами
           </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Handshake className="h-5 w-5" />
-              База партнеров
-            </CardTitle>
-            <CardDescription>
-              Просмотр и редактирование информации о партнерах
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              Нажмите кнопку "Управление партнерами" для просмотра, добавления или редактирования партнеров.
-            </p>
-          </CardContent>
-        </Card>
+        {isAdmin ? (
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList>
+              <TabsTrigger value="debts" className="gap-2" data-testid="tab-debts">
+                <Wallet className="h-4 w-4" />
+                Расчёты (карточки)
+              </TabsTrigger>
+              <TabsTrigger value="table" className="gap-2" data-testid="tab-table">
+                <Table className="h-4 w-4" />
+                Расчёты (таблица)
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="debts" className="mt-4">
+              <PartnerDebtDashboard />
+            </TabsContent>
+
+            <TabsContent value="table" className="mt-4">
+              <PartnerPaymentsManager />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <div className="text-center text-muted-foreground py-8">
+            <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p>Нажмите кнопку "Управление партнёрами" для просмотра и редактирования партнёров.</p>
+          </div>
+        )}
 
         <ManagePartnersDialog 
           open={managePartnersOpen} 

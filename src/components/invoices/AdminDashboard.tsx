@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { BarChart3, Receipt, Users as UsersIcon, Building2, Maximize2, Minimize2 } from "lucide-react";
+import { BarChart3, Receipt, Building2, Maximize2, Minimize2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { AdminInvoicesList } from "./admin/AdminInvoicesList";
@@ -9,8 +9,6 @@ import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
 import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
 import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
 import { ManageAccessCodesDialog } from "./admin/ManageAccessCodesDialog";
-import { PartnerPaymentsManager } from "./admin/PartnerPaymentsManager";
-import { PartnerDebtDashboard } from "./admin/PartnerDebtDashboard";
 import { AdminCashFlowForecast } from "./admin/AdminCashFlowForecast";
 import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { RecurringInvoicesManager } from "./admin/RecurringInvoicesManager";
@@ -54,8 +52,6 @@ export const AdminDashboard = () => {
       cashFlow: true,
       recurringInvoices: true,
       invoicesList: true,
-      partnerPayments: true,
-      partnerPaymentsTable: false,
     }
   );
 
@@ -116,10 +112,6 @@ export const AdminDashboard = () => {
             <TabsTrigger value="invoices" className="gap-2">
               <Receipt className="h-4 w-4" />
               Счета
-            </TabsTrigger>
-            <TabsTrigger value="team" className="gap-2">
-              <UsersIcon className="h-4 w-4" />
-              Команда
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-1 shrink-0">
@@ -196,27 +188,6 @@ export const AdminDashboard = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="team" className="space-y-6">
-          <div className="space-y-6">
-            <CollapsibleSection
-              id="partnerPayments"
-              title="Расчёты с партнёрами (карточки)"
-              isExpanded={isExpanded("partnerPayments")}
-              onToggle={() => toggleSection("partnerPayments")}
-            >
-              <PartnerDebtDashboard />
-            </CollapsibleSection>
-
-            <CollapsibleSection
-              id="partnerPaymentsTable"
-              title="Расчёты с партнёрами (таблица)"
-              isExpanded={isExpanded("partnerPaymentsTable")}
-              onToggle={() => toggleSection("partnerPaymentsTable")}
-            >
-              <PartnerPaymentsManager />
-            </CollapsibleSection>
-          </div>
-        </TabsContent>
 
       </Tabs>
 

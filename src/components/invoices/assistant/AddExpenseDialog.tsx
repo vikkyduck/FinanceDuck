@@ -127,7 +127,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[95vw] sm:w-full">
         <DialogHeader>
           <DialogTitle>Добавить расход</DialogTitle>
         </DialogHeader>

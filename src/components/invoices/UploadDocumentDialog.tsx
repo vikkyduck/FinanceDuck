@@ -75,7 +75,7 @@ export const UploadDocumentDialog = ({ open, onOpenChange, invoiceId, onSuccess 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[95vw] sm:w-full">
         <DialogHeader>
           <DialogTitle>Загрузить документ</DialogTitle>
           <DialogDescription>

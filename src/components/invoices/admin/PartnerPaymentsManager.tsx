@@ -91,22 +91,24 @@ export const PartnerPaymentsManager = () => {
 
   return (
     <div className="space-y-4">
-      <div className="text-sm text-muted-foreground">
-        Всего должны партнёры: <span className="font-semibold text-foreground">{formatCurrency(totalRemaining)}</span>
-        <span className="ml-4">Партнёров в системе: {summaries.length}</span>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+        <span>Всего должны партнёры: <span className="font-semibold text-foreground">{formatCurrency(totalRemaining)}</span></span>
+        <span>Партнёров в системе: {summaries.length}</span>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Партнёр</TableHead>
-            <TableHead className="text-right">Счетов</TableHead>
-            <TableHead className="text-right">Долг</TableHead>
-            <TableHead className="text-right">Оплачено</TableHead>
-            <TableHead className="text-right">Осталось</TableHead>
-            <TableHead className="text-right">Действие</TableHead>
-          </TableRow>
-        </TableHeader>
+      <div className="overflow-x-auto -mx-4 sm:mx-0">
+        <div className="min-w-[600px] px-4 sm:px-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs sm:text-sm">Партнёр</TableHead>
+                <TableHead className="text-right text-xs sm:text-sm">Счетов</TableHead>
+                <TableHead className="text-right text-xs sm:text-sm">Долг</TableHead>
+                <TableHead className="text-right text-xs sm:text-sm">Оплачено</TableHead>
+                <TableHead className="text-right text-xs sm:text-sm">Осталось</TableHead>
+                <TableHead className="text-right text-xs sm:text-sm">Действие</TableHead>
+              </TableRow>
+            </TableHeader>
         <TableBody>
           {summaries.map((summary, index) => {
             const isExpanded = expandedPartnerId === summary.partnerId;
@@ -172,7 +174,9 @@ export const PartnerPaymentsManager = () => {
             );
           })}
         </TableBody>
-      </Table>
+          </Table>
+        </div>
+      </div>
 
       {selectedPartner && (
         <RecordPaymentDialog

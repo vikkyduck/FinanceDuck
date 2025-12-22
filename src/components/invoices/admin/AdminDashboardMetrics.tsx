@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -107,7 +107,7 @@ const InvoiceList = ({ year, month, category, isOpen }: InvoiceListProps) => {
       {invoices.map(inv => (
         <Link
           key={inv.id}
-          href={`/invoices/${inv.id}`}
+          to={`/invoices/${inv.id}`}
           className="flex items-center justify-between gap-2 p-1.5 rounded hover-elevate text-sm group"
           data-testid={`link-invoice-${inv.id}`}
         >

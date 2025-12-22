@@ -2042,24 +2042,30 @@ export function registerRoutes(app: Express): void {
       const displayName = invoiceNumber || client?.name || partner?.name || invoice.description || id;
       const actTypeLabel = actType === 'company' ? 'компании' : 'исполнителя';
       
-      await storage.logAssistantAction({
-        accessTokenId: req.user!.token.id,
-        actionType: "upload_act",
-        entityType: "act",
-        entityId: act.id,
-        description: `Загружен акт ${actTypeLabel}: ${displayName}`,
-        details: JSON.stringify({
-          invoiceId: id,
-          invoiceNumber,
-          clientName: client?.name,
-          partnerName: partner?.name,
-          actType,
-          fileName,
-          isLink: isLink || false,
-        }),
-        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
-        userAgent: req.headers['user-agent'] || null,
-      });
+      console.log('[Upload Act] About to log action for act:', act.id, 'token:', req.user!.token.id);
+      try {
+        await storage.logAssistantAction({
+          accessTokenId: req.user!.token.id,
+          actionType: "upload_act",
+          entityType: "act",
+          entityId: act.id,
+          description: `Загружен акт ${actTypeLabel}: ${displayName}`,
+          details: JSON.stringify({
+            invoiceId: id,
+            invoiceNumber,
+            clientName: client?.name,
+            partnerName: partner?.name,
+            actType,
+            fileName,
+            isLink: isLink || false,
+          }),
+          ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+          userAgent: req.headers['user-agent'] || null,
+        });
+        console.log('[Upload Act] Action logged successfully');
+      } catch (logError) {
+        console.error('[Upload Act] Failed to log action:', logError);
+      }
       
       // Return without file data
       const { fileData: _, ...actWithoutData } = act;

@@ -95,47 +95,74 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
         </p>
       </CardHeader>
       <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
-        <div className="rounded-md border overflow-x-auto -mx-4 sm:mx-0">
-          <div className="min-w-[600px] px-4 sm:px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs sm:text-sm">Месяц</TableHead>
-                  <TableHead className="text-xs sm:text-sm text-right">Продано</TableHead>
-                  <TableHead className="text-xs sm:text-sm text-right">Поступило</TableHead>
-                  <TableHead className="text-xs sm:text-sm text-right">Расходы</TableHead>
-                  <TableHead className="text-xs sm:text-sm text-right">Чистая прибыль</TableHead>
-                  <TableHead className="text-xs sm:text-sm text-right">Рост</TableHead>
+        {/* Mobile cards layout */}
+        <div className="sm:hidden space-y-2">
+          {tableData.map((row, index) => (
+            <button
+              key={index}
+              onClick={() => openMonthInvoices(row.monthNumber)}
+              className="w-full p-3 text-left bg-muted/30 rounded-lg min-h-[56px] active:bg-muted/50"
+              data-testid={`mobile-row-month-${row.monthNumber}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-medium text-sm text-primary">{row.month}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-primary">{formatCurrency(row.netProfit)}</span>
+                  <GrowthIndicator value={row.growthPercent} />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-muted-foreground pl-6">
+                <span>Продано: {formatCurrency(row.totalSold)}</span>
+                <span>Поступило: {formatCurrency(row.totalReceived)}</span>
+                <span>Расходы: {formatCurrency(row.expenses)}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Desktop table layout */}
+        <div className="hidden sm:block rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-sm">Месяц</TableHead>
+                <TableHead className="text-sm text-right">Продано</TableHead>
+                <TableHead className="text-sm text-right">Поступило</TableHead>
+                <TableHead className="text-sm text-right">Расходы</TableHead>
+                <TableHead className="text-sm text-right">Чистая прибыль</TableHead>
+                <TableHead className="text-sm text-right">Рост</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tableData.map((row, index) => (
+                <TableRow 
+                  key={index}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => openMonthInvoices(row.monthNumber)}
+                  data-testid={`row-month-${row.monthNumber}`}
+                >
+                  <TableCell className="text-sm py-2">
+                    <div className="flex items-center gap-2">
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="font-medium text-primary">{row.month}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalSold)}</TableCell>
+                  <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalReceived)}</TableCell>
+                  <TableCell className="text-sm text-right text-muted-foreground py-2">{formatCurrency(row.expenses)}</TableCell>
+                  <TableCell className="text-sm text-right font-semibold text-primary py-2">
+                    {formatCurrency(row.netProfit)}
+                  </TableCell>
+                  <TableCell className="text-sm text-right py-2">
+                    <GrowthIndicator value={row.growthPercent} />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableData.map((row, index) => (
-                  <TableRow 
-                    key={index}
-                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70 min-h-[44px]"
-                    onClick={() => openMonthInvoices(row.monthNumber)}
-                    data-testid={`row-month-${row.monthNumber}`}
-                  >
-                    <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
-                      <div className="flex items-center gap-2">
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium text-primary">{row.month}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(row.totalSold)}</TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(row.totalReceived)}</TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">{formatCurrency(row.expenses)}</TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right font-semibold text-primary py-3 sm:py-2">
-                      {formatCurrency(row.netProfit)}
-                    </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
-                      <GrowthIndicator value={row.growthPercent} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </CardContent>
     </Card>

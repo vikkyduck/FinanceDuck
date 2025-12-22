@@ -107,7 +107,7 @@ const InvoiceList = ({ year, month, category, isOpen }: InvoiceListProps) => {
       {invoices.map(inv => (
         <Link
           key={inv.id}
-          to={`/invoices/${inv.id}`}
+          href={`/invoices/${inv.id}`}
           className="flex items-center justify-between gap-2 p-1.5 rounded hover-elevate text-sm group"
           data-testid={`link-invoice-${inv.id}`}
         >

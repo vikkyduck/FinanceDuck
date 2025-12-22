@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FileCheck2, ChevronDown, ChevronUp, Building2, User, RefreshCw, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
@@ -11,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useNavigate } from "react-router-dom";
+import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
 
 interface InvoiceDetail {
   id: string;
@@ -34,9 +33,15 @@ interface ClientActsData {
 
 export const ClientActsDashboard = () => {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const refetchInterval = useVisibilityAwareInterval();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const openInvoiceDetails = (invoiceId: string) => {
+    setSelectedInvoiceId(invoiceId);
+    setDetailsDialogOpen(true);
+  };
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -216,7 +221,7 @@ export const ClientActsDashboard = () => {
                         {client.invoiceDetails.map(inv => (
                           <div 
                             key={inv.id} 
-                            onClick={() => navigate(`/stats?open=${inv.id}`)}
+                            onClick={() => openInvoiceDetails(inv.id)}
                             className="block p-2 rounded border bg-muted/30 hover-elevate cursor-pointer"
                             data-testid={`invoice-link-mobile-${inv.id}`}
                           >
@@ -339,7 +344,7 @@ export const ClientActsDashboard = () => {
                               <tr 
                                 key={inv.id} 
                                 className="hover:bg-muted/30 cursor-pointer"
-                                onClick={() => navigate(`/stats?open=${inv.id}`)}
+                                onClick={() => openInvoiceDetails(inv.id)}
                                 data-testid={`invoice-row-desktop-${inv.id}`}
                               >
                                 <td className="p-2">
@@ -383,6 +388,24 @@ export const ClientActsDashboard = () => {
           </div>
         )}
       </CardContent>
+
+      {/* Invoice Details Dialog */}
+      {selectedInvoiceId && (
+        <InvoiceDetailsDialog
+          invoiceId={selectedInvoiceId}
+          open={detailsDialogOpen}
+          onOpenChange={(open) => {
+            setDetailsDialogOpen(open);
+            if (!open) {
+              setSelectedInvoiceId(null);
+              // Refresh acts status after closing
+              queryClient.invalidateQueries({ queryKey: ['/api/clients/acts-status'] });
+            }
+          }}
+          canEdit={true}
+          userRole="admin"
+        />
+      )}
     </Card>
   );
 };

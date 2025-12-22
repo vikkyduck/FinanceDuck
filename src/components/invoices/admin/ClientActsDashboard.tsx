@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 interface InvoiceDetail {
   id: string;
@@ -34,6 +34,7 @@ interface ClientActsData {
 
 export const ClientActsDashboard = () => {
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const refetchInterval = useVisibilityAwareInterval();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
 
@@ -335,7 +336,12 @@ export const ClientActsDashboard = () => {
                           </thead>
                           <tbody className="divide-y">
                             {client.invoiceDetails.map(inv => (
-                              <tr key={inv.id} className="hover:bg-muted/30">
+                              <tr 
+                                key={inv.id} 
+                                className="hover:bg-muted/30 cursor-pointer"
+                                onClick={() => setLocation(`/invoices/${inv.id}`)}
+                                data-testid={`invoice-row-desktop-${inv.id}`}
+                              >
                                 <td className="p-2">
                                   <div className="font-medium">
                                     {inv.invoiceNumber || inv.id.slice(0, 8)}
@@ -361,16 +367,8 @@ export const ClientActsDashboard = () => {
                                     <AlertCircle className="h-4 w-4 text-orange-400 inline" />
                                   )}
                                 </td>
-                                <td className="p-2">
-                                  <Link href={`/invoices/${inv.id}`}>
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon"
-                                      data-testid={`invoice-link-desktop-${inv.id}`}
-                                    >
-                                      <ExternalLink className="h-4 w-4" />
-                                    </Button>
-                                  </Link>
+                                <td className="p-2 text-center">
+                                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
                                 </td>
                               </tr>
                             ))}

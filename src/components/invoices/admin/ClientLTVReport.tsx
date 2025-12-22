@@ -29,7 +29,7 @@ export const ClientLTVReport = () => {
   const [sortBy, setSortBy] = useState<'total_admin_profit' | 'potential_profit' | 'total_invoices'>('total_admin_profit');
 
   const openClientInvoices = (clientId: string) => {
-    navigate(`/invoices?clientId=${clientId}`);
+    navigate(`/stats?tab=invoices&clientId=${clientId}`);
   };
 
   const { data: clients = [], isLoading, error } = useQuery<ClientLTV[]>({

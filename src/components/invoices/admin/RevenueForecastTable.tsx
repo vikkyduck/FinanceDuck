@@ -31,7 +31,7 @@ export const RevenueForecastTable = () => {
   });
   
   const openMonthInvoices = (monthIndex: number, year: number) => {
-    navigate(`/invoices?month=${monthIndex}&year=${year}`);
+    navigate(`/stats?tab=invoices&month=${monthIndex}&year=${year}`);
   };
 
   if (isLoading) {

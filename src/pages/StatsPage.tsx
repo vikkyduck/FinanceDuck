@@ -31,6 +31,10 @@ const StatsPage = () => {
   const { viewMode, setViewMode } = useViewMode();
   const [searchParams] = useSearchParams();
   const showAlerts = searchParams.get('alerts') === 'true';
+  
+  // Get tab from URL params, default to 'overview'
+  const urlTab = searchParams.get('tab');
+  const defaultTab = urlTab === 'invoices' || urlTab === 'sales' ? urlTab : 'overview';
 
   const { isExpanded, toggleSection, expandAll, collapseAll } = useCollapsibleSections(
     "stats-page-sections",
@@ -88,7 +92,7 @@ const StatsPage = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4 sm:space-y-8 pb-8 sm:pb-12">
+      <Tabs defaultValue={defaultTab} className="space-y-4 sm:space-y-8 pb-8 sm:pb-12">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 animate-fade-in">
           <TabsList className="glass-strong border border-primary/10 shadow-lg p-1 sm:p-1.5 gap-1 h-auto w-full sm:w-auto grid grid-cols-3 sm:inline-flex">
             <TabsTrigger 

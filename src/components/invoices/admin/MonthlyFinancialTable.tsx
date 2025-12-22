@@ -27,7 +27,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
   });
   
   const openMonthInvoices = (monthNumber: number) => {
-    navigate(`/invoices?month=${monthNumber}&year=${year}`);
+    navigate(`/stats?tab=invoices&month=${monthNumber}&year=${year}`);
   };
 
   const monthNames = [

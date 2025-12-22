@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -197,116 +198,177 @@ export const DoNotSpendDashboard = ({
             </div>
           )}
 
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <div className="min-w-[500px] px-4 sm:px-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent border-amber-200/50 dark:border-amber-800/30">
-                    <TableHead className="text-xs w-8"></TableHead>
-                    <TableHead className="text-xs">Клиент</TableHead>
-                    <TableHead className="text-xs text-center">Счетов</TableHead>
-                    <TableHead className="text-xs text-right">Бюджет</TableHead>
-                    <TableHead className="text-xs text-right">Потрачено</TableHead>
-                    <TableHead className="text-xs text-right">Остаток</TableHead>
-                  </TableRow>
-                </TableHeader>
-            <TableBody>
-              {summaries.map((summary) => {
-                const isExpanded = expandedClients.has(summary.clientId);
-                return (
-                  <Fragment key={summary.clientId}>
-                    <TableRow 
-                      className="hover:bg-amber-100/50 dark:hover:bg-amber-900/20 active:bg-amber-100/70 dark:active:bg-amber-900/30 border-amber-200/50 dark:border-amber-800/30 cursor-pointer min-h-[44px]"
-                      onClick={() => toggleClient(summary.clientId)}
-                      data-testid={`row-client-${summary.clientId}`}
-                    >
-                      <TableCell className="text-sm w-8 py-3 sm:py-2 px-2">
+          {/* Mobile cards layout */}
+          <div className="sm:hidden space-y-3">
+            {summaries.map((summary) => {
+              const isExpanded = expandedClients.has(summary.clientId);
+              return (
+                <Card 
+                  key={summary.clientId}
+                  className="bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-800/30"
+                >
+                  <button
+                    className="w-full p-4 text-left min-h-[56px] active:bg-amber-100/50 dark:active:bg-amber-900/20"
+                    onClick={() => toggleClient(summary.clientId)}
+                    data-testid={`mobile-row-client-${summary.clientId}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                         ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                         )}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="font-medium">{summary.clientName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm text-center text-muted-foreground py-3 sm:py-2">
-                        {summary.invoiceCount}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
-                        {formatCurrency(summary.totalBudget)}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
-                        {formatCurrency(summary.totalSpent)}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
-                        <span className="font-semibold text-amber-700 dark:text-amber-400">
-                          {formatCurrency(summary.remaining)}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                    {isExpanded && summary.invoices.map((invoice) => (
-                      <TableRow 
-                        key={invoice.id}
-                        className="bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/30 dark:border-amber-800/20 min-h-[44px]"
-                        data-testid={`row-invoice-${invoice.id}`}
-                      >
-                        <TableCell className="py-3 sm:py-2 px-2"></TableCell>
-                        <TableCell className="text-xs sm:text-sm pl-6 sm:pl-8 py-3 sm:py-2" colSpan={2}>
+                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-sm truncate">{summary.clientName}</span>
+                      </div>
+                      <span className="font-semibold text-amber-700 dark:text-amber-400 text-sm shrink-0">
+                        {formatCurrency(summary.remaining)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground pl-10">
+                      <span>{summary.invoiceCount} счетов</span>
+                      <span>Потрачено: {formatCurrency(summary.totalSpent)}</span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-amber-200/50 dark:border-amber-800/30 px-4 pb-3">
+                      {summary.invoices.map((invoice) => (
+                        <button
+                          key={invoice.id}
+                          onClick={() => openInvoice(invoice.id)}
+                          className="w-full py-3 text-left border-b border-amber-200/30 dark:border-amber-800/20 last:border-0 min-h-[56px] active:bg-amber-100/50"
+                          data-testid={`mobile-link-invoice-${invoice.id}`}
+                        >
                           <div className="flex items-start gap-2">
-                            <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                            <div className="min-w-0 space-y-1">
-                              <button
-                                onClick={() => openInvoice(invoice.id)}
-                                className="font-medium text-xs text-primary hover:underline cursor-pointer text-left min-h-[44px] flex items-center"
-                                data-testid={`link-invoice-${invoice.id}`}
-                              >
-                                {invoice.number}
-                              </button>
+                            <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-xs text-primary">{invoice.number}</span>
+                                <span className={cn(
+                                  "font-medium text-xs shrink-0",
+                                  invoice.remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+                                )}>
+                                  {formatCurrency(invoice.remaining)}
+                                </span>
+                              </div>
                               {invoice.description && (
-                                <div className="text-xs text-muted-foreground" title={invoice.description}>
-                                  {invoice.description}
-                                </div>
-                              )}
-                              {invoice.notes && (
-                                <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
-                                  <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                                  <span className="line-clamp-2" title={invoice.notes}>
-                                    {invoice.notes}
-                                  </span>
-                                </div>
+                                <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{invoice.description}</div>
                               )}
                             </div>
                           </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden sm:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-amber-200/50 dark:border-amber-800/30">
+                  <TableHead className="text-xs w-8"></TableHead>
+                  <TableHead className="text-xs">Клиент</TableHead>
+                  <TableHead className="text-xs text-center">Счетов</TableHead>
+                  <TableHead className="text-xs text-right">Бюджет</TableHead>
+                  <TableHead className="text-xs text-right">Потрачено</TableHead>
+                  <TableHead className="text-xs text-right">Остаток</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {summaries.map((summary) => {
+                  const isExpanded = expandedClients.has(summary.clientId);
+                  return (
+                    <Fragment key={summary.clientId}>
+                      <TableRow 
+                        className="hover:bg-amber-100/50 dark:hover:bg-amber-900/20 active:bg-amber-100/70 border-amber-200/50 dark:border-amber-800/30 cursor-pointer"
+                        onClick={() => toggleClient(summary.clientId)}
+                        data-testid={`row-client-${summary.clientId}`}
+                      >
+                        <TableCell className="text-sm w-8 py-2 px-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
-                          {formatCurrency(invoice.budget)}
+                        <TableCell className="text-sm py-2">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{summary.clientName}</span>
+                          </div>
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
-                          {formatCurrency(invoice.spent)}
+                        <TableCell className="text-sm text-center text-muted-foreground py-2">
+                          {summary.invoiceCount}
                         </TableCell>
-                        <TableCell className="text-xs text-right py-3 sm:py-2">
-                          <span className={cn(
-                            "font-medium",
-                            invoice.remaining > 0 
-                              ? "text-amber-600 dark:text-amber-400" 
-                              : "text-muted-foreground"
-                          )}>
-                            {formatCurrency(invoice.remaining)}
+                        <TableCell className="text-sm text-right text-muted-foreground py-2">
+                          {formatCurrency(summary.totalBudget)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right text-muted-foreground py-2">
+                          {formatCurrency(summary.totalSpent)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right py-2">
+                          <span className="font-semibold text-amber-700 dark:text-amber-400">
+                            {formatCurrency(summary.remaining)}
                           </span>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </Fragment>
-                );
-              })}
+                      {isExpanded && summary.invoices.map((invoice) => (
+                        <TableRow 
+                          key={invoice.id}
+                          className="bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/30 dark:border-amber-800/20"
+                          data-testid={`row-invoice-${invoice.id}`}
+                        >
+                          <TableCell className="py-2 px-2"></TableCell>
+                          <TableCell className="text-sm pl-8 py-2" colSpan={2}>
+                            <div className="flex items-start gap-2">
+                              <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              <div className="min-w-0 space-y-1">
+                                <button
+                                  onClick={() => openInvoice(invoice.id)}
+                                  className="font-medium text-xs text-primary hover:underline cursor-pointer text-left"
+                                  data-testid={`link-invoice-${invoice.id}`}
+                                >
+                                  {invoice.number}
+                                </button>
+                                {invoice.description && (
+                                  <div className="text-xs text-muted-foreground">{invoice.description}</div>
+                                )}
+                                {invoice.notes && (
+                                  <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
+                                    <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                                    <span className="line-clamp-2">{invoice.notes}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground py-2">
+                            {formatCurrency(invoice.budget)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right text-muted-foreground py-2">
+                            {formatCurrency(invoice.spent)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right py-2">
+                            <span className={cn(
+                              "font-medium",
+                              invoice.remaining > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+                            )}>
+                              {formatCurrency(invoice.remaining)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
-        </div>
 
           <div className="mt-4 pt-4 border-t border-amber-200/50 dark:border-amber-800/30">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs sm:text-sm gap-2">
@@ -353,52 +415,120 @@ export const DoNotSpendDashboard = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto -mx-4 sm:mx-0">
-            <div className="min-w-[500px] px-4 sm:px-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
-                    <TableHead className="text-xs w-8"></TableHead>
-                    <TableHead className="text-xs">Партнёр</TableHead>
-                    <TableHead className="text-xs text-center">Счетов</TableHead>
-                    <TableHead className="text-xs text-right">План. расходы</TableHead>
-                    <TableHead className="text-xs text-right">Потрачено</TableHead>
-                    <TableHead className="text-xs text-right">Остаток</TableHead>
-                  </TableRow>
-                </TableHeader>
+          {/* Mobile cards layout */}
+          <div className="sm:hidden space-y-3">
+            {partnerSchemeSummaries.map((summary) => {
+              const isExpanded = expandedPartners.has(summary.partnerId);
+              return (
+                <Card 
+                  key={summary.partnerId}
+                  className="bg-blue-50/30 dark:bg-blue-950/10 border-blue-200/50 dark:border-blue-800/30"
+                >
+                  <button
+                    className="w-full p-4 text-left min-h-[56px] active:bg-blue-100/50 dark:active:bg-blue-900/20"
+                    onClick={() => togglePartner(summary.partnerId)}
+                    data-testid={`mobile-row-partner-${summary.partnerId}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                        <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-sm truncate">{summary.partnerName}</span>
+                      </div>
+                      <span className="font-semibold text-blue-700 dark:text-blue-400 text-sm shrink-0">
+                        {formatCurrency(summary.totalDoNotSpend)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground pl-10">
+                      <span>{summary.invoiceCount} счетов</span>
+                      <span>Потрачено: {formatCurrency(summary.totalSpent)}</span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-blue-200/50 dark:border-blue-800/30 px-4 pb-3">
+                      {summary.invoices.map((invoice) => (
+                        <button
+                          key={invoice.id}
+                          onClick={() => openInvoice(invoice.id)}
+                          className="w-full py-3 text-left border-b border-blue-200/30 dark:border-blue-800/20 last:border-0 min-h-[56px] active:bg-blue-100/50"
+                          data-testid={`mobile-link-partner-invoice-${invoice.id}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-medium text-xs text-primary">{invoice.number}</span>
+                                <span className={cn(
+                                  "font-medium text-xs shrink-0",
+                                  invoice.doNotSpend > 0 ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"
+                                )}>
+                                  {formatCurrency(invoice.doNotSpend)}
+                                </span>
+                              </div>
+                              {invoice.description && (
+                                <div className="text-xs text-muted-foreground mt-1 line-clamp-1">{invoice.description}</div>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden sm:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-blue-200/50 dark:border-blue-800/30">
+                  <TableHead className="text-xs w-8"></TableHead>
+                  <TableHead className="text-xs">Партнёр</TableHead>
+                  <TableHead className="text-xs text-center">Счетов</TableHead>
+                  <TableHead className="text-xs text-right">План. расходы</TableHead>
+                  <TableHead className="text-xs text-right">Потрачено</TableHead>
+                  <TableHead className="text-xs text-right">Остаток</TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {partnerSchemeSummaries.map((summary) => {
                   const isExpanded = expandedPartners.has(summary.partnerId);
                   return (
                     <Fragment key={summary.partnerId}>
                       <TableRow 
-                        className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 active:bg-blue-100/70 dark:active:bg-blue-900/30 border-blue-200/50 dark:border-blue-800/30 cursor-pointer min-h-[44px]"
+                        className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 border-blue-200/50 dark:border-blue-800/30 cursor-pointer"
                         onClick={() => togglePartner(summary.partnerId)}
                         data-testid={`row-partner-${summary.partnerId}`}
                       >
-                        <TableCell className="text-sm w-8 py-3 sm:py-2 px-2">
+                        <TableCell className="text-sm w-8 py-2 px-2">
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           ) : (
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           )}
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
+                        <TableCell className="text-sm py-2">
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4 text-muted-foreground shrink-0" />
                             <span className="font-medium">{summary.partnerName}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm text-center text-muted-foreground py-3 sm:py-2">
+                        <TableCell className="text-sm text-center text-muted-foreground py-2">
                           {summary.invoiceCount}
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
+                        <TableCell className="text-sm text-right text-muted-foreground py-2">
                           {formatCurrency(summary.totalPlannedExpenses)}
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
+                        <TableCell className="text-sm text-right text-muted-foreground py-2">
                           {formatCurrency(summary.totalSpent)}
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
+                        <TableCell className="text-sm text-right py-2">
                           <span className="font-semibold text-blue-700 dark:text-blue-400">
                             {formatCurrency(summary.totalDoNotSpend)}
                           </span>
@@ -407,49 +537,43 @@ export const DoNotSpendDashboard = ({
                       {isExpanded && summary.invoices.map((invoice) => (
                         <TableRow 
                           key={invoice.id}
-                          className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/30 dark:border-blue-800/20 min-h-[44px]"
+                          className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/30 dark:border-blue-800/20"
                           data-testid={`row-partner-invoice-${invoice.id}`}
                         >
-                          <TableCell className="py-3 sm:py-2 px-2"></TableCell>
-                          <TableCell className="text-xs sm:text-sm pl-6 sm:pl-8 py-3 sm:py-2" colSpan={2}>
+                          <TableCell className="py-2 px-2"></TableCell>
+                          <TableCell className="text-sm pl-8 py-2" colSpan={2}>
                             <div className="flex items-start gap-2">
                               <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                               <div className="min-w-0 space-y-1">
                                 <button
                                   onClick={() => openInvoice(invoice.id)}
-                                  className="font-medium text-xs text-primary hover:underline cursor-pointer text-left min-h-[44px] flex items-center"
+                                  className="font-medium text-xs text-primary hover:underline cursor-pointer text-left"
                                   data-testid={`link-partner-invoice-${invoice.id}`}
                                 >
                                   {invoice.number}
                                 </button>
                                 {invoice.description && (
-                                  <div className="text-xs text-muted-foreground" title={invoice.description}>
-                                    {invoice.description}
-                                  </div>
+                                  <div className="text-xs text-muted-foreground">{invoice.description}</div>
                                 )}
                                 {invoice.notes && (
                                   <div className="flex items-start gap-1 text-xs text-muted-foreground/80 italic">
                                     <MessageSquare className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                                    <span className="line-clamp-2" title={invoice.notes}>
-                                      {invoice.notes}
-                                    </span>
+                                    <span className="line-clamp-2">{invoice.notes}</span>
                                   </div>
                                 )}
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
+                          <TableCell className="text-xs text-right text-muted-foreground py-2">
                             {formatCurrency(invoice.plannedExpenses)}
                           </TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
+                          <TableCell className="text-xs text-right text-muted-foreground py-2">
                             {formatCurrency(invoice.spent)}
                           </TableCell>
-                          <TableCell className="text-xs text-right py-3 sm:py-2">
+                          <TableCell className="text-xs text-right py-2">
                             <span className={cn(
                               "font-medium",
-                              invoice.doNotSpend > 0 
-                                ? "text-blue-600 dark:text-blue-400" 
-                                : "text-muted-foreground"
+                              invoice.doNotSpend > 0 ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground"
                             )}>
                               {formatCurrency(invoice.doNotSpend)}
                             </span>
@@ -459,9 +583,8 @@ export const DoNotSpendDashboard = ({
                     </Fragment>
                   );
                 })}
-                </TableBody>
-              </Table>
-            </div>
+              </TableBody>
+            </Table>
           </div>
 
           <div className="mt-4 pt-4 border-t border-blue-200/50 dark:border-blue-800/30">

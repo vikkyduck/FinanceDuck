@@ -216,33 +216,33 @@ export const DoNotSpendDashboard = ({
                 return (
                   <Fragment key={summary.clientId}>
                     <TableRow 
-                      className="hover:bg-amber-100/50 dark:hover:bg-amber-900/20 border-amber-200/50 dark:border-amber-800/30 cursor-pointer"
+                      className="hover:bg-amber-100/50 dark:hover:bg-amber-900/20 active:bg-amber-100/70 dark:active:bg-amber-900/30 border-amber-200/50 dark:border-amber-800/30 cursor-pointer min-h-[44px]"
                       onClick={() => toggleClient(summary.clientId)}
                       data-testid={`row-client-${summary.clientId}`}
                     >
-                      <TableCell className="text-sm w-8 p-2">
+                      <TableCell className="text-sm w-8 py-3 sm:py-2 px-2">
                         {isExpanded ? (
                           <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         ) : (
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
                         <div className="flex items-center gap-2">
-                          <Building2 className="h-3 w-3 text-muted-foreground" />
-                          {summary.clientName}
+                          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium">{summary.clientName}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-center text-muted-foreground">
+                      <TableCell className="text-xs sm:text-sm text-center text-muted-foreground py-3 sm:py-2">
                         {summary.invoiceCount}
                       </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
+                      <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
                         {formatCurrency(summary.totalBudget)}
                       </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
+                      <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
                         {formatCurrency(summary.totalSpent)}
                       </TableCell>
-                      <TableCell className="text-sm text-right">
+                      <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
                         <span className="font-semibold text-amber-700 dark:text-amber-400">
                           {formatCurrency(summary.remaining)}
                         </span>
@@ -251,17 +251,17 @@ export const DoNotSpendDashboard = ({
                     {isExpanded && summary.invoices.map((invoice) => (
                       <TableRow 
                         key={invoice.id}
-                        className="bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/30 dark:border-amber-800/20"
+                        className="bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/30 dark:border-amber-800/20 min-h-[44px]"
                         data-testid={`row-invoice-${invoice.id}`}
                       >
-                        <TableCell className="p-2"></TableCell>
-                        <TableCell className="text-sm pl-8" colSpan={2}>
+                        <TableCell className="py-3 sm:py-2 px-2"></TableCell>
+                        <TableCell className="text-xs sm:text-sm pl-6 sm:pl-8 py-3 sm:py-2" colSpan={2}>
                           <div className="flex items-start gap-2">
-                            <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                             <div className="min-w-0 space-y-1">
                               <button
                                 onClick={() => openInvoice(invoice.id)}
-                                className="font-medium text-xs text-primary hover:underline cursor-pointer text-left"
+                                className="font-medium text-xs text-primary hover:underline cursor-pointer text-left min-h-[44px] flex items-center"
                                 data-testid={`link-invoice-${invoice.id}`}
                               >
                                 {invoice.number}
@@ -282,13 +282,13 @@ export const DoNotSpendDashboard = ({
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground">
+                        <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
                           {formatCurrency(invoice.budget)}
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground">
+                        <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
                           {formatCurrency(invoice.spent)}
                         </TableCell>
-                        <TableCell className="text-xs text-right">
+                        <TableCell className="text-xs text-right py-3 sm:py-2">
                           <span className={cn(
                             "font-medium",
                             invoice.remaining > 0 
@@ -372,33 +372,33 @@ export const DoNotSpendDashboard = ({
                   return (
                     <Fragment key={summary.partnerId}>
                       <TableRow 
-                        className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 border-blue-200/50 dark:border-blue-800/30 cursor-pointer"
+                        className="hover:bg-blue-100/50 dark:hover:bg-blue-900/20 active:bg-blue-100/70 dark:active:bg-blue-900/30 border-blue-200/50 dark:border-blue-800/30 cursor-pointer min-h-[44px]"
                         onClick={() => togglePartner(summary.partnerId)}
                         data-testid={`row-partner-${summary.partnerId}`}
                       >
-                        <TableCell className="text-sm w-8 p-2">
+                        <TableCell className="text-sm w-8 py-3 sm:py-2 px-2">
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           ) : (
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           )}
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
                           <div className="flex items-center gap-2">
-                            <Users className="h-3 w-3 text-muted-foreground" />
-                            {summary.partnerName}
+                            <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-medium">{summary.partnerName}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-center text-muted-foreground">
+                        <TableCell className="text-xs sm:text-sm text-center text-muted-foreground py-3 sm:py-2">
                           {summary.invoiceCount}
                         </TableCell>
-                        <TableCell className="text-sm text-right text-muted-foreground">
+                        <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
                           {formatCurrency(summary.totalPlannedExpenses)}
                         </TableCell>
-                        <TableCell className="text-sm text-right text-muted-foreground">
+                        <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">
                           {formatCurrency(summary.totalSpent)}
                         </TableCell>
-                        <TableCell className="text-sm text-right">
+                        <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
                           <span className="font-semibold text-blue-700 dark:text-blue-400">
                             {formatCurrency(summary.totalDoNotSpend)}
                           </span>
@@ -407,17 +407,17 @@ export const DoNotSpendDashboard = ({
                       {isExpanded && summary.invoices.map((invoice) => (
                         <TableRow 
                           key={invoice.id}
-                          className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/30 dark:border-blue-800/20"
+                          className="bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/30 dark:border-blue-800/20 min-h-[44px]"
                           data-testid={`row-partner-invoice-${invoice.id}`}
                         >
-                          <TableCell className="p-2"></TableCell>
-                          <TableCell className="text-sm pl-8" colSpan={2}>
+                          <TableCell className="py-3 sm:py-2 px-2"></TableCell>
+                          <TableCell className="text-xs sm:text-sm pl-6 sm:pl-8 py-3 sm:py-2" colSpan={2}>
                             <div className="flex items-start gap-2">
-                              <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                               <div className="min-w-0 space-y-1">
                                 <button
                                   onClick={() => openInvoice(invoice.id)}
-                                  className="font-medium text-xs text-primary hover:underline cursor-pointer text-left"
+                                  className="font-medium text-xs text-primary hover:underline cursor-pointer text-left min-h-[44px] flex items-center"
                                   data-testid={`link-partner-invoice-${invoice.id}`}
                                 >
                                   {invoice.number}
@@ -438,13 +438,13 @@ export const DoNotSpendDashboard = ({
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">
+                          <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
                             {formatCurrency(invoice.plannedExpenses)}
                           </TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">
+                          <TableCell className="text-xs text-right text-muted-foreground py-3 sm:py-2">
                             {formatCurrency(invoice.spent)}
                           </TableCell>
-                          <TableCell className="text-xs text-right">
+                          <TableCell className="text-xs text-right py-3 sm:py-2">
                             <span className={cn(
                               "font-medium",
                               invoice.doNotSpend > 0 

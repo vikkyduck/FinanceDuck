@@ -112,23 +112,23 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                 {tableData.map((row, index) => (
                   <TableRow 
                     key={index}
-                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70"
+                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70 min-h-[44px]"
                     onClick={() => openMonthInvoices(row.monthNumber)}
                     data-testid={`row-month-${row.monthNumber}`}
                   >
-                    <TableCell className="text-xs sm:text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="font-medium text-primary">{row.month}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalSold)}</TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalReceived)}</TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right text-muted-foreground">{formatCurrency(row.expenses)}</TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right font-semibold text-primary">
+                    <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(row.totalSold)}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(row.totalReceived)}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right text-muted-foreground py-3 sm:py-2">{formatCurrency(row.expenses)}</TableCell>
+                    <TableCell className="text-xs sm:text-sm text-right font-semibold text-primary py-3 sm:py-2">
                       {formatCurrency(row.netProfit)}
                     </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right">
+                    <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
                       <GrowthIndicator value={row.growthPercent} />
                     </TableCell>
                   </TableRow>

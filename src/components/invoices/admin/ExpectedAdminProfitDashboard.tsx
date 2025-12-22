@@ -161,27 +161,27 @@ export const ExpectedAdminProfitDashboard = ({
                 return (
                   <Fragment key={summary.partnerId}>
                     <TableRow 
-                      className="hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 border-emerald-200/50 dark:border-emerald-800/30 cursor-pointer"
+                      className="hover:bg-emerald-100/50 dark:hover:bg-emerald-900/20 active:bg-emerald-100/70 dark:active:bg-emerald-900/30 border-emerald-200/50 dark:border-emerald-800/30 cursor-pointer min-h-[44px]"
                       onClick={() => togglePartner(summary.partnerId)}
                       data-testid={`row-admin-profit-${summary.partnerId}`}
                     >
-                      <TableCell className="text-sm w-8 p-2">
+                      <TableCell className="text-sm w-8 py-3 sm:py-2 px-2">
                         {isExpanded ? (
                           <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         ) : (
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         )}
                       </TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
                         <div className="flex items-center gap-2">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          {summary.partnerName}
+                          <Users className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium">{summary.partnerName}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-center text-muted-foreground">
+                      <TableCell className="text-xs sm:text-sm text-center text-muted-foreground py-3 sm:py-2">
                         {summary.invoiceCount}
                       </TableCell>
-                      <TableCell className="text-sm text-right">
+                      <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">
                         <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                           {formatCurrency(summary.totalExpectedProfit)}
                         </span>
@@ -190,18 +190,18 @@ export const ExpectedAdminProfitDashboard = ({
                     {isExpanded && summary.invoices.map((invoice) => (
                       <TableRow 
                         key={invoice.id}
-                        className="bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/30 dark:border-emerald-800/20"
+                        className="bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/30 dark:border-emerald-800/20 min-h-[44px]"
                         data-testid={`row-admin-profit-invoice-${invoice.id}`}
                       >
-                        <TableCell className="p-2"></TableCell>
-                        <TableCell className="text-sm pl-8" colSpan={2}>
+                        <TableCell className="py-3 sm:py-2 px-2"></TableCell>
+                        <TableCell className="text-xs sm:text-sm pl-6 sm:pl-8 py-3 sm:py-2" colSpan={2}>
                           <div className="flex items-start gap-2">
-                            <FileText className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+                            <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                             <div className="min-w-0 space-y-1">
-                              <div className="font-medium text-xs flex items-center gap-2">
+                              <div className="font-medium text-xs flex flex-wrap items-center gap-2">
                                 <button
                                   onClick={() => openInvoice(invoice.id)}
-                                  className="text-primary hover:underline cursor-pointer text-left"
+                                  className="text-primary hover:underline cursor-pointer text-left min-h-[44px] flex items-center"
                                   data-testid={`link-admin-profit-invoice-${invoice.id}`}
                                 >
                                   {invoice.number}
@@ -221,7 +221,7 @@ export const ExpectedAdminProfitDashboard = ({
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs text-right">
+                        <TableCell className="text-xs text-right py-3 sm:py-2">
                           <span className="font-medium text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(invoice.netProfitAdmin)}
                           </span>

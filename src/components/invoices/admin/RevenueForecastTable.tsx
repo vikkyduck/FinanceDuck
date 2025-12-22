@@ -100,32 +100,32 @@ export const RevenueForecastTable = () => {
                 {tableData.map((row, index) => (
                   <TableRow 
                     key={index}
-                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70"
+                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70 min-h-[44px]"
                     onClick={() => openMonthInvoices(row.monthIndex, row.yearNum)}
                     data-testid={`row-forecast-${row.monthIndex}-${row.yearNum}`}
                   >
-                    <TableCell className="text-xs sm:text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <TableCell className="text-xs sm:text-sm py-3 sm:py-2">
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                         <span className="font-medium text-primary">{row.month}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right text-chart-1">
+                    <TableCell className="text-xs sm:text-sm text-right text-chart-1 py-3 sm:py-2">
                       {formatCurrency(row.expected)}
                     </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right text-chart-2">
+                    <TableCell className="text-xs sm:text-sm text-right text-chart-2 py-3 sm:py-2">
                       {formatCurrency(row.received)}
                     </TableCell>
-                    <TableCell className="text-xs sm:text-sm text-right font-semibold">
+                    <TableCell className="text-xs sm:text-sm text-right font-semibold py-3 sm:py-2">
                       {formatCurrency(row.total)}
                     </TableCell>
                   </TableRow>
                 ))}
                 <TableRow className="bg-muted/50 font-semibold">
-                  <TableCell className="text-xs sm:text-sm">Итого</TableCell>
-                  <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(totals.expected)}</TableCell>
-                  <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(totals.received)}</TableCell>
-                  <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(totals.total)}</TableCell>
+                  <TableCell className="text-xs sm:text-sm py-3 sm:py-2">Итого</TableCell>
+                  <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(totals.expected)}</TableCell>
+                  <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(totals.received)}</TableCell>
+                  <TableCell className="text-xs sm:text-sm text-right py-3 sm:py-2">{formatCurrency(totals.total)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

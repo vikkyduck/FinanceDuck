@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Users } from "lucide-react";
 import { ManageClientsDialog } from "@/components/invoices/assistant/ManageClientsDialog";
 import { ClientLTVReport } from "@/components/invoices/admin/ClientLTVReport";
+import { ClientActsDashboard } from "@/components/invoices/admin/ClientActsDashboard";
 import { useUserRole } from "@/hooks/useUserRole";
 
 const ClientsPage = () => {
@@ -56,6 +57,9 @@ const ClientsPage = () => {
             Управление клиентами
           </Button>
         </div>
+
+        {/* Acts Dashboard - shown for both admin and assistant */}
+        <ClientActsDashboard />
 
         {isAdmin && (
           <ClientLTVReport />

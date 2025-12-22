@@ -823,6 +823,94 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Client acts status dashboard - real-time view of which clients have acts attached
+  app.get("/api/clients/acts-status", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const role = req.user?.role as UserRole || "client";
+      
+      // Get all clients
+      const clients = await storage.getClients();
+      
+      // Get invoices using proper role-based access
+      const allInvoices = await storage.getInvoices(role);
+      
+      // Filter to only paid invoices
+      const paidInvoices = allInvoices.filter(inv => inv.status === 'paid');
+      
+      // Group invoices by client and check acts
+      // Note: We intentionally include only minimal fields needed for acts tracking
+      // No financial data or descriptions are included for security
+      const clientActsMap = new Map<string, {
+        clientId: string;
+        clientName: string;
+        totalInvoices: number;
+        invoicesWithCompanyAct: number;
+        invoicesWithExecutorAct: number;
+        invoicesWithBothActs: number;
+        invoicesWithoutActs: number;
+        invoiceDetails: Array<{
+          id: string;
+          invoiceNumber: string | null;
+          hasCompanyAct: boolean;
+          hasExecutorAct: boolean;
+          paymentDate: string | null;
+        }>;
+      }>();
+
+      // Initialize all clients in the map
+      for (const client of clients) {
+        clientActsMap.set(client.id, {
+          clientId: client.id,
+          clientName: client.name,
+          totalInvoices: 0,
+          invoicesWithCompanyAct: 0,
+          invoicesWithExecutorAct: 0,
+          invoicesWithBothActs: 0,
+          invoicesWithoutActs: 0,
+          invoiceDetails: [],
+        });
+      }
+
+      // Process each invoice
+      for (const invoice of paidInvoices) {
+        if (!invoice.clientId) continue;
+        
+        const clientData = clientActsMap.get(invoice.clientId);
+        if (!clientData) continue;
+        
+        // Get acts for this invoice
+        const acts = await storage.getSignedActsByInvoice(invoice.id);
+        const hasCompanyAct = acts.some(a => a.actType === 'company');
+        const hasExecutorAct = acts.some(a => a.actType === 'executor');
+        
+        clientData.totalInvoices++;
+        if (hasCompanyAct) clientData.invoicesWithCompanyAct++;
+        if (hasExecutorAct) clientData.invoicesWithExecutorAct++;
+        if (hasCompanyAct && hasExecutorAct) clientData.invoicesWithBothActs++;
+        if (!hasCompanyAct && !hasExecutorAct) clientData.invoicesWithoutActs++;
+        
+        // Only include minimal, non-sensitive data needed for acts tracking
+        clientData.invoiceDetails.push({
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          hasCompanyAct,
+          hasExecutorAct,
+          paymentDate: invoice.paymentDate,
+        });
+      }
+
+      // Convert map to array and filter out clients with no invoices
+      const result = Array.from(clientActsMap.values())
+        .filter(c => c.totalInvoices > 0)
+        .sort((a, b) => b.invoicesWithoutActs - a.invoicesWithoutActs || b.totalInvoices - a.totalInvoices);
+
+      res.json(result);
+    } catch (error) {
+      console.error("Get clients acts status error:", error);
+      res.status(500).json({ error: "Failed to get clients acts status" });
+    }
+  });
+
   app.get("/api/dashboard/stats", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";

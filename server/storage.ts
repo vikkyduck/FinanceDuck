@@ -198,6 +198,7 @@ export interface IStorage {
   // Analytics methods
   getAdminMonthlyData(year: number): Promise<MonthlyData[]>;
   getAdminForecast(monthsAhead: number): Promise<ForecastData[]>;
+  getInvoicesByMonth(month: number, year: number, type?: string): Promise<MonthInvoiceDetail[]>;
   getOverdueInvoices(): Promise<OverdueInvoice[]>;
   getAdminPlanFact(year: number): Promise<PlanFactData[]>;
   
@@ -319,6 +320,18 @@ export interface MonthlyData {
   totalProfit: number;
   invoiceCount: number;
   expenses: number;
+}
+
+export interface MonthInvoiceDetail {
+  id: string;
+  invoiceNumber: string | null;
+  clientName: string | null;
+  clientBill: number;
+  netProfitAdmin: number;
+  status: string;
+  paymentDate: string | null;
+  isExpected: boolean;
+  isPaid: boolean;
 }
 
 export interface DraftsStats {
@@ -3159,6 +3172,50 @@ export class DatabaseStorage implements IStorage {
     }
     
     return forecastData;
+  }
+  
+  async getInvoicesByMonth(month: number, year: number, type?: string): Promise<MonthInvoiceDetail[]> {
+    // Get invoices for a specific month - for expandable month rows
+    const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = new Date(year, month, 0); // Last day of month
+    const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+    
+    // For forecast type, we need to include sent invoices that may not have paymentDate
+    // Use COALESCE to fall back to issueDate when paymentDate is null for sent invoices
+    const results = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id))
+      .where(
+        type === 'forecast' 
+          ? and(
+              or(eq(invoices.status, 'sent'), eq(invoices.status, 'paid')),
+              sql`COALESCE(${invoices.paymentDate}::date, ${invoices.issueDate}::date) >= ${startDateStr}::date`,
+              sql`COALESCE(${invoices.paymentDate}::date, ${invoices.issueDate}::date) <= ${endDateStr}::date`
+            )
+          : and(
+              eq(invoices.status, 'paid'),
+              sql`${invoices.paymentDate}::date >= ${startDateStr}::date`,
+              sql`${invoices.paymentDate}::date <= ${endDateStr}::date`
+            )
+      );
+    
+    return results.map(row => ({
+      id: row.invoice.id,
+      invoiceNumber: row.invoice.invoiceNumber,
+      clientName: row.clientName,
+      clientBill: parseFloat(row.calculations?.clientBill || '0'),
+      netProfitAdmin: parseFloat(row.calculations?.netProfitAdmin || '0'),
+      status: row.invoice.status,
+      paymentDate: row.invoice.paymentDate,
+      isExpected: row.invoice.status === 'sent',
+      isPaid: row.invoice.status === 'paid',
+    }));
   }
   
   async getOverdueInvoices(): Promise<OverdueInvoice[]> {

@@ -963,6 +963,25 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Get invoices by month for expandable tables
+  app.get("/api/admin/invoices-by-month", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const month = parseInt(req.query.month as string);
+      const year = parseInt(req.query.year as string);
+      const type = req.query.type as string; // 'forecast' or 'financial'
+      
+      if (!month || !year) {
+        return res.status(400).json({ error: "Month and year are required" });
+      }
+      
+      const data = await storage.getInvoicesByMonth(month, year, type);
+      res.json(data);
+    } catch (error) {
+      console.error("Get invoices by month error:", error);
+      res.status(500).json({ error: "Failed to get invoices by month" });
+    }
+  });
+
   app.get("/api/invoices/overdue", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const data = await storage.getOverdueInvoices();

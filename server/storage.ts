@@ -2994,9 +2994,10 @@ export class DatabaseStorage implements IStorage {
     for (const row of allInvoices) {
       if (!row.calculations) continue;
       
-      // Use paymentDate for grouping
-      const paymentDate = row.invoice.paymentDate 
-        ? new Date(row.invoice.paymentDate) 
+      // Use actualPaymentDate first, then paymentDate for grouping (matches dashboard logic)
+      const paymentDateStr = row.invoice.actualPaymentDate || row.invoice.paymentDate;
+      const paymentDate = paymentDateStr 
+        ? new Date(paymentDateStr) 
         : null;
       
       if (!paymentDate || paymentDate < yearStart || paymentDate > yearEnd) continue;
@@ -3057,9 +3058,18 @@ export class DatabaseStorage implements IStorage {
     for (const row of allInvoices) {
       if (!row.calculations) continue;
       
-      const paymentDate = row.invoice.paymentDate 
-        ? new Date(row.invoice.paymentDate) 
-        : null;
+      const isPaid = row.invoice.status === 'paid';
+      
+      // For paid invoices: use actualPaymentDate first, then paymentDate (matches dashboard logic)
+      // For expected invoices: use plannedPaymentDate or issueDate
+      let dateStr: string | Date | null;
+      if (isPaid) {
+        dateStr = row.invoice.actualPaymentDate || row.invoice.paymentDate;
+      } else {
+        dateStr = row.invoice.plannedPaymentDate || row.invoice.paymentDate || row.invoice.issueDate;
+      }
+      
+      const paymentDate = dateStr ? new Date(dateStr) : null;
       
       if (!paymentDate) continue;
       
@@ -3076,7 +3086,7 @@ export class DatabaseStorage implements IStorage {
       
       if (forecastIndex === -1) continue;
       
-      if (row.invoice.status === 'paid') {
+      if (isPaid) {
         forecastData[forecastIndex].receivedAmount += profit;
       } else if (row.invoice.status === 'sent') {
         forecastData[forecastIndex].expectedAmount += profit;
@@ -3181,7 +3191,8 @@ export class DatabaseStorage implements IStorage {
     const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
     
     // For forecast type, we need to include sent invoices that may not have paymentDate
-    // Use COALESCE to fall back to issueDate when paymentDate is null for sent invoices
+    // For paid invoices: use actualPaymentDate first, then paymentDate (matches dashboard logic)
+    // For sent invoices: use plannedPaymentDate, paymentDate, or issueDate as fallback
     const results = await db
       .select({
         invoice: invoices,
@@ -3195,13 +3206,13 @@ export class DatabaseStorage implements IStorage {
         type === 'forecast' 
           ? and(
               or(eq(invoices.status, 'sent'), eq(invoices.status, 'paid')),
-              sql`COALESCE(${invoices.paymentDate}::date, ${invoices.issueDate}::date) >= ${startDateStr}::date`,
-              sql`COALESCE(${invoices.paymentDate}::date, ${invoices.issueDate}::date) <= ${endDateStr}::date`
+              sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date, ${invoices.plannedPaymentDate}::date, ${invoices.issueDate}::date) >= ${startDateStr}::date`,
+              sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date, ${invoices.plannedPaymentDate}::date, ${invoices.issueDate}::date) <= ${endDateStr}::date`
             )
           : and(
               eq(invoices.status, 'paid'),
-              sql`${invoices.paymentDate}::date >= ${startDateStr}::date`,
-              sql`${invoices.paymentDate}::date <= ${endDateStr}::date`
+              sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date) >= ${startDateStr}::date`,
+              sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date) <= ${endDateStr}::date`
             )
       );
     

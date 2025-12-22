@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { ArrowUp, ArrowDown, Minus, ChevronRight } from "lucide-react";
 import { apiGet } from "@/lib/api";
 
 interface MonthlyData {
@@ -112,11 +112,16 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                 {tableData.map((row, index) => (
                   <TableRow 
                     key={index}
-                    className="cursor-pointer hover:bg-muted/50"
+                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70"
                     onClick={() => openMonthInvoices(row.monthNumber)}
                     data-testid={`row-month-${row.monthNumber}`}
                   >
-                    <TableCell className="text-xs sm:text-sm font-medium text-primary hover:underline">{row.month}</TableCell>
+                    <TableCell className="text-xs sm:text-sm">
+                      <div className="flex items-center gap-1.5">
+                        <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-primary">{row.month}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalSold)}</TableCell>
                     <TableCell className="text-xs sm:text-sm text-right">{formatCurrency(row.totalReceived)}</TableCell>
                     <TableCell className="text-xs sm:text-sm text-right text-muted-foreground">{formatCurrency(row.expenses)}</TableCell>

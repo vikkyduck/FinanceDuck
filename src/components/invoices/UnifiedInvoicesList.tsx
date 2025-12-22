@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -104,19 +104,65 @@ export const UnifiedInvoicesList = ({
     }
   }, [openInvoiceParam]);
 
-  // Apply URL filters when component mounts or URL params change
+  // Track previous URL params to detect when navigating away from deep-links
+  const prevParamsRef = useRef<{
+    clientId: string | null;
+    partnerId: string | null;
+    month: string | null;
+    year: string | null;
+    isFirstMount: boolean;
+  }>({ clientId: null, partnerId: null, month: null, year: null, isFirstMount: true });
+
+  // Apply prop-driven filters on mount (so UI shows correct filter value)
   useEffect(() => {
-    if (clientIdParam) {
-      setClientFilter(clientIdParam);
+    if (clientId) {
+      setClientFilter(clientId);
     }
-    if (partnerIdParam) {
-      setPartnerFilter(partnerIdParam);
+    if (partnerId) {
+      setPartnerFilter(partnerId);
     }
+  }, [clientId, partnerId, setClientFilter, setPartnerFilter]);
+
+  // Apply URL filters when component mounts or URL params change
+  // Reset filters only when navigating away from deep-links (param was set, now is null)
+  // Skip URL-driven filtering when component has prop-driven scoping (partnerId/clientId props)
+  useEffect(() => {
+    const prevParams = prevParamsRef.current;
+    
+    // Don't apply URL-based client filter if component has prop-driven clientId
+    if (!clientId) {
+      if (clientIdParam) {
+        setClientFilter(clientIdParam);
+      } else if (!prevParams.isFirstMount && prevParams.clientId) {
+        // Only reset if we had a param before (navigating away from deep-link)
+        setClientFilter('all');
+      }
+    }
+    // Don't apply URL-based partner filter if component has prop-driven partnerId
+    if (!partnerId) {
+      if (partnerIdParam) {
+        setPartnerFilter(partnerIdParam);
+      } else if (!prevParams.isFirstMount && prevParams.partnerId) {
+        setPartnerFilter('all');
+      }
+    }
+    // Month filter is always URL-driven (no prop equivalent)
     if (monthParam && yearParam) {
       const monthValue = `${yearParam}-${monthParam.padStart(2, '0')}`;
       setMonthFilter(monthValue);
+    } else if (!prevParams.isFirstMount && prevParams.month && prevParams.year) {
+      setMonthFilter('all');
     }
-  }, [clientIdParam, partnerIdParam, monthParam, yearParam, setClientFilter, setPartnerFilter, setMonthFilter]);
+    
+    // Update previous params for next comparison
+    prevParamsRef.current = {
+      clientId: clientIdParam,
+      partnerId: partnerIdParam,
+      month: monthParam,
+      year: yearParam,
+      isFirstMount: false
+    };
+  }, [clientIdParam, partnerIdParam, monthParam, yearParam, clientId, partnerId, setClientFilter, setPartnerFilter, setMonthFilter]);
 
   useEffect(() => {
     if (!enableRealtime) return;

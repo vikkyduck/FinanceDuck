@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { TrendingUp, Users, AlertCircle, Clock } from "lucide-react";
+import { TrendingUp, Users, AlertCircle, Clock, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -160,11 +160,16 @@ export const ClientLTVReport = () => {
                       return (
                         <TableRow 
                           key={client.client_id} 
-                          className="cursor-pointer hover:bg-muted/50"
+                          className="cursor-pointer hover:bg-muted/50 active:bg-muted/70"
                           onClick={() => openClientInvoices(client.client_id)}
                           data-testid={`row-client-${client.client_id}`}
                         >
-                          <TableCell className="font-medium text-primary hover:underline">{client.client_name}</TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            <div className="flex items-center gap-1.5">
+                              <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                              <span className="font-medium text-primary">{client.client_name}</span>
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {client.paid_invoices} / {client.total_invoices}
                           </TableCell>

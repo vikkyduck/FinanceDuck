@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -99,11 +100,16 @@ export const RevenueForecastTable = () => {
                 {tableData.map((row, index) => (
                   <TableRow 
                     key={index}
-                    className="cursor-pointer hover:bg-muted/50"
+                    className="cursor-pointer hover:bg-muted/50 active:bg-muted/70"
                     onClick={() => openMonthInvoices(row.monthIndex, row.yearNum)}
                     data-testid={`row-forecast-${row.monthIndex}-${row.yearNum}`}
                   >
-                    <TableCell className="text-xs sm:text-sm font-medium text-primary hover:underline">{row.month}</TableCell>
+                    <TableCell className="text-xs sm:text-sm">
+                      <div className="flex items-center gap-1.5">
+                        <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-primary">{row.month}</span>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-xs sm:text-sm text-right text-chart-1">
                       {formatCurrency(row.expected)}
                     </TableCell>

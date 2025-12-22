@@ -4425,9 +4425,7 @@ export class DatabaseStorage implements IStorage {
     // For update_invoice actions, try to coalesce with recent logs from the same user on the same invoice
     // Only coalesce if entityId is non-null to avoid merging unrelated updates
     if (log.actionType === 'update_invoice' && log.entityId && log.accessTokenId) {
-      const COALESCE_WINDOW_SECONDS = 10; // Merge updates within 10 seconds
-      
-      // Find recent log for same entity and action
+      // Find recent log for same entity and action (within 10 seconds)
       const recentLogs = await db.select()
         .from(assistantActionLogs)
         .where(
@@ -4435,7 +4433,7 @@ export class DatabaseStorage implements IStorage {
             eq(assistantActionLogs.accessTokenId, log.accessTokenId),
             eq(assistantActionLogs.entityId, log.entityId),
             eq(assistantActionLogs.actionType, 'update_invoice'),
-            sql`${assistantActionLogs.createdAt} > NOW() - INTERVAL '${COALESCE_WINDOW_SECONDS} seconds'`
+            sql`${assistantActionLogs.createdAt} > NOW() - INTERVAL '10 seconds'`
           )
         )
         .orderBy(desc(assistantActionLogs.createdAt))

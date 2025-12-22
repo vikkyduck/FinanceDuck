@@ -4469,9 +4469,9 @@ export class DatabaseStorage implements IStorage {
       const clientBill = parseFloat(row.calculations.clientBill || "0");
       
       if (category === 'received') {
-        // Paid invoices in selected month (using actualPaymentDate first, then paymentDate)
+        // Paid invoices in selected month (using paymentDate first - this is what user enters as payment date)
         if (status !== 'paid') continue;
-        const paymentDateStr = row.invoice.actualPaymentDate || row.invoice.paymentDate;
+        const paymentDateStr = row.invoice.paymentDate || row.invoice.actualPaymentDate;
         const paymentDate = paymentDateStr ? new Date(paymentDateStr) : null;
         if (!paymentDate || paymentDate < monthStart || paymentDate > monthEnd) continue;
         

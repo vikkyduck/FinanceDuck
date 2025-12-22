@@ -2035,6 +2035,32 @@ export function registerRoutes(app: Express): void {
         uploadedBy: req.user!.token.id,
       });
       
+      // Log action for assistant/admin
+      const client = invoice.clientId ? await storage.getClient(invoice.clientId) : null;
+      const partner = invoice.partnerId ? await storage.getPartner(invoice.partnerId) : null;
+      const invoiceNumber = invoice.invoiceNumber;
+      const displayName = invoiceNumber || client?.name || partner?.name || invoice.description || id;
+      const actTypeLabel = actType === 'company' ? 'компании' : 'исполнителя';
+      
+      await storage.logAssistantAction({
+        accessTokenId: req.user!.token.id,
+        actionType: "upload_act",
+        entityType: "act",
+        entityId: act.id,
+        description: `Загружен акт ${actTypeLabel}: ${displayName}`,
+        details: JSON.stringify({
+          invoiceId: id,
+          invoiceNumber,
+          clientName: client?.name,
+          partnerName: partner?.name,
+          actType,
+          fileName,
+          isLink: isLink || false,
+        }),
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+      
       // Return without file data
       const { fileData: _, ...actWithoutData } = act;
       res.status(201).json(actWithoutData);
@@ -2087,6 +2113,40 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
+      
+      // Get act info before deleting for logging
+      const act = await storage.getSignedAct(id);
+      if (!act) {
+        return res.status(404).json({ error: "Act not found" });
+      }
+      
+      // Get invoice info for logging
+      const invoice = await storage.getInvoice(act.invoiceId);
+      const client = invoice?.clientId ? await storage.getClient(invoice.clientId) : null;
+      const partner = invoice?.partnerId ? await storage.getPartner(invoice.partnerId) : null;
+      const invoiceNumber = invoice?.invoiceNumber;
+      const displayName = invoiceNumber || client?.name || partner?.name || invoice?.description || act.invoiceId;
+      const actTypeLabel = act.actType === 'company' ? 'компании' : 'исполнителя';
+      
+      // Log action before delete
+      await storage.logAssistantAction({
+        accessTokenId: req.user!.token.id,
+        actionType: "delete_act",
+        entityType: "act",
+        entityId: id,
+        description: `Удалён акт ${actTypeLabel}: ${displayName}`,
+        details: JSON.stringify({
+          invoiceId: act.invoiceId,
+          invoiceNumber,
+          clientName: client?.name,
+          partnerName: partner?.name,
+          actType: act.actType,
+          fileName: act.fileName,
+        }),
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+      
       await storage.deleteSignedAct(id);
       res.json({ success: true });
     } catch (error) {

@@ -216,7 +216,7 @@ export const ClientActsDashboard = () => {
                         {client.invoiceDetails.map(inv => (
                           <div 
                             key={inv.id} 
-                            onClick={() => navigate(`/invoices?open=${inv.id}`)}
+                            onClick={() => navigate(`/stats?open=${inv.id}`)}
                             className="block p-2 rounded border bg-muted/30 hover-elevate cursor-pointer"
                             data-testid={`invoice-link-mobile-${inv.id}`}
                           >
@@ -339,7 +339,7 @@ export const ClientActsDashboard = () => {
                               <tr 
                                 key={inv.id} 
                                 className="hover:bg-muted/30 cursor-pointer"
-                                onClick={() => navigate(`/invoices?open=${inv.id}`)}
+                                onClick={() => navigate(`/stats?open=${inv.id}`)}
                                 data-testid={`invoice-row-desktop-${inv.id}`}
                               >
                                 <td className="p-2">

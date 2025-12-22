@@ -14,6 +14,7 @@ import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import InvoicesDashboard from "./pages/InvoicesDashboard";
+import InvoicePage from "./pages/InvoicePage";
 import AccessCodeLogin from "./pages/AccessCodeLogin";
 import NotFound from "./pages/NotFound";
 import ClientsPage from "./pages/ClientsPage";
@@ -65,6 +66,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute>
               <InvoicesDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/invoices/:id" 
+          element={
+            <ProtectedRoute>
+              <InvoicePage />
             </ProtectedRoute>
           } 
         />

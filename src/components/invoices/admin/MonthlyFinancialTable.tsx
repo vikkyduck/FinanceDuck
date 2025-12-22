@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { ArrowUp, ArrowDown, Minus, ChevronRight, ChevronDown, Loader2 } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { InvoiceDetailsDialog } from "@/components/invoices/InvoiceDetailsDialog";
 
 interface MonthlyData {
   monthNumber: number;
@@ -33,9 +33,8 @@ interface MonthlyFinancialTableProps {
 }
 
 export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [expandedMonths, setExpandedMonths] = useState<Set<number>>(new Set());
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   
   const { data, isLoading } = useQuery<MonthlyData[]>({
     queryKey: ['admin-monthly-data', year],
@@ -54,10 +53,8 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
     });
   };
 
-  const handleDialogClose = () => {
-    setSelectedInvoiceId(null);
-    queryClient.invalidateQueries({ queryKey: ['admin-monthly-data'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+  const goToInvoice = (invoiceId: string) => {
+    navigate(`/invoices/${invoiceId}`);
   };
 
   const monthNames = [
@@ -117,134 +114,124 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
   });
 
   return (
-    <>
-      <Card>
-        <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-base sm:text-lg">Детализация по месяцам</CardTitle>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Подробный анализ финансовых показателей за {year} год
-          </p>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
-          {/* Mobile cards layout */}
-          <div className="sm:hidden space-y-2">
-            {tableData.map((row) => {
-              const isExpanded = expandedMonths.has(row.monthNumber);
-              
-              return (
-                <div key={row.monthNumber} className="rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleMonth(row.monthNumber)}
-                    className="w-full p-3 text-left bg-muted/30 min-h-[56px] active:bg-muted/50"
-                    data-testid={`mobile-row-month-${row.monthNumber}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        )}
-                        <span className="font-medium text-sm text-primary">{row.month}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-primary">{formatCurrency(row.netProfit)}</span>
-                        <GrowthIndicator value={row.growthPercent} />
-                      </div>
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">Детализация по месяцам</CardTitle>
+        <p className="text-xs sm:text-sm text-muted-foreground">
+          Подробный анализ финансовых показателей за {year} год
+        </p>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
+        {/* Mobile cards layout */}
+        <div className="sm:hidden space-y-2">
+          {tableData.map((row) => {
+            const isExpanded = expandedMonths.has(row.monthNumber);
+            
+            return (
+              <div key={row.monthNumber} className="rounded-lg overflow-hidden">
+                <button
+                  onClick={() => toggleMonth(row.monthNumber)}
+                  className="w-full p-3 text-left bg-muted/30 min-h-[56px] active:bg-muted/50"
+                  data-testid={`mobile-row-month-${row.monthNumber}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                      <span className="font-medium text-sm text-primary">{row.month}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-muted-foreground pl-6">
-                      <span>Продано: {formatCurrency(row.totalSold)}</span>
-                      <span>Поступило: {formatCurrency(row.totalReceived)}</span>
-                      <span>Расходы: {formatCurrency(row.expenses)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-primary">{formatCurrency(row.netProfit)}</span>
+                      <GrowthIndicator value={row.growthPercent} />
                     </div>
-                  </button>
-                  {isExpanded && (
-                    <MonthInvoices 
-                      month={row.monthNumber} 
-                      year={year}
-                      type="financial"
-                      onInvoiceClick={setSelectedInvoiceId}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-muted-foreground pl-6">
+                    <span>Продано: {formatCurrency(row.totalSold)}</span>
+                    <span>Поступило: {formatCurrency(row.totalReceived)}</span>
+                    <span>Расходы: {formatCurrency(row.expenses)}</span>
+                  </div>
+                </button>
+                {isExpanded && (
+                  <MonthInvoices 
+                    month={row.monthNumber} 
+                    year={year}
+                    type="financial"
+                    onInvoiceClick={goToInvoice}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-          {/* Desktop table layout */}
-          <div className="hidden sm:block rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-sm">Месяц</TableHead>
-                  <TableHead className="text-sm text-right">Продано</TableHead>
-                  <TableHead className="text-sm text-right">Поступило</TableHead>
-                  <TableHead className="text-sm text-right">Расходы</TableHead>
-                  <TableHead className="text-sm text-right">Чистая прибыль</TableHead>
-                  <TableHead className="text-sm text-right">Рост</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tableData.map((row) => {
-                  const isExpanded = expandedMonths.has(row.monthNumber);
-                  
-                  return (
-                    <>
-                      <TableRow 
-                        key={row.monthNumber}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => toggleMonth(row.monthNumber)}
-                        data-testid={`row-month-${row.monthNumber}`}
-                      >
-                        <TableCell className="text-sm py-2">
-                          <div className="flex items-center gap-2">
-                            {isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                            )}
-                            <span className="font-medium text-primary">{row.month}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalSold)}</TableCell>
-                        <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalReceived)}</TableCell>
-                        <TableCell className="text-sm text-right text-muted-foreground py-2">{formatCurrency(row.expenses)}</TableCell>
-                        <TableCell className="text-sm text-right font-semibold text-primary py-2">
-                          {formatCurrency(row.netProfit)}
-                        </TableCell>
-                        <TableCell className="text-sm text-right py-2">
-                          <GrowthIndicator value={row.growthPercent} />
+        {/* Desktop table layout */}
+        <div className="hidden sm:block rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-sm">Месяц</TableHead>
+                <TableHead className="text-sm text-right">Продано</TableHead>
+                <TableHead className="text-sm text-right">Поступило</TableHead>
+                <TableHead className="text-sm text-right">Расходы</TableHead>
+                <TableHead className="text-sm text-right">Чистая прибыль</TableHead>
+                <TableHead className="text-sm text-right">Рост</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tableData.map((row) => {
+                const isExpanded = expandedMonths.has(row.monthNumber);
+                
+                return (
+                  <>
+                    <TableRow 
+                      key={row.monthNumber}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => toggleMonth(row.monthNumber)}
+                      data-testid={`row-month-${row.monthNumber}`}
+                    >
+                      <TableCell className="text-sm py-2">
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          )}
+                          <span className="font-medium text-primary">{row.month}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalSold)}</TableCell>
+                      <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalReceived)}</TableCell>
+                      <TableCell className="text-sm text-right text-muted-foreground py-2">{formatCurrency(row.expenses)}</TableCell>
+                      <TableCell className="text-sm text-right font-semibold text-primary py-2">
+                        {formatCurrency(row.netProfit)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right py-2">
+                        <GrowthIndicator value={row.growthPercent} />
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow key={`${row.monthNumber}-details`}>
+                        <TableCell colSpan={6} className="p-0 bg-muted/20">
+                          <MonthInvoices 
+                            month={row.monthNumber} 
+                            year={year}
+                            type="financial"
+                            onInvoiceClick={goToInvoice}
+                          />
                         </TableCell>
                       </TableRow>
-                      {isExpanded && (
-                        <TableRow key={`${row.monthNumber}-details`}>
-                          <TableCell colSpan={6} className="p-0 bg-muted/20">
-                            <MonthInvoices 
-                              month={row.monthNumber} 
-                              year={year}
-                              type="financial"
-                              onInvoiceClick={setSelectedInvoiceId}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <InvoiceDetailsDialog
-        invoiceId={selectedInvoiceId}
-        open={!!selectedInvoiceId}
-        onOpenChange={(open) => {
-          if (!open) handleDialogClose();
-        }}
-      />
-    </>
+                    )}
+                  </>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -301,7 +288,12 @@ function MonthInvoices({ month, year, type, onInvoiceClick }: MonthInvoicesProps
             <Badge variant={invoice.isPaid ? "default" : "secondary"} className="text-xs">
               {invoice.isPaid ? 'Оплачен' : 'Ожидает'}
             </Badge>
-            <span className="text-xs font-medium">{formatCurrency(invoice.netProfitAdmin)}</span>
+            <div className="text-right">
+              <span className="text-xs font-medium">{formatCurrency(invoice.netProfitAdmin)}</span>
+              <span className="text-xs text-muted-foreground ml-1">
+                (счет: {formatCurrency(invoice.clientBill)})
+              </span>
+            </div>
           </div>
         </button>
       ))}

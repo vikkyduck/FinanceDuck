@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 
 interface InvoiceDetail {
   id: string;
@@ -34,7 +34,6 @@ interface ClientActsData {
 
 export const ClientActsDashboard = () => {
   const queryClient = useQueryClient();
-  const [, setLocation] = useLocation();
   const refetchInterval = useVisibilityAwareInterval();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
 
@@ -336,16 +335,15 @@ export const ClientActsDashboard = () => {
                           </thead>
                           <tbody className="divide-y">
                             {client.invoiceDetails.map(inv => (
-                              <tr 
-                                key={inv.id} 
-                                className="hover:bg-muted/30 cursor-pointer"
-                                onClick={() => setLocation(`/invoices/${inv.id}`)}
-                                data-testid={`invoice-row-desktop-${inv.id}`}
-                              >
+                              <tr key={inv.id} className="hover:bg-muted/30">
                                 <td className="p-2">
-                                  <div className="font-medium">
+                                  <Link 
+                                    href={`/invoices/${inv.id}`}
+                                    className="font-medium text-foreground hover:underline"
+                                    data-testid={`invoice-link-desktop-${inv.id}`}
+                                  >
                                     {inv.invoiceNumber || inv.id.slice(0, 8)}
-                                  </div>
+                                  </Link>
                                 </td>
                                 <td className="p-2 text-muted-foreground">
                                   {inv.paymentDate 
@@ -368,7 +366,9 @@ export const ClientActsDashboard = () => {
                                   )}
                                 </td>
                                 <td className="p-2 text-center">
-                                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                  <Link href={`/invoices/${inv.id}`}>
+                                    <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-foreground cursor-pointer" />
+                                  </Link>
                                 </td>
                               </tr>
                             ))}

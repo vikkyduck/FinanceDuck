@@ -1,13 +1,13 @@
 import { useState, Fragment, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
 import { TrendingUp, ChevronDown, ChevronRight, FileText, Users } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import {
   Table,
@@ -54,11 +54,14 @@ export const ExpectedAdminProfitDashboard = ({
   className,
 }: ExpectedAdminProfitDashboardProps) => {
   const { isAuthenticated, role } = useAuth();
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   
   const openInvoice = (invoiceId: string) => {
-    navigate(`/invoices?open=${invoiceId}`);
+    setSelectedInvoiceId(invoiceId);
+    setDetailsDialogOpen(true);
   };
 
   const { data: summaries = [], isLoading } = useQuery<ExpectedAdminProfitSummary[]>({
@@ -314,6 +317,24 @@ export const ExpectedAdminProfitDashboard = ({
           </span>
         </div>
       </div>
+
+      {/* Invoice Details Dialog */}
+      {selectedInvoiceId && (
+        <InvoiceDetailsDialog
+          invoiceId={selectedInvoiceId}
+          open={detailsDialogOpen}
+          onOpenChange={(open) => {
+            setDetailsDialogOpen(open);
+            if (!open) {
+              setSelectedInvoiceId(null);
+              queryClient.invalidateQueries({ queryKey: ['/api/expected-admin-profit'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+            }
+          }}
+          canEdit={true}
+          userRole="admin"
+        />
+      )}
     </div>
   );
 };

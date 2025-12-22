@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, ChevronDown, ChevronUp, Clock, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import { formatCurrency } from "@/lib/invoiceCalculations";
+import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiGet, apiPost } from "@/lib/api";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
@@ -33,9 +33,15 @@ interface CriticalAlert extends CriticalAlertData {
 
 export const CriticalAlertsSection = () => {
   const [expanded, setExpanded] = useState(true);
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const refetchInterval = useVisibilityAwareInterval();
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const openInvoiceDetails = (invoiceId: string) => {
+    setSelectedInvoiceId(invoiceId);
+    setDetailsDialogOpen(true);
+  };
 
   const handleMarkAsPaid = useCallback(async (invoiceId: string) => {
     try {
@@ -71,7 +77,7 @@ export const CriticalAlertsSection = () => {
         break;
       case "draft":
         icon = FileText;
-        action = () => navigate(`/invoices?open=${alert.id}`);
+        action = () => openInvoiceDetails(alert.id);
         actionLabel = "Заполнить";
         break;
       case "long_sent":
@@ -228,6 +234,24 @@ export const CriticalAlertsSection = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Invoice Details Dialog */}
+      {selectedInvoiceId && (
+        <InvoiceDetailsDialog
+          invoiceId={selectedInvoiceId}
+          open={detailsDialogOpen}
+          onOpenChange={(open) => {
+            setDetailsDialogOpen(open);
+            if (!open) {
+              setSelectedInvoiceId(null);
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/critical-alerts"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+            }
+          }}
+          canEdit={true}
+          userRole="admin"
+        />
+      )}
     </Card>
   );
 };

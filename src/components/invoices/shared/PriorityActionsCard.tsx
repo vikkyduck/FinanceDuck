@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, FileText, Send, Clock, TrendingDown } from "lucide-react";
@@ -6,7 +7,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch } from "@/lib/api";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useLocation } from "wouter";
+import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
+import { useAuth } from "@/hooks/useAuth";
 
 interface PriorityAction {
   id: string;
@@ -26,8 +28,15 @@ const iconMap: Record<string, any> = {
 };
 
 export const PriorityActionsCard = () => {
-  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  const openInvoiceDetails = (invoiceId: string) => {
+    setSelectedInvoiceId(invoiceId);
+    setDetailsDialogOpen(true);
+  };
 
   const { data: actions = [], isLoading } = useQuery<PriorityAction[]>({
     queryKey: ["/api/priority-actions"],
@@ -57,7 +66,7 @@ export const PriorityActionsCard = () => {
         markPaidMutation.mutate(action.id);
         break;
       case "edit":
-        navigate(`/invoices?open=${action.id}`);
+        openInvoiceDetails(action.id);
         break;
       case "remind":
         toast.success(`Напоминание отправлено`);
@@ -176,6 +185,24 @@ export const PriorityActionsCard = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Invoice Details Dialog */}
+      {selectedInvoiceId && (
+        <InvoiceDetailsDialog
+          invoiceId={selectedInvoiceId}
+          open={detailsDialogOpen}
+          onOpenChange={(open) => {
+            setDetailsDialogOpen(open);
+            if (!open) {
+              setSelectedInvoiceId(null);
+              queryClient.invalidateQueries({ queryKey: ["/api/priority-actions"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+            }
+          }}
+          canEdit={role === 'admin' || role === 'assistant'}
+          userRole={role || 'assistant'}
+        />
+      )}
     </motion.div>
   );
 };

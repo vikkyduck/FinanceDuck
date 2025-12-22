@@ -31,6 +31,8 @@ interface AssistantStats {
   companyActsCount: number;
   totalPaidInvoices: number;
   assistantBonus: number;
+  totalEarned: number;
+  totalPaid: number;
 }
 
 export const AssistantBonusManager = () => {
@@ -82,17 +84,13 @@ export const AssistantBonusManager = () => {
   });
 
   const payoutMutation = useMutation({
-    mutationFn: async () => {
-      return apiPost('/admin/bonus-payout', {
-        amount: unpaidBonus?.total || 0,
-        notes: notes || null,
-        invoiceIds: unpaidBonus?.invoiceIds || [],
-      });
+    mutationFn: async (payoutData: { amount: number; notes: string | null; invoiceIds: string[] }) => {
+      return apiPost('/admin/bonus-payout', payoutData);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({
         title: "Выплата зафиксирована",
-        description: `Сумма ${formatCurrency(unpaidBonus?.total || 0)} отмечена как выплаченная`,
+        description: `Сумма ${formatCurrency(variables.amount)} отмечена как выплаченная`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/bonus-payments'] });
@@ -117,15 +115,21 @@ export const AssistantBonusManager = () => {
   const totalPaidInvoices = stats?.totalPaidInvoices || 0;
   const executorActsAmount = executorActsCount * 1000;
   const companyActsAmount = companyActsCount * 2000;
-  const calculatedTotal = stats?.assistantBonus || (executorActsAmount + companyActsAmount);
+  // Stats provides historical totals (totalEarned, totalPaid)
+  const totalEarnedAmount = stats?.totalEarned || (executorActsAmount + companyActsAmount);
+  const totalPaidAmount = stats?.totalPaid || 0;
+  
+  // Use unpaidBonus for payout operations (amount + invoiceIds) to ensure consistency
+  const unpaidTotal = unpaidBonus?.total || 0;
+  const hasUnpaidBonuses = unpaidTotal > 0;
 
   const loading = loadingUnpaid || loadingStats;
   
   // Handle errors gracefully
   if (errorStats || errorUnpaid) return null;
   
-  // Progress calculations (same as AssistantBonusCard)
-  const progressPercent = Math.min((calculatedTotal / 50000) * 100, 100);
+  // Progress calculations based on unpaid amount (same as AssistantBonusCard)
+  const progressPercent = Math.min((unpaidTotal / 50000) * 100, 100);
   const executorProgress = totalPaidInvoices > 0 
     ? (executorActsCount / totalPaidInvoices) * 100 
     : 0;
@@ -154,9 +158,6 @@ export const AssistantBonusManager = () => {
     );
   }
 
-  const unpaidTotal = unpaidBonus?.total || 0;
-  const hasUnpaidBonuses = unpaidTotal > 0;
-
   return (
     <>
       <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
@@ -182,17 +183,22 @@ export const AssistantBonusManager = () => {
           <div>
             <div className="flex items-baseline gap-3">
               <div className="text-3xl font-bold text-primary" data-testid="text-admin-bonus-total">
-                {formatCurrency(calculatedTotal)}
+                {formatCurrency(unpaidTotal)}
               </div>
               {hasUnpaidBonuses && (
                 <Badge variant="secondary" className="text-xs">
-                  К выплате: {formatCurrency(unpaidTotal)}
+                  К выплате
                 </Badge>
               )}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Всего начислено за {totalPaidInvoices} оплаченных счетов
+              Накоплено после последней выплаты
             </p>
+            {totalPaidAmount > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Всего заработано: {formatCurrency(totalEarnedAmount)} (выплачено: {formatCurrency(totalPaidAmount)})
+              </p>
+            )}
           </div>
 
           <div>
@@ -239,8 +245,8 @@ export const AssistantBonusManager = () => {
 
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between p-2 rounded-md bg-primary/10">
-              <span className="font-medium">Итого бонус:</span>
-              <span className="font-bold text-primary">{formatCurrency(calculatedTotal)}</span>
+              <span className="font-medium">К выплате:</span>
+              <span className="font-bold text-primary">{formatCurrency(unpaidTotal)}</span>
             </div>
           </div>
 
@@ -278,8 +284,8 @@ export const AssistantBonusManager = () => {
                 Сумма к выплате
               </p>
               <div className="flex justify-center gap-4 mt-2 text-sm text-muted-foreground">
-                <span>{unpaidBonus?.executorActs || 0} актов исполнителей</span>
-                <span>{unpaidBonus?.companyActs || 0} актов компаний</span>
+                <span>{executorActsCount} актов исполнителей</span>
+                <span>{companyActsCount} актов компаний</span>
               </div>
             </div>
 
@@ -304,7 +310,11 @@ export const AssistantBonusManager = () => {
               Отмена
             </Button>
             <Button 
-              onClick={() => payoutMutation.mutate()}
+              onClick={() => payoutMutation.mutate({
+                amount: unpaidTotal,
+                notes: notes || null,
+                invoiceIds: unpaidBonus?.invoiceIds || [],
+              })}
               disabled={payoutMutation.isPending}
               data-testid="button-confirm-payout"
             >

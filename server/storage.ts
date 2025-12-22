@@ -3612,10 +3612,21 @@ export class DatabaseStorage implements IStorage {
     companyActsCount: number;
     totalPaidInvoices: number;
     assistantBonus: number;
+    totalEarned: number;
+    totalPaid: number;
   }> {
     const stats = await this.getActsStatistics(true);
     
-    const assistantBonus = (stats.executorActs * 1000) + (stats.companyActs * 2000);
+    const totalEarned = (stats.executorActs * 1000) + (stats.companyActs * 2000);
+    
+    // Get total already paid from payment history
+    const paymentsResult = await db.select({ 
+      totalPaid: sql<string>`COALESCE(SUM(amount::numeric), 0)` 
+    }).from(assistantBonusPayments);
+    const totalPaid = parseFloat(paymentsResult[0]?.totalPaid || '0');
+    
+    // assistantBonus = unpaid amount (accumulated since last payment)
+    const assistantBonus = Math.max(0, totalEarned - totalPaid);
     
     return {
       paidInvoicesCount: stats.totalPaidInvoices,
@@ -3623,6 +3634,8 @@ export class DatabaseStorage implements IStorage {
       companyActsCount: stats.companyActs,
       totalPaidInvoices: stats.totalPaidInvoices,
       assistantBonus,
+      totalEarned,
+      totalPaid,
     };
   }
 

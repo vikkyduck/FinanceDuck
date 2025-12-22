@@ -20,6 +20,8 @@ interface AssistantStats {
   companyActsCount: number;
   totalPaidInvoices: number;
   assistantBonus: number;
+  totalEarned: number;
+  totalPaid: number;
 }
 
 export const AssistantBonusCard = () => {
@@ -125,8 +127,13 @@ export const AssistantBonusCard = () => {
               {formatCurrency(stats.assistantBonus)}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Накоплено за загруженные акты
+              Накоплено после последней выплаты
             </p>
+            {stats.totalPaid > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Всего заработано: {formatCurrency(stats.totalEarned)} (выплачено: {formatCurrency(stats.totalPaid)})
+              </p>
+            )}
           </div>
 
           <div>

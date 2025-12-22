@@ -248,6 +248,9 @@ export interface IStorage {
   // Assistant action logs
   logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog>;
   getAssistantActionLogs(filters: AssistantActionLogFilters): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }>;
+  
+  // Dashboard invoice details for expandable cards
+  getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts'): Promise<DashboardInvoiceDetail[]>;
 }
 
 export interface AssistantActionLogFilters {
@@ -312,6 +315,16 @@ export interface PartnerHeroMetricsData {
   signedActsCount: number;
   totalPaidInvoices: number;
   invoicesWithDebt: { id: string; number: string; amount: number }[];
+}
+
+export interface DashboardInvoiceDetail {
+  id: string;
+  invoiceNumber: string;
+  clientName: string | null;
+  netProfitAdmin: number;
+  clientBill: number;
+  status: string;
+  paymentDate: string | null;
 }
 
 export interface MonthlyData {
@@ -4430,6 +4443,83 @@ export class DatabaseStorage implements IStorage {
     // Сортируем по total_admin_profit (реальной прибыли)
     return Array.from(clientMap.values())
       .sort((a, b) => b.total_admin_profit - a.total_admin_profit);
+  }
+
+  async getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts'): Promise<DashboardInvoiceDetail[]> {
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
+    
+    const allInvoices = await db
+      .select({
+        invoice: invoices,
+        calculations: invoiceCalculations,
+        clientName: clients.name,
+      })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .leftJoin(clients, eq(invoices.clientId, clients.id));
+    
+    const result: DashboardInvoiceDetail[] = [];
+    
+    for (const row of allInvoices) {
+      if (!row.calculations) continue;
+      
+      const status = row.invoice.status;
+      const netProfitAdmin = parseFloat(row.calculations.netProfitAdmin || "0");
+      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      
+      if (category === 'received') {
+        // Paid invoices in selected month (using actualPaymentDate first, then paymentDate)
+        if (status !== 'paid') continue;
+        const paymentDateStr = row.invoice.actualPaymentDate || row.invoice.paymentDate;
+        const paymentDate = paymentDateStr ? new Date(paymentDateStr) : null;
+        if (!paymentDate || paymentDate < monthStart || paymentDate > monthEnd) continue;
+        
+        result.push({
+          id: row.invoice.id,
+          invoiceNumber: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+          clientName: row.clientName,
+          netProfitAdmin,
+          clientBill,
+          status,
+          paymentDate: paymentDateStr?.toString() || null,
+        });
+      } else if (category === 'expected') {
+        // Sent/pending invoices with expected payment in selected month
+        if (status === 'paid' || status === 'cancelled') continue;
+        const paymentDateStr = row.invoice.plannedPaymentDate || row.invoice.paymentDate || row.invoice.createdAt;
+        const paymentDate = paymentDateStr ? new Date(paymentDateStr) : null;
+        if (!paymentDate || paymentDate < monthStart || paymentDate > monthEnd) continue;
+        
+        result.push({
+          id: row.invoice.id,
+          invoiceNumber: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+          clientName: row.clientName,
+          netProfitAdmin,
+          clientBill,
+          status,
+          paymentDate: paymentDateStr?.toString() || null,
+        });
+      } else if (category === 'drafts') {
+        // Draft invoices created in selected month
+        if (status === 'paid' || status === 'sent' || status === 'cancelled') continue;
+        const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
+        if (!createdAt || createdAt < monthStart || createdAt > monthEnd) continue;
+        
+        result.push({
+          id: row.invoice.id,
+          invoiceNumber: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+          clientName: row.clientName,
+          netProfitAdmin,
+          clientBill,
+          status,
+          paymentDate: null,
+        });
+      }
+    }
+    
+    // Sort by netProfitAdmin descending
+    return result.sort((a, b) => b.netProfitAdmin - a.netProfitAdmin);
   }
 
   async logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog> {

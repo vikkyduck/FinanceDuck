@@ -1967,6 +1967,25 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Dashboard invoices by category (for expandable cards)
+  app.get("/api/admin/dashboard-invoices", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = parseInt(req.query.month as string) || new Date().getMonth();
+      const category = req.query.category as 'received' | 'expected' | 'drafts';
+      
+      if (!category || !['received', 'expected', 'drafts'].includes(category)) {
+        return res.status(400).json({ error: "Invalid category. Must be 'received', 'expected', or 'drafts'" });
+      }
+      
+      const invoices = await storage.getDashboardInvoices(year, month, category);
+      res.json(invoices);
+    } catch (error) {
+      console.error("Get dashboard invoices error:", error);
+      res.status(500).json({ error: "Failed to get dashboard invoices" });
+    }
+  });
+
   // Assistant Bonus Payments
   app.get("/api/admin/bonus-payments", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {

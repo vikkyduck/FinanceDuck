@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { apiGet } from "@/lib/api";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { 
@@ -13,7 +15,10 @@ import {
   FileText,
   Percent,
   DollarSign,
-  Users
+  Users,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink
 } from "lucide-react";
 
 interface DashboardStats {
@@ -52,6 +57,78 @@ interface DashboardStats {
   availableYears: number[];
 }
 
+interface DashboardInvoiceDetail {
+  id: string;
+  invoiceNumber: string;
+  clientName: string | null;
+  netProfitAdmin: number;
+  clientBill: number;
+  status: string;
+  paymentDate: string | null;
+}
+
+interface InvoiceListProps {
+  year: number;
+  month: number;
+  category: 'received' | 'expected' | 'drafts';
+  isOpen: boolean;
+}
+
+const InvoiceList = ({ year, month, category, isOpen }: InvoiceListProps) => {
+  const { data: invoices, isLoading } = useQuery<DashboardInvoiceDetail[]>({
+    queryKey: ["/api/admin/dashboard-invoices", year, month, category],
+    queryFn: () => apiGet<DashboardInvoiceDetail[]>(`/admin/dashboard-invoices?year=${year}&month=${month}&category=${category}`),
+    enabled: isOpen,
+    staleTime: 30000,
+  });
+
+  if (!isOpen) return null;
+
+  if (isLoading) {
+    return (
+      <div className="pt-2 space-y-1">
+        {[1, 2, 3].map(i => (
+          <Skeleton key={i} className="h-6 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!invoices || invoices.length === 0) {
+    return (
+      <div className="pt-2 text-sm text-muted-foreground">
+        Нет счетов
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-2 space-y-1 max-h-48 overflow-y-auto">
+      {invoices.map(inv => (
+        <Link
+          key={inv.id}
+          to={`/invoices/${inv.id}`}
+          className="flex items-center justify-between gap-2 p-1.5 rounded hover-elevate text-sm group"
+          data-testid={`link-invoice-${inv.id}`}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary shrink-0" />
+            <span className="truncate font-medium">{inv.invoiceNumber}</span>
+            {inv.clientName && (
+              <span className="truncate text-muted-foreground text-xs hidden sm:inline">
+                {inv.clientName}
+              </span>
+            )}
+          </div>
+          <span className="shrink-0 font-semibold text-xs">
+            {formatCurrency(inv.netProfitAdmin)}
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+};
+
 const MONTH_NAMES = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
@@ -69,6 +146,9 @@ const formatCurrency = (amount: number) => {
 export const AdminDashboardMetrics = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [openReceivedList, setOpenReceivedList] = useState(false);
+  const [openExpectedList, setOpenExpectedList] = useState(false);
+  const [openDraftsList, setOpenDraftsList] = useState(false);
   const refetchInterval = useVisibilityAwareInterval();
 
   const { data: stats, isLoading, isError } = useQuery<DashboardStats>({
@@ -210,18 +290,50 @@ export const AdminDashboardMetrics = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
-            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-muted-foreground">Получено</span>
-              <span className="font-semibold text-green-600 text-sm sm:text-base" data-testid="text-cashflow-received">
-                {formatCurrency(stats.monthlyCashFlow.received)}
-              </span>
-            </div>
-            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-muted-foreground">Ожидается</span>
-              <span className="font-semibold text-amber-600 text-sm sm:text-base" data-testid="text-cashflow-expected">
-                {formatCurrency(stats.monthlyCashFlow.expected)}
-              </span>
-            </div>
+            {/* Received - expandable */}
+            <Collapsible open={openReceivedList} onOpenChange={setOpenReceivedList}>
+              <CollapsibleTrigger className="w-full" data-testid="trigger-received-list">
+                <div className="flex items-center justify-between gap-2 hover-elevate p-1 -m-1 rounded cursor-pointer">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground">Получено</span>
+                    {openReceivedList ? (
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                  <span className="font-semibold text-green-600 text-sm sm:text-base" data-testid="text-cashflow-received">
+                    {formatCurrency(stats.monthlyCashFlow.received)}
+                  </span>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <InvoiceList year={selectedYear} month={selectedMonth} category="received" isOpen={openReceivedList} />
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Expected - expandable */}
+            <Collapsible open={openExpectedList} onOpenChange={setOpenExpectedList}>
+              <CollapsibleTrigger className="w-full" data-testid="trigger-expected-list">
+                <div className="flex items-center justify-between gap-2 hover-elevate p-1 -m-1 rounded cursor-pointer">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground">Ожидается</span>
+                    {openExpectedList ? (
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                  <span className="font-semibold text-amber-600 text-sm sm:text-base" data-testid="text-cashflow-expected">
+                    {formatCurrency(stats.monthlyCashFlow.expected)}
+                  </span>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <InvoiceList year={selectedYear} month={selectedMonth} category="expected" isOpen={openExpectedList} />
+              </CollapsibleContent>
+            </Collapsible>
+
             {(stats.monthlyCashFlow.recurring || 0) > 0 && (
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm text-muted-foreground">Регулярные</span>
@@ -241,7 +353,7 @@ export const AdminDashboardMetrics = () => {
           </CardContent>
         </Card>
 
-        {/* Sales (Drafts) Card */}
+        {/* Sales (Drafts) Card - expandable */}
         <Card data-testid="card-sales">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
@@ -250,12 +362,26 @@ export const AdminDashboardMetrics = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
-            <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-muted-foreground">Количество</span>
-              <Badge variant="secondary" data-testid="badge-drafts-count">
-                {stats.monthlySales.draftsCount} шт.
-              </Badge>
-            </div>
+            <Collapsible open={openDraftsList} onOpenChange={setOpenDraftsList}>
+              <CollapsibleTrigger className="w-full" data-testid="trigger-drafts-list">
+                <div className="flex items-center justify-between gap-2 hover-elevate p-1 -m-1 rounded cursor-pointer">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground">Количество</span>
+                    {openDraftsList ? (
+                      <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                    )}
+                  </div>
+                  <Badge variant="secondary" data-testid="badge-drafts-count">
+                    {stats.monthlySales.draftsCount} шт.
+                  </Badge>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <InvoiceList year={selectedYear} month={selectedMonth} category="drafts" isOpen={openDraftsList} />
+              </CollapsibleContent>
+            </Collapsible>
             <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm text-muted-foreground">Сумма</span>
               <span className="font-semibold text-sm sm:text-base" data-testid="text-drafts-total">

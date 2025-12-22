@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 interface InvoiceDetail {
   id: string;
@@ -34,6 +34,7 @@ interface ClientActsData {
 
 export const ClientActsDashboard = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const refetchInterval = useVisibilityAwareInterval();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
 
@@ -213,10 +214,10 @@ export const ClientActsDashboard = () => {
                     <CollapsibleContent className="px-3 pb-3 pt-1">
                       <div className="space-y-2 mt-2">
                         {client.invoiceDetails.map(inv => (
-                          <Link 
+                          <div 
                             key={inv.id} 
-                            to={`/invoices/${inv.id}`}
-                            className="block p-2 rounded border bg-muted/30 hover-elevate"
+                            onClick={() => navigate(`/invoices?open=${inv.id}`)}
+                            className="block p-2 rounded border bg-muted/30 hover-elevate cursor-pointer"
                             data-testid={`invoice-link-mobile-${inv.id}`}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -252,7 +253,7 @@ export const ClientActsDashboard = () => {
                                 <ExternalLink className="h-3 w-3 text-muted-foreground" />
                               </div>
                             </div>
-                          </Link>
+                          </div>
                         ))}
                       </div>
                     </CollapsibleContent>
@@ -335,15 +336,16 @@ export const ClientActsDashboard = () => {
                           </thead>
                           <tbody className="divide-y">
                             {client.invoiceDetails.map(inv => (
-                              <tr key={inv.id} className="hover:bg-muted/30">
+                              <tr 
+                                key={inv.id} 
+                                className="hover:bg-muted/30 cursor-pointer"
+                                onClick={() => navigate(`/invoices?open=${inv.id}`)}
+                                data-testid={`invoice-row-desktop-${inv.id}`}
+                              >
                                 <td className="p-2">
-                                  <Link 
-                                    to={`/invoices/${inv.id}`}
-                                    className="font-medium text-foreground hover:underline"
-                                    data-testid={`invoice-link-desktop-${inv.id}`}
-                                  >
+                                  <span className="font-medium text-foreground hover:underline">
                                     {inv.invoiceNumber || inv.id.slice(0, 8)}
-                                  </Link>
+                                  </span>
                                 </td>
                                 <td className="p-2 text-muted-foreground">
                                   {inv.paymentDate 
@@ -366,9 +368,7 @@ export const ClientActsDashboard = () => {
                                   )}
                                 </td>
                                 <td className="p-2 text-center">
-                                  <Link to={`/invoices/${inv.id}`}>
-                                    <ExternalLink className="h-4 w-4 text-muted-foreground hover:text-foreground cursor-pointer" />
-                                  </Link>
+                                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
                                 </td>
                               </tr>
                             ))}

@@ -2134,6 +2134,8 @@ export function registerRoutes(app: Express): void {
       const { id } = req.params;
       const { actType, fileName, fileData, mimeType, isLink, url } = req.body;
       
+      console.log('[Upload Act] Request received - invoiceId:', id, 'actType:', actType, 'fileName:', fileName, 'role:', req.user?.role, 'tokenId:', req.user?.token?.id);
+      
       // Validate invoice exists
       const invoice = await storage.getInvoice(id);
       if (!invoice) {

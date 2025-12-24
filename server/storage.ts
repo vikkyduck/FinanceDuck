@@ -67,6 +67,29 @@ function calculateInvoiceServer(
       result.catShare50 = (netProfitAdmin / 2).toString();
       break;
     }
+    case 'agency_40': {
+      // Agency 40%: расходы идут из клиентского бюджета (60%), не из доли админа
+      const agencyMargin40 = clientBill * 0.40;
+      const partnerShare40 = clientBill * 0.16;
+      const adminShare40 = clientBill * 0.24;
+      const clientBase40 = clientBill * 0.60;
+      const clientRemaining40 = clientBase40 - executorExpenses;
+      // Для agency_40: партнёр должен перевести 24% (фиксировано)
+      const partnerTransferDue40 = adminShare40;
+      // Чистая прибыль админа = 24% (расходы из 60% клиента)
+      const netProfitAdmin40 = adminShare40;
+      
+      result.agencyMargin = agencyMargin40.toString();
+      result.partnerShareFromMargin = partnerShare40.toString();
+      result.adminShareFromMargin = adminShare40.toString();
+      result.clientBaseAfterMargin = clientBase40.toString();
+      result.clientRemaining = clientRemaining40.toString();
+      result.partnerTransferDue = partnerTransferDue40.toString();
+      result.netProfitAdmin = netProfitAdmin40.toString();
+      result.adminShare50 = (netProfitAdmin40 / 2).toString();
+      result.catShare50 = (netProfitAdmin40 / 2).toString();
+      break;
+    }
     case 'partner_10': {
       // Partner 10%: партнёр платит расходы из денег клиента, потом переводит остаток админу
       const commissionRate = 10;
@@ -1177,8 +1200,8 @@ export class DatabaseStorage implements IStorage {
         const scheme = inv.scheme;
         const netProfit = parseFloat(calc.netProfitAdmin || "0");
         
-        if (scheme === 'agency_30') {
-          // Agency 30%: 15% to partner, 15% to admin (both from margin)
+        if (scheme === 'agency_30' || scheme === 'agency_40') {
+          // Agency schemes: partner & admin get from margin
           totalPartnerCommission += parseFloat(calc.partnerShareFromMargin || "0");
           totalAdminShare += parseFloat(calc.adminShareFromMargin || "0");
           clientRemaining += parseFloat(calc.clientBaseAfterMargin || "0") - expenses;
@@ -1842,8 +1865,8 @@ export class DatabaseStorage implements IStorage {
       
       // Calculate commission based on scheme
       let commission = 0;
-      if (scheme === 'agency_30') {
-        // For agency_30: partner gets partnerShareFromMargin (15% of client bill)
+      if (scheme === 'agency_30' || scheme === 'agency_40') {
+        // For agency schemes: partner gets partnerShareFromMargin
         commission = parseFloat(row.calculations.partnerShareFromMargin || "0");
       } else {
         // For partner_10, partner_15, commission_based: use commissionAmount
@@ -2072,7 +2095,7 @@ export class DatabaseStorage implements IStorage {
       
       // Use partnerTransferDue for cash flow - this is what partner actually transfers after expenses
       let cashToAdmin: number;
-      if (scheme === 'agency_30') {
+      if (scheme === 'agency_30' || scheme === 'agency_40') {
         cashToAdmin = parseFloat(row.calculations.adminShareFromMargin || "0");
       } else {
         // Partner transfers partnerTransferDue = amountToAdmin - expensesPaidByPartner
@@ -4138,9 +4161,10 @@ export class DatabaseStorage implements IStorage {
       let commission = 0;
       let clientRemaining = 0;
       
-      if (scheme === 'agency_30') {
+      if (scheme === 'agency_30' || scheme === 'agency_40') {
         commission = parseFloat(row.calculations.partnerShareFromMargin || "0");
-        const clientBase = clientBill * 0.70;
+        const clientPercent = scheme === 'agency_40' ? 0.60 : 0.70;
+        const clientBase = clientBill * clientPercent;
         const expenses = parseFloat(row.calculations.executorExpensesTotal || "0");
         clientRemaining = Math.max(0, clientBase - expenses);
       } else {

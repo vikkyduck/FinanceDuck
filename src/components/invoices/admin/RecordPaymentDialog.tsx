@@ -48,16 +48,15 @@ export const RecordPaymentDialog = ({
       try {
         const invoices = await invoiceService.fetchInvoices(partnerId);
         
-        const options = invoices.map((inv: InvoiceListItem) => {
-          const isMarginScheme = ['agency_30', 'partner_10', 'partner_15'].includes(inv.scheme);
-          const toTransfer = isMarginScheme
-            ? (Number(inv.admin_share_from_margin) || 0)
-            : (Number(inv.commission_amount) || 0);
-          return {
-            id: inv.id,
-            label: `${inv.invoice_number} - ${formatCurrency(toTransfer)}`
-          };
-        });
+        const options = invoices
+          .filter((inv: InvoiceListItem) => inv.status === 'paid')
+          .map((inv: InvoiceListItem) => {
+            const toTransfer = Number(inv.partner_transfer_due) || 0;
+            return {
+              id: inv.id,
+              label: `${inv.invoice_number} - ${formatCurrency(toTransfer)}`
+            };
+          });
         setInvoiceOptions(options);
       } catch (error) {
         console.error("Error loading invoices:", error);

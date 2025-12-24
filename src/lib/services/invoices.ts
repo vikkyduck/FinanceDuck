@@ -106,6 +106,7 @@ export interface InvoiceListItem {
   net_profit_admin: number | null;
   client_remaining: number | null;
   hidden_from_assistant: boolean;
+  partner_transfer_due: number | null;
 }
 
 function normalizeInvoiceFromApi(data: any): InvoiceViewModel {
@@ -169,6 +170,7 @@ function normalizeInvoiceListFromApi(data: any): InvoiceListItem {
     net_profit_admin: calculations?.netProfitAdmin || null,
     client_remaining: calculations?.clientRemaining || null,
     hidden_from_assistant: data.hideFromAssistant || false,
+    partner_transfer_due: calculations?.partnerTransferDue ? parseFloat(calculations.partnerTransferDue) : null,
   };
 }
 

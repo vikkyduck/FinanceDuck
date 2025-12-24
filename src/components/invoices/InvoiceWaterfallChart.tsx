@@ -4,7 +4,7 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 
 interface WaterfallChartProps {
   clientBill: number;
-  scheme: "agency_30" | "commission_based";
+  scheme: "agency_30" | "agency_40" | "commission_based";
   commissionRate?: number;
   executorExpenses: number;
   expensesPaidByPartner?: number;
@@ -67,9 +67,12 @@ export function InvoiceWaterfallChart({
     });
     runningTotal = safeClientBill;
 
-    if (scheme === "agency_30") {
+    if (scheme === "agency_30" || scheme === "agency_40") {
+      const partnerPercent = scheme === "agency_40" ? "16%" : "15%";
+      const adminPercent = scheme === "agency_40" ? "24%" : "15%";
+      
       items.push({
-        name: "Партнёру (15%)",
+        name: `Партнёру (${partnerPercent})`,
         value: -safePartnerShare,
         total: runningTotal - safePartnerShare,
         isPositive: false,
@@ -78,7 +81,7 @@ export function InvoiceWaterfallChart({
       runningTotal -= safePartnerShare;
 
       items.push({
-        name: "Админу (15%)",
+        name: `Админу (${adminPercent})`,
         value: -safeAdminShare,
         total: runningTotal - safeAdminShare,
         isPositive: false,

@@ -1410,7 +1410,7 @@ export type Database = {
           }
     }
     Enums: {
-      invoice_scheme: "agency_30" | "commission_based"
+      invoice_scheme: "agency_30" | "agency_40" | "commission_based" | "partner_10" | "partner_15"
       invoice_status:
         | "draft"
         | "pending_approval"
@@ -1561,7 +1561,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      invoice_scheme: ["agency_30", "commission_based"],
+      invoice_scheme: ["agency_30", "agency_40", "commission_based", "partner_10", "partner_15"],
       invoice_status: [
         "draft",
         "pending_approval",

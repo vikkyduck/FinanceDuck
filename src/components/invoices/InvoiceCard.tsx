@@ -31,7 +31,7 @@ export const InvoiceCard = ({
 }: InvoiceCardProps) => {
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
 
-  const scheme = invoice.scheme as 'agency_30' | 'commission_based';
+  const scheme = invoice.scheme as 'agency_30' | 'agency_40' | 'commission_based';
   const clientBill = invoice.client_bill ?? 0;
   const executorExpensesTotal = invoice.executor_expenses_total ?? 0;
   const commissionRate = invoice.partner_commission_rate ?? invoice.commission_rate ?? undefined;
@@ -135,7 +135,7 @@ export const InvoiceCard = ({
                     <span className="text-muted-foreground">Схема:</span>
                     <span className="font-medium">{getSchemeLabel(scheme, role, commissionRate)}</span>
                   </div>
-                  {scheme === 'agency_30' ? (
+                  {(scheme === 'agency_30' || scheme === 'agency_40') ? (
                     <div className="text-xs text-muted-foreground pt-1">
                       Условия вознаграждения фиксируются в договоре и не раскрываются ассистенту.
                     </div>
@@ -165,7 +165,7 @@ export const InvoiceCard = ({
                   </div>
                 </div>
                 
-                {scheme === 'agency_30' ? (
+                {(scheme === 'agency_30' || scheme === 'agency_40') ? (
                   <div className="grid grid-cols-2 gap-2 text-sm pt-1">
                     <div>
                       <p className="text-xs text-muted-foreground">Доля партнёра</p>
@@ -218,7 +218,7 @@ export const InvoiceCard = ({
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        {scheme === 'agency_30' ? 'Доля админа (15%)' : 'Прибыль админа'}
+                        {scheme === 'agency_40' ? 'Доля админа (24%)' : scheme === 'agency_30' ? 'Доля админа (15%)' : 'Прибыль админа'}
                       </p>
                       <p className="font-semibold text-primary">{formatCurrency(netProfit)}</p>
                     </div>
@@ -231,7 +231,7 @@ export const InvoiceCard = ({
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">
-                        {scheme === 'agency_30' ? 'Остаток 70%' : 'Остаток клиента'}
+                        {scheme === 'agency_40' ? 'Остаток 60%' : scheme === 'agency_30' ? 'Остаток 70%' : 'Остаток клиента'}
                       </p>
                       <p className="font-medium">{formatCurrency(clientRemaining)}</p>
                     </div>

@@ -566,13 +566,13 @@ export const UnifiedInvoicesList = ({
                       <>
                         <TableCell className="text-muted-foreground">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
                         <TableCell className="font-semibold text-primary">
-                          {invoice.scheme === 'agency_30' 
+                          {(invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40')
                             ? formatCurrency(invoice.partner_share_from_margin || 0)
                             : formatCurrency(invoice.commission_amount || 0)
                           }
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {invoice.scheme === 'agency_30' 
+                          {(invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40')
                             ? formatCurrency(invoice.admin_share_from_margin || 0)
                             : '—'
                           }
@@ -749,7 +749,7 @@ export const UnifiedInvoicesList = ({
       ) : (
         <div className="space-y-4">
           {displayInvoices.map((invoice, index) => {
-          const isAgency30 = invoice.scheme === 'agency_30';
+          const isAgency30 = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
           
           return (
             <Card 

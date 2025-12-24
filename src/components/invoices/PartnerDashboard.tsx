@@ -32,7 +32,8 @@ const getSchemeDisplayName = (scheme: string): string => {
   const schemeNames: Record<string, string> = {
     'partner_10': '10%',
     'partner_15': '15%',
-    'agency_30': 'Агентский',
+    'agency_30': 'Агентский 30%',
+    'agency_40': 'Агентский 40%',
     'commission_based': 'По договору',
   };
   return schemeNames[scheme] || scheme;
@@ -207,7 +208,7 @@ export const PartnerDashboard = () => {
       const calc = inv.calculations || {};
       const commissionAmount = parseFloat(calc.commissionAmount || "0");
       const partnerShareFromMargin = parseFloat(calc.partnerShareFromMargin || "0");
-      const partnerCommission = inv.scheme === 'agency_30' ? partnerShareFromMargin : commissionAmount;
+      const partnerCommission = (inv.scheme === 'agency_30' || inv.scheme === 'agency_40') ? partnerShareFromMargin : commissionAmount;
       
       const invoiceYear = inv.paymentDate 
         ? new Date(inv.paymentDate).getFullYear()

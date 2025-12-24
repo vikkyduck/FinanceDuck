@@ -44,6 +44,9 @@ export const PartnerTerms = () => {
     if (scheme === 'agency_30') {
       return '15% от счета клиента (половина комиссии агентства 30%)';
     }
+    if (scheme === 'agency_40') {
+      return '16% от счета клиента (из комиссии агентства 40%)';
+    }
     if (scheme === 'commission_based' && rate) {
       return `${rate}% от счета клиента`;
     }
@@ -72,9 +75,11 @@ export const PartnerTerms = () => {
             <TableCell className="text-primary font-semibold table-cell-highlight">
               {term.scheme === 'agency_30' 
                 ? '15% от счета' 
-                : term.partnerCommissionRate 
-                  ? `${term.partnerCommissionRate}%` 
-                  : 'Не установлен'}
+                : term.scheme === 'agency_40'
+                  ? '16% от счета'
+                  : term.partnerCommissionRate 
+                    ? `${term.partnerCommissionRate}%` 
+                    : 'Не установлен'}
             </TableCell>
             <TableCell className="text-sm text-muted-foreground table-cell-highlight">
               {getSchemeDescription(term.scheme, term.partnerCommissionRate)}

@@ -1,5 +1,5 @@
 export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
-export type InvoiceScheme = 'agency_30' | 'commission_based';
+export type InvoiceScheme = 'agency_30' | 'agency_40' | 'commission_based';
 
 export interface VisibleFields {
   // Basic info
@@ -64,10 +64,10 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       showBasicInfo: true,
       showClientBill: true,
       showCommissionDetails: false, // НЕ видит процент партнера
-      showAgencyMargin: scheme === 'agency_30', // Видит общую маржу агентства 30%, но НЕ разбивку
-      showClientBudget: scheme === 'agency_30', // Видит базу клиента только для agency_30
+      showAgencyMargin: scheme === 'agency_30' || scheme === 'agency_40', // Видит общую маржу агентства, но НЕ разбивку
+      showClientBudget: scheme === 'agency_30' || scheme === 'agency_40', // Видит базу клиента только для agency схем
       showExpensesTotal: true, // Видит расходы для обеих схем
-      showClientRemaining: scheme === 'agency_30', // Видит остаток клиента только для agency_30
+      showClientRemaining: scheme === 'agency_30' || scheme === 'agency_40', // Видит остаток клиента только для agency схем
       showPartnerShare: false, // НЕ видит распределение партнер/админ (15%/15%)
       showAdminShare: false, // НЕ видит долю админа
       showNetProfitAdmin: false,
@@ -86,8 +86,8 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
 
   // Client permissions - different based on scheme
   if (userRole === 'client') {
-    if (scheme === 'agency_30') {
-      // For agency_30 scheme, show budget and expenses
+    if (scheme === 'agency_30' || scheme === 'agency_40') {
+      // For agency schemes, show budget and expenses
       return {
         showBasicInfo: true,
         showClientBill: true,

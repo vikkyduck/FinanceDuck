@@ -39,7 +39,8 @@ const getSchemeLabel = (scheme: string): string => {
   const labels: Record<string, string> = {
     'partner_10': '10%',
     'partner_15': '15%',
-    'agency_30': 'Агентский',
+    'agency_30': 'Агентский 30%',
+    'agency_40': 'Агентский 40%',
     'commission_based': 'По договору',
   };
   return labels[scheme] || scheme;

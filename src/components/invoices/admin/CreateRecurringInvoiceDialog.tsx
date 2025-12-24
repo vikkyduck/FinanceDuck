@@ -36,7 +36,7 @@ export function CreateRecurringInvoiceDialog({
   const [formData, setFormData] = useState({
     clientId: "",
     partnerId: "",
-    scheme: "agency_30" as "agency_30" | "commission_based" | "partner_10" | "partner_15",
+    scheme: "agency_30" as "agency_30" | "agency_40" | "commission_based" | "partner_10" | "partner_15",
     partnerCommissionRate: "",
     amount: "",
     defaultExpenses: "",
@@ -230,6 +230,7 @@ export function CreateRecurringInvoiceDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="agency_30">Агентская 30%</SelectItem>
+                <SelectItem value="agency_40">Агентская 40%</SelectItem>
                 <SelectItem value="partner_10">Партнёрская 10%</SelectItem>
                 <SelectItem value="partner_15">Партнёрская 15%</SelectItem>
                 <SelectItem value="commission_based">Комиссионная</SelectItem>

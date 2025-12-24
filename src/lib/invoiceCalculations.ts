@@ -1,7 +1,7 @@
 // Utility functions for invoice calculations
 
 // All scheme types from database
-export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'commission_based';
+export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'agency_40' | 'commission_based';
 
 export interface InvoiceCalculations {
   client_bill: number;
@@ -82,6 +82,40 @@ export function calculateInvoice(
       const clientRemaining = clientBase - executorExpenses;
       const partnerTransferDue = adminShare; // Долг партнёра = 15%
       const netProfitAdmin = adminShare; // Прибыль = 15% (расходы из 70% клиента)
+      
+      calculations = {
+        ...calculations,
+        agency_margin: agencyMargin,
+        partner_share_from_margin: partnerShare,
+        admin_share_from_margin: adminShare,
+        client_base_after_margin: clientBase,
+        client_spent: executorExpenses,
+        client_remaining: clientRemaining,
+        partner_transfer_due: partnerTransferDue,
+        net_profit_admin: netProfitAdmin,
+        admin_share_50: netProfitAdmin / 2,
+        cat_share_50: netProfitAdmin / 2,
+      };
+      break;
+    }
+
+    case 'agency_40': {
+      // Схема: Маржа агентства 40%
+      // Клиент платит: X
+      // Комиссия агентства (40%): X × 0.40
+      //   ├─ Партнеру (16%): X × 0.16
+      //   └─ Админу (24%): X × 0.24
+      // Средства клиента для трат: X × 0.60 (расходы идут отсюда!)
+      // Долг партнёра = 24% (фиксировано)
+      // Чистая прибыль админа = 24% (ФИКСИРОВАННАЯ, расходы идут из 60% клиента)
+      
+      const agencyMargin = clientBill * 0.40;
+      const partnerShare = clientBill * 0.16; // Партнеру 16%
+      const adminShare = clientBill * 0.24;   // Админу 24%
+      const clientBase = clientBill * 0.60;
+      const clientRemaining = clientBase - executorExpenses;
+      const partnerTransferDue = adminShare; // Долг партнёра = 24%
+      const netProfitAdmin = adminShare; // Прибыль = 24% (расходы из 60% клиента)
       
       calculations = {
         ...calculations,
@@ -314,6 +348,8 @@ export function getSchemeLabel(
   switch (scheme) {
     case 'agency_30':
       return 'Агентство 30%';
+    case 'agency_40':
+      return 'Агентство 40%';
     case 'partner_10':
       return 'Партнер 10%';
     case 'partner_15':

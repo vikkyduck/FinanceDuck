@@ -113,6 +113,10 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
           }
           commissionRate = customRate;
           break;
+        case 'agency_40':
+          dbScheme = 'agency_40';
+          commissionRate = undefined;
+          break;
         default:
           dbScheme = 'agency_30';
           commissionRate = undefined;
@@ -245,7 +249,16 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           onSelect={() => setScheme("agency_30")}
                           icon="building"
                           title="Агентство 30%"
-                          description="Схема с фиксированной комиссией агентства"
+                          description="Маржа 30%: партнёру 15%, админу 15%"
+                        />
+                        
+                        <SchemeCard
+                          value="agency_40"
+                          selected={scheme === "agency_40"}
+                          onSelect={() => setScheme("agency_40")}
+                          icon="building"
+                          title="Агентство 40%"
+                          description="Маржа 40%: партнёру 16%, админу 24%"
                         />
 
                         {effectiveRole === 'assistant' && (

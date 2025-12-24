@@ -149,6 +149,7 @@ export function RecurringInvoicesManager() {
   const getSchemeLabel = (scheme: string) => {
     const labels: Record<string, string> = { 
       agency_30: "Агентская 30%", 
+      agency_40: "Агентская 40%",
       partner_10: "10%", 
       partner_15: "15%", 
       commission_based: "Комиссия" 

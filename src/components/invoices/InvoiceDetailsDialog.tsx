@@ -625,7 +625,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
 
   const calcRaw = invoice.invoice_calculations;
   const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
-  const isAgency30 = invoice.scheme === 'agency_30';
+  const isAgency30 = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
   const permissions = getVisibleFields(userRole, invoice.scheme);
 
   return (
@@ -997,7 +997,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                     {permissions.showAgencyMargin && (
                       <div className="pl-4 space-y-2 border-l-2 border-primary/20">
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Маржа агентства (30%):</span>
+                          <span className="text-muted-foreground">Маржа агентства ({invoice.scheme === 'agency_40' ? '40%' : '30%'}):</span>
                           <span>{formatCurrency(calc?.agency_margin || 0)}</span>
                         </div>
                         {permissions.showPartnerShare && (
@@ -1018,7 +1018,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                     {permissions.showClientBudget && (
                       <div className="pl-4 space-y-2 border-l-2 border-muted">
                         <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">Бюджет клиента (70%):</span>
+                          <span className="text-muted-foreground">Бюджет клиента ({invoice.scheme === 'agency_40' ? '60%' : '70%'}):</span>
                           <span>{formatCurrency(calc?.client_base_after_margin || 0)}</span>
                         </div>
                         {permissions.showExpensesTotal && (

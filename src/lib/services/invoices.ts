@@ -71,7 +71,7 @@ export interface InvoiceViewModel {
   invoice_number: string;
   client_id: string | null;
   partner_id: string | null;
-  scheme: "partner_10" | "partner_15" | "agency_30" | "commission_based";
+  scheme: "partner_10" | "partner_15" | "agency_30" | "agency_40" | "commission_based";
   status: "draft" | "sent" | "paid" | "cancelled";
   payment_date: string | null;
   actual_payment_date: string | null;

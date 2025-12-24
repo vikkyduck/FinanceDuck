@@ -96,18 +96,18 @@ export function AppSidebar() {
       items: [
         { 
           title: "Главная", 
-          url: role === "admin" ? "/invoices" : "/", 
+          url: "/", 
           icon: Home,
           badge: alertCounts.overdueInvoices > 0 ? alertCounts.overdueInvoices : undefined,
           badgeVariant: "destructive" as const
         },
-        ...(role !== "admin" ? [{ 
+        { 
           title: "Счета", 
           url: "/invoices", 
           icon: FileText,
           badge: alertCounts.pendingInvoices > 0 ? alertCounts.pendingInvoices : undefined,
           badgeVariant: "secondary" as const
-        }] : []),
+        },
         ...(role === "admin" ? [{
           title: "Аналитика",
           url: "/stats",

@@ -6,28 +6,19 @@ import { AssistantDashboard } from "@/components/invoices/AssistantDashboard";
 import { PartnerDashboard } from "@/components/invoices/PartnerDashboard";
 import { ClientDashboard } from "@/components/invoices/ClientDashboard";
 import { useViewMode } from "@/hooks/useViewMode";
-import { useCollapsibleSections } from "@/hooks/useCollapsibleSections";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
-import { CollapsibleSection } from "@/components/ui/collapsible-section";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Maximize2, Minimize2, FileText } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileText, RefreshCw, Receipt } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const InvoicesListPage = () => {
   const { role, isLoading } = useAuth();
   const { viewMode, setViewMode } = useViewMode();
   const [searchParams] = useSearchParams();
   const showAlerts = searchParams.get('alerts') === 'true';
-
-  const { isExpanded, toggleSection, expandAll, collapseAll } = useCollapsibleSections(
-    "invoices-page-sections",
-    {
-      recurringInvoices: true,
-      invoicesList: true,
-    }
-  );
+  const urlTab = searchParams.get('tab');
+  const defaultTab = urlTab === 'recurring' ? 'recurring' : 'all';
 
   if (isLoading) {
     return (
@@ -77,61 +68,63 @@ const InvoicesListPage = () => {
         </div>
       </div>
 
-      <div className="flex justify-end gap-1 mb-4">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={expandAll} data-testid="button-expand-all">
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Развернуть все</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={collapseAll} data-testid="button-collapse-all">
-              <Minimize2 className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Свернуть все</TooltipContent>
-        </Tooltip>
-      </div>
+      <Tabs defaultValue={defaultTab} className="space-y-4 sm:space-y-6 pb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <TabsList className="glass-strong border border-primary/10 shadow-lg p-1 sm:p-1.5 gap-1 h-auto w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
+            <TabsTrigger 
+              value="all"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1.5 sm:gap-2"
+              data-testid="tab-all-invoices"
+            >
+              <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>Все счета</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="recurring"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-3 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1.5 sm:gap-2"
+              data-testid="tab-recurring-invoices"
+            >
+              <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span>Автоматические</span>
+            </TabsTrigger>
+          </TabsList>
+          
+          <ViewModeToggle 
+            value={viewMode}
+            onValueChange={setViewMode}
+            className="hidden sm:flex self-end sm:self-auto"
+          />
+        </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="space-y-6 pb-8"
-      >
-        <CollapsibleSection
-          id="recurringInvoices"
-          title="Автоматические счета"
-          isExpanded={isExpanded("recurringInvoices")}
-          onToggle={() => toggleSection("recurringInvoices")}
-        >
-          <RecurringInvoicesManager />
-        </CollapsibleSection>
+        <AnimatePresence mode="wait">
+          <TabsContent value="all" className="mt-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <AdminInvoicesList 
+                viewMode={viewMode}
+                initialStatusFilter={showAlerts ? 'overdue' : undefined}
+              />
+            </motion.div>
+          </TabsContent>
+        </AnimatePresence>
 
-        <CollapsibleSection
-          id="invoicesList"
-          title="Все счета"
-          isExpanded={isExpanded("invoicesList")}
-          onToggle={() => toggleSection("invoicesList")}
-          headerActions={
-            <ViewModeToggle 
-              value={viewMode}
-              onValueChange={setViewMode}
-              className="hidden sm:flex"
-            />
-          }
-        >
-          <div className="px-0 -mx-6">
-            <AdminInvoicesList 
-              viewMode={viewMode}
-              initialStatusFilter={showAlerts ? 'overdue' : undefined}
-            />
-          </div>
-        </CollapsibleSection>
-      </motion.div>
+        <AnimatePresence mode="wait">
+          <TabsContent value="recurring" className="mt-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <RecurringInvoicesManager />
+            </motion.div>
+          </TabsContent>
+        </AnimatePresence>
+      </Tabs>
     </DashboardLayout>
   );
 };

@@ -31,7 +31,7 @@ export const PartnerDebtDashboard = () => {
   const queryClient = useQueryClient();
   
   const openPartnerInvoices = (partnerId: string) => {
-    navigate(`/invoices?partnerId=${partnerId}`);
+    navigate(`/stats?tab=invoices&partnerId=${partnerId}`);
   };
 
   const { data: summaries = [], isLoading, refetch, isFetching } = useQuery<PartnerDebtSummary[]>({

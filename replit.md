@@ -18,7 +18,20 @@ The backend utilizes an Express.js server with a Neon PostgreSQL database access
 
 ## Financial Calculation Engine
 
-The system supports four primary commission schemes: `partner_10`, `partner_15`, `agency_30`, and `commission_based`. A core `calculateInvoice()` function computes all financial metrics, accurately distinguishing between expenses paid by partners and those paid by admins for net profit calculations. The `agency_30` scheme features a fixed admin share, with expenses deducted from the client's budget. Assistant bonus payouts are based on signed acts. Net profit calculation formulas are specifically defined for partner and agency schemes. Unified partner debt tracking is managed via `partnerTransferDue` stored in `invoice_calculations` table. All roles receive data from the same stored values, filtered by centralized permission constants.
+The system supports five primary commission schemes: `partner_10`, `partner_15`, `agency_30`, `agency_40`, and `commission_based`. A core `calculateInvoice()` function computes all financial metrics, accurately distinguishing between expenses paid by partners and those paid by admins for net profit calculations. The `agency_30` scheme features a fixed admin share (15% admin + 15% partner, 70% client budget), and `agency_40` scheme (24% admin + 16% partner, 60% client budget). Assistant bonus payouts are based on signed acts. Net profit calculation formulas are specifically defined for partner and agency schemes. Unified partner debt tracking is managed via `partnerTransferDue` stored in `invoice_calculations` table. All roles receive data from the same stored values, filtered by centralized permission constants.
+
+## Dashboard Data Rules
+
+**CRITICAL: Each dashboard has strict invoice status filtering:**
+
+| Dashboard | Status Filter | Description |
+|-----------|---------------|-------------|
+| **Ожидаемая прибыль** | `sent`, `draft` | Прибыль по неоплаченным счетам (клиенты ещё не заплатили) |
+| **Долг партнёра** | `paid` | Суммы, которые партнёр должен перевести по оплаченным счетам |
+| **Не тратить** | `paid` ONLY | Бюджет клиента по уже оплаченным счетам agency_30/agency_40 |
+| **Средства партнёров Agency** | `paid` | Доля партнёра по оплаченным agency счетам |
+
+**Rule: Неоплаченные счета НИКОГДА не должны попадать в дашборды "Не тратить" и "Долг партнёра", т.к. деньги по ним ещё не получены.**
 
 ## Security Architecture
 

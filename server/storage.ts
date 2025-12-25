@@ -1537,7 +1537,7 @@ export class DatabaseStorage implements IStorage {
     }[];
   }[]> {
     const conditions = [
-      eq(invoices.scheme, 'agency_30'),
+      inArray(invoices.scheme, ['agency_30', 'agency_40']),
       inArray(invoices.status, ['paid', 'sent'])
     ];
     
@@ -1545,7 +1545,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(invoices.partnerId, partnerId));
     }
     
-    const agency30Invoices = await db
+    const agencyInvoices = await db
       .select({
         invoice: invoices,
         calculations: invoiceCalculations,
@@ -1575,7 +1575,7 @@ export class DatabaseStorage implements IStorage {
       }[];
     }>();
 
-    for (const row of agency30Invoices) {
+    for (const row of agencyInvoices) {
       if (!row.invoice.clientId || !row.calculations) continue;
 
       const clientId = row.invoice.clientId;
@@ -1583,7 +1583,10 @@ export class DatabaseStorage implements IStorage {
       const clientBill = parseFloat(row.calculations.clientBill || "0");
       const executorExpenses = parseFloat(row.calculations.executorExpensesTotal || "0");
       
-      const clientBase = clientBill * 0.7;
+      // Use stored clientBaseAfterMargin if available, else calculate based on scheme
+      const scheme = row.invoice.scheme;
+      const clientBaseRate = scheme === 'agency_40' ? 0.6 : 0.7; // agency_40: 60%, agency_30: 70%
+      const clientBase = parseFloat(row.calculations.clientBaseAfterMargin || "0") || (clientBill * clientBaseRate);
       const doNotSpendBudget = clientBase;
       const invoiceRemaining = Math.max(0, doNotSpendBudget - executorExpenses);
       
@@ -1818,7 +1821,7 @@ export class DatabaseStorage implements IStorage {
   }[]> {
     // Get all UNPAID invoices (status = 'sent') for partner schemes
     const conditions = [
-      inArray(invoices.scheme, ['commission_based', 'partner_10', 'partner_15', 'agency_30']),
+      inArray(invoices.scheme, ['commission_based', 'partner_10', 'partner_15', 'agency_30', 'agency_40']),
       eq(invoices.status, 'sent')
     ];
     
@@ -2953,8 +2956,8 @@ export class DatabaseStorage implements IStorage {
     total_spent: number;
     remaining_budget: number;
   }> {
-    // Get agency_30 invoices for this client
-    const agency30Invoices = await db
+    // Get agency scheme invoices (agency_30 and agency_40) for this client
+    const agencyInvoices = await db
       .select({
         calculations: invoiceCalculations,
       })
@@ -2963,7 +2966,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(invoices.clientId, clientId),
-          eq(invoices.scheme, 'agency_30')
+          inArray(invoices.scheme, ['agency_30', 'agency_40'])
         )
       );
 
@@ -2973,7 +2976,7 @@ export class DatabaseStorage implements IStorage {
     let totalSpent = 0;
     let remainingBudget = 0;
 
-    for (const row of agency30Invoices) {
+    for (const row of agencyInvoices) {
       if (!row.calculations) continue;
       totalPaid += parseFloat(row.calculations.clientBill || '0');
       agencyMargin += parseFloat(row.calculations.agencyMargin || '0');
@@ -4241,8 +4244,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPartnerAgency30Funds(partnerId: string): Promise<PartnerAgency30FundsData[]> {
-    // Get agency_30 invoices for this partner (same logic as admin DoNotSpend)
-    const agency30Invoices = await db
+    // Get agency scheme invoices (agency_30 and agency_40) for this partner
+    const agencyInvoices = await db
       .select({
         invoice: invoices,
         calculations: invoiceCalculations,
@@ -4253,13 +4256,13 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(clients, eq(invoices.clientId, clients.id))
       .where(and(
         eq(invoices.partnerId, partnerId),
-        eq(invoices.scheme, 'agency_30'),
+        inArray(invoices.scheme, ['agency_30', 'agency_40']),
         inArray(invoices.status, ['paid', 'sent'])
       ));
 
     const clientMap = new Map<string, PartnerAgency30FundsData>();
 
-    for (const row of agency30Invoices) {
+    for (const row of agencyInvoices) {
       if (!row.invoice.clientId || !row.calculations) continue;
 
       const clientId = row.invoice.clientId;
@@ -4267,8 +4270,10 @@ export class DatabaseStorage implements IStorage {
       const clientBill = parseFloat(row.calculations.clientBill || "0");
       const executorExpenses = parseFloat(row.calculations.executorExpensesTotal || "0");
       
-      // 70% is client money that partner must not spend
-      const clientBase = clientBill * 0.7;
+      // Client money that partner must not spend (70% for agency_30, 60% for agency_40)
+      const scheme = row.invoice.scheme;
+      const clientBaseRate = scheme === 'agency_40' ? 0.6 : 0.7;
+      const clientBase = parseFloat(row.calculations.clientBaseAfterMargin || "0") || (clientBill * clientBaseRate);
       
       if (!clientMap.has(clientId)) {
         clientMap.set(clientId, {

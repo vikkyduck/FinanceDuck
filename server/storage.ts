@@ -1538,7 +1538,7 @@ export class DatabaseStorage implements IStorage {
   }[]> {
     const conditions = [
       inArray(invoices.scheme, ['agency_30', 'agency_40']),
-      inArray(invoices.status, ['paid', 'sent'])
+      eq(invoices.status, 'paid')
     ];
     
     if (partnerId) {

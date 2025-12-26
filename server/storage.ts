@@ -139,7 +139,8 @@ function calculateInvoiceServer(
     case 'commission_based':
     default: {
       // Commission-based: партнёр платит расходы из денег клиента, потом переводит остаток админу
-      const commissionRate = partnerCommissionRate || 10;
+      // Если комиссия не указана (null/undefined), используем 0% (вся сумма идёт админу)
+      const commissionRate = partnerCommissionRate ?? 0;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
       // Долг партнёра зависит от наличия резерва:
@@ -2231,7 +2232,6 @@ export class DatabaseStorage implements IStorage {
     const monthEnd = new Date(year, month + 1, 0);
     const yearStart = new Date(year, 0, 1);
     const yearEnd = new Date(year, 11, 31);
-    const now = new Date();
     
     // Helper to advance date by frequency
     const advanceByFrequency = (date: Date, freq: 'monthly' | 'quarterly' | 'yearly', day: number): Date => {
@@ -2306,19 +2306,14 @@ export class DatabaseStorage implements IStorage {
       if (startDate > yearEnd) continue;
       if (endDateValue && endDateValue < yearStart) continue;
       
-      // For current year, count from now; for other years, count from yearStart
-      const countFromDate = year === now.getFullYear() 
-        ? (now > yearStart ? now : yearStart) 
-        : yearStart;
-      
-      // 1. Calculate monthlyAmount - occurrences in selected month that are >= countFromDate
-      const monthRangeStart = monthStart > countFromDate ? monthStart : countFromDate;
-      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, monthRangeStart, monthEnd, endDateValue)) {
+      // 1. Calculate monthlyAmount - all occurrences in selected month
+      // (no date filtering - show full month's expected income regardless of current date)
+      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, monthStart, monthEnd, endDateValue)) {
         monthlyAmount += expectedProfit;
       }
       
-      // 2. Calculate yearlyTotal - all future occurrences from countFromDate to yearEnd
-      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, countFromDate, yearEnd, endDateValue)) {
+      // 2. Calculate yearlyTotal - all occurrences from yearStart to yearEnd
+      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, yearStart, yearEnd, endDateValue)) {
         yearlyTotal += expectedProfit;
       }
     }
@@ -2341,7 +2336,6 @@ export class DatabaseStorage implements IStorage {
     const result: RecurringInvoiceForMonth[] = [];
     const monthStart = new Date(year, month, 1);
     const monthEnd = new Date(year, month + 1, 0);
-    const now = new Date();
     
     const advanceByFrequency = (date: Date, freq: 'monthly' | 'quarterly' | 'yearly', day: number): Date => {
       switch (freq) {

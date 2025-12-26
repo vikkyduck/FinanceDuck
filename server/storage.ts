@@ -2291,8 +2291,13 @@ export class DatabaseStorage implements IStorage {
       const partnerCommissionRate = recurring.partnerCommissionRate 
         ? parseFloat(recurring.partnerCommissionRate) 
         : undefined;
+      const defaultExpenses = recurring.defaultExpenses 
+        ? parseFloat(recurring.defaultExpenses) 
+        : 0;
       
-      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0);
+      // For partner schemes, expenses reduce the amount admin receives
+      // plannedExpenses parameter (7th) affects partner debt calculation
+      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
       const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
       
       if (expectedProfit <= 0) continue;
@@ -2381,8 +2386,12 @@ export class DatabaseStorage implements IStorage {
       const partnerCommissionRate = recurring.partnerCommissionRate 
         ? parseFloat(recurring.partnerCommissionRate) 
         : undefined;
+      const defaultExpenses = recurring.defaultExpenses 
+        ? parseFloat(recurring.defaultExpenses) 
+        : 0;
       
-      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0);
+      // For partner schemes, expenses reduce the amount admin receives
+      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
       const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
       
       if (expectedProfit <= 0) continue;

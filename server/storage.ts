@@ -4499,9 +4499,12 @@ export class DatabaseStorage implements IStorage {
       const clientBill = parseFloat(row.calculations.clientBill || "0");
       
       if (category === 'received') {
-        // Paid invoices in selected month (using paymentDate first - this is what user enters as payment date)
+        // Paid invoices in selected month - MUST match getAdminDashboardStats logic
+        // Uses paymentDate, falls back to createdAt if not set
         if (status !== 'paid') continue;
-        const paymentDateStr = row.invoice.paymentDate || row.invoice.actualPaymentDate;
+        const paymentDateStr = row.invoice.paymentDate 
+          ? row.invoice.paymentDate 
+          : (row.invoice.createdAt ? row.invoice.createdAt : null);
         const paymentDate = paymentDateStr ? new Date(paymentDateStr) : null;
         if (!paymentDate || paymentDate < monthStart || paymentDate > monthEnd) continue;
         
@@ -4515,9 +4518,12 @@ export class DatabaseStorage implements IStorage {
           paymentDate: paymentDateStr?.toString() || null,
         });
       } else if (category === 'expected') {
-        // Sent/pending invoices with expected payment in selected month
+        // Sent/pending invoices with expected payment in selected month - MUST match getAdminDashboardStats logic
+        // Uses paymentDate (which is the planned payment date), falls back to createdAt
         if (status === 'paid' || status === 'cancelled') continue;
-        const paymentDateStr = row.invoice.plannedPaymentDate || row.invoice.paymentDate || row.invoice.createdAt;
+        const paymentDateStr = row.invoice.paymentDate 
+          ? row.invoice.paymentDate 
+          : (row.invoice.createdAt ? row.invoice.createdAt : null);
         const paymentDate = paymentDateStr ? new Date(paymentDateStr) : null;
         if (!paymentDate || paymentDate < monthStart || paymentDate > monthEnd) continue;
         

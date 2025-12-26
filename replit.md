@@ -33,6 +33,12 @@ The system supports five primary commission schemes: `partner_10`, `partner_15`,
 
 **Rule: Неоплаченные счета НИКОГДА не должны попадать в дашборды "Не тратить" и "Долг партнёра", т.к. деньги по ним ещё не получены.**
 
+**CRITICAL: Синхронизация логики дашбордов:**
+- Функции `getAdminDashboardStats()` и `getDashboardInvoices()` ДОЛЖНЫ использовать одинаковую логику фильтрации по датам
+- Для определения месяца используется `paymentDate` (планируемая дата оплаты), с fallback на `createdAt`
+- Логика: `paymentDate ? paymentDate : createdAt`
+- Любые изменения в одной функции ТРЕБУЮТ аналогичных изменений в другой
+
 ## Security Architecture
 
 Security is implemented through XSS protection via input sanitization and React's auto-escaping, coupled with file upload validation. Rate limiting employs a token bucket algorithm. Input validation is handled by Zod schemas on both frontend and backend. Centralized error handling provides user feedback and logs critical errors. Authentication uses secure cookie-based sessions with CSRF protection and role-based access control.

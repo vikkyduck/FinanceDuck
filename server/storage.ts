@@ -2308,20 +2308,24 @@ export class DatabaseStorage implements IStorage {
       const dayOfMonth = parseInt(recurring.dayOfMonth || "1");
       const frequency = recurring.frequency as 'monthly' | 'quarterly' | 'yearly';
       const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
-      const startDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
+      const baseStartDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
+      
+      // Use nextInvoiceDate if available (respects manual adjustments), otherwise use startDate
+      const nextInvoiceDate = recurring.nextInvoiceDate ? new Date(recurring.nextInvoiceDate) : null;
+      const effectiveStartDate = nextInvoiceDate && nextInvoiceDate > baseStartDate ? nextInvoiceDate : baseStartDate;
       
       // Check if schedule is active for this year
-      if (startDate > yearEnd) continue;
+      if (effectiveStartDate > yearEnd) continue;
       if (endDateValue && endDateValue < yearStart) continue;
       
       // 1. Calculate monthlyAmount - all occurrences in selected month
-      // (no date filtering - show full month's expected income regardless of current date)
-      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, monthStart, monthEnd, endDateValue)) {
+      // Use effectiveStartDate to respect nextInvoiceDate (manual adjustments)
+      for (const occurrence of generateOccurrences(effectiveStartDate, frequency, dayOfMonth, monthStart, monthEnd, endDateValue)) {
         monthlyAmount += expectedProfit;
       }
       
       // 2. Calculate yearlyTotal - all occurrences from yearStart to yearEnd
-      for (const occurrence of generateOccurrences(startDate, frequency, dayOfMonth, yearStart, yearEnd, endDateValue)) {
+      for (const occurrence of generateOccurrences(effectiveStartDate, frequency, dayOfMonth, yearStart, yearEnd, endDateValue)) {
         yearlyTotal += expectedProfit;
       }
     }
@@ -2402,12 +2406,16 @@ export class DatabaseStorage implements IStorage {
       const dayOfMonth = parseInt(recurring.dayOfMonth || "1");
       const frequency = recurring.frequency as 'monthly' | 'quarterly' | 'yearly';
       const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
-      const startDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
+      const baseStartDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
       
-      if (startDate > monthEnd) continue;
+      // Use nextInvoiceDate if available (respects manual adjustments), otherwise use startDate
+      const nextInvoiceDateValue = recurring.nextInvoiceDate ? new Date(recurring.nextInvoiceDate) : null;
+      const effectiveStartDate = nextInvoiceDateValue && nextInvoiceDateValue > baseStartDate ? nextInvoiceDateValue : baseStartDate;
+      
+      if (effectiveStartDate > monthEnd) continue;
       if (endDateValue && endDateValue < monthStart) continue;
       
-      if (hasOccurrenceInMonth(startDate, frequency, dayOfMonth, endDateValue)) {
+      if (hasOccurrenceInMonth(effectiveStartDate, frequency, dayOfMonth, endDateValue)) {
         result.push({
           id: recurring.id,
           clientName: row.clientName,

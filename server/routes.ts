@@ -1970,8 +1970,8 @@ export function registerRoutes(app: Express): void {
   // Dashboard invoices by category (for expandable cards)
   app.get("/api/admin/dashboard-invoices", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const year = parseInt(req.query.year as string) || new Date().getFullYear();
-      const month = parseInt(req.query.month as string) || new Date().getMonth();
+      const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+      const month = req.query.month !== undefined ? parseInt(req.query.month as string) : new Date().getMonth();
       const category = req.query.category as 'received' | 'expected' | 'drafts';
       
       if (!category || !['received', 'expected', 'drafts'].includes(category)) {
@@ -1989,8 +1989,8 @@ export function registerRoutes(app: Express): void {
   // Recurring invoices for month display
   app.get("/api/admin/dashboard-recurring", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const year = parseInt(req.query.year as string) || new Date().getFullYear();
-      const month = parseInt(req.query.month as string) || new Date().getMonth();
+      const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+      const month = req.query.month !== undefined ? parseInt(req.query.month as string) : new Date().getMonth();
       
       const recurring = await storage.getRecurringInvoicesForMonth(year, month);
       res.json(recurring);

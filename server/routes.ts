@@ -1986,6 +1986,20 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Recurring invoices for month display
+  app.get("/api/admin/dashboard-recurring", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const year = parseInt(req.query.year as string) || new Date().getFullYear();
+      const month = parseInt(req.query.month as string) || new Date().getMonth();
+      
+      const recurring = await storage.getRecurringInvoicesForMonth(year, month);
+      res.json(recurring);
+    } catch (error) {
+      console.error("Get dashboard recurring error:", error);
+      res.status(500).json({ error: "Failed to get recurring invoices" });
+    }
+  });
+
   // Assistant Bonus Payments
   app.get("/api/admin/bonus-payments", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {

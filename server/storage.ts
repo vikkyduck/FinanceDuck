@@ -274,6 +274,20 @@ export interface IStorage {
   
   // Dashboard invoice details for expandable cards
   getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts'): Promise<DashboardInvoiceDetail[]>;
+  
+  // Recurring invoices for month display
+  getRecurringInvoicesForMonth(year: number, month: number): Promise<RecurringInvoiceForMonth[]>;
+}
+
+export interface RecurringInvoiceForMonth {
+  id: string;
+  clientName: string | null;
+  partnerName: string | null;
+  amount: number;
+  expectedProfit: number;
+  frequency: string;
+  dayOfMonth: number;
+  scheme: string;
 }
 
 export interface AssistantActionLogFilters {
@@ -2310,6 +2324,98 @@ export class DatabaseStorage implements IStorage {
     }
     
     return { monthlyAmount, yearlyTotal };
+  }
+  
+  async getRecurringInvoicesForMonth(year: number, month: number): Promise<RecurringInvoiceForMonth[]> {
+    const activeRecurring = await db
+      .select({
+        recurring: recurringInvoices,
+        clientName: clients.name,
+        partnerName: partners.name,
+      })
+      .from(recurringInvoices)
+      .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
+      .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
+      .where(eq(recurringInvoices.isActive, true));
+    
+    const result: RecurringInvoiceForMonth[] = [];
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0);
+    const now = new Date();
+    
+    const advanceByFrequency = (date: Date, freq: 'monthly' | 'quarterly' | 'yearly', day: number): Date => {
+      switch (freq) {
+        case 'monthly':
+          return new Date(date.getFullYear(), date.getMonth() + 1, day);
+        case 'quarterly':
+          return new Date(date.getFullYear(), date.getMonth() + 3, day);
+        case 'yearly':
+          return new Date(date.getFullYear() + 1, date.getMonth(), day);
+      }
+    };
+    
+    const hasOccurrenceInMonth = (
+      scheduleStart: Date,
+      frequency: 'monthly' | 'quarterly' | 'yearly',
+      dayOfMonth: number,
+      scheduleEnd: Date | null
+    ): boolean => {
+      let cursor = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth(), dayOfMonth);
+      if (cursor < scheduleStart) {
+        cursor = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth(), dayOfMonth);
+      }
+      
+      let iterations = 0;
+      while (cursor <= monthEnd && iterations < 500) {
+        iterations++;
+        if (scheduleEnd && cursor > scheduleEnd) break;
+        
+        if (cursor >= scheduleStart && cursor >= monthStart && cursor <= monthEnd) {
+          return true;
+        }
+        cursor = advanceByFrequency(cursor, frequency, dayOfMonth);
+      }
+      return false;
+    };
+    
+    for (const row of activeRecurring) {
+      const recurring = row.recurring;
+      const amount = parseFloat(recurring.amount || "0");
+      if (amount <= 0) continue;
+      
+      const scheme = recurring.scheme as InvoiceScheme;
+      const partnerCommissionRate = recurring.partnerCommissionRate 
+        ? parseFloat(recurring.partnerCommissionRate) 
+        : undefined;
+      
+      const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0);
+      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      
+      if (expectedProfit <= 0) continue;
+      
+      const dayOfMonth = parseInt(recurring.dayOfMonth || "1");
+      const frequency = recurring.frequency as 'monthly' | 'quarterly' | 'yearly';
+      const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
+      const startDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
+      
+      if (startDate > monthEnd) continue;
+      if (endDateValue && endDateValue < monthStart) continue;
+      
+      if (hasOccurrenceInMonth(startDate, frequency, dayOfMonth, endDateValue)) {
+        result.push({
+          id: recurring.id,
+          clientName: row.clientName,
+          partnerName: row.partnerName,
+          amount,
+          expectedProfit,
+          frequency,
+          dayOfMonth,
+          scheme,
+        });
+      }
+    }
+    
+    return result;
   }
   
   async getCriticalAlerts(): Promise<Array<{

@@ -74,6 +74,17 @@ interface InvoiceListProps {
   isOpen: boolean;
 }
 
+interface RecurringInvoiceForMonth {
+  id: string;
+  clientName: string | null;
+  partnerName: string | null;
+  amount: number;
+  expectedProfit: number;
+  frequency: string;
+  dayOfMonth: number;
+  scheme: string;
+}
+
 const InvoiceList = ({ year, month, category, isOpen }: InvoiceListProps) => {
   const { data: invoices, isLoading } = useQuery<DashboardInvoiceDetail[]>({
     queryKey: ["/api/admin/dashboard-invoices", year, month, category],
@@ -129,6 +140,74 @@ const InvoiceList = ({ year, month, category, isOpen }: InvoiceListProps) => {
   );
 };
 
+interface RecurringListProps {
+  year: number;
+  month: number;
+  isOpen: boolean;
+}
+
+const getFrequencyLabel = (freq: string): string => {
+  const labels: Record<string, string> = {
+    'monthly': 'ежемесячно',
+    'quarterly': 'ежеквартально',
+    'yearly': 'ежегодно',
+  };
+  return labels[freq] || freq;
+};
+
+const RecurringList = ({ year, month, isOpen }: RecurringListProps) => {
+  const { data: recurring, isLoading } = useQuery<RecurringInvoiceForMonth[]>({
+    queryKey: ["/api/admin/dashboard-recurring", year, month],
+    queryFn: () => apiGet<RecurringInvoiceForMonth[]>(`/admin/dashboard-recurring?year=${year}&month=${month}`),
+    enabled: isOpen,
+    staleTime: 30000,
+  });
+
+  if (!isOpen) return null;
+
+  if (isLoading) {
+    return (
+      <div className="pt-2 space-y-1">
+        {[1, 2, 3].map(i => (
+          <Skeleton key={i} className="h-6 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!recurring || recurring.length === 0) {
+    return (
+      <div className="pt-2 text-sm text-muted-foreground">
+        Нет регулярных счетов
+      </div>
+    );
+  }
+
+  return (
+    <div className="pt-2 space-y-1 max-h-48 overflow-y-auto">
+      {recurring.map(rec => (
+        <Link
+          key={rec.id}
+          to="/recurring-invoices"
+          className="flex items-center justify-between gap-2 p-1.5 rounded hover-elevate text-sm group"
+          data-testid={`link-recurring-${rec.id}`}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary shrink-0" />
+            <span className="truncate font-medium">{rec.clientName || 'Без клиента'}</span>
+            <span className="truncate text-muted-foreground text-xs hidden sm:inline">
+              {getFrequencyLabel(rec.frequency)}
+            </span>
+          </div>
+          <span className="shrink-0 font-semibold text-xs">
+            {formatCurrency(rec.expectedProfit)}
+          </span>
+        </Link>
+      ))}
+    </div>
+  );
+};
+
 const MONTH_NAMES = [
   "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
@@ -149,6 +228,7 @@ export const AdminDashboardMetrics = () => {
   const [openReceivedList, setOpenReceivedList] = useState(false);
   const [openExpectedList, setOpenExpectedList] = useState(false);
   const [openDraftsList, setOpenDraftsList] = useState(false);
+  const [openRecurringList, setOpenRecurringList] = useState(false);
   const refetchInterval = useVisibilityAwareInterval();
 
   const { data: stats, isLoading, isError } = useQuery<DashboardStats>({
@@ -335,12 +415,26 @@ export const AdminDashboardMetrics = () => {
             </Collapsible>
 
             {(stats.monthlyCashFlow.recurring || 0) > 0 && (
-              <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-sm text-muted-foreground">Регулярные</span>
-                <span className="font-semibold text-blue-600 text-sm sm:text-base" data-testid="text-cashflow-recurring">
-                  {formatCurrency(stats.monthlyCashFlow.recurring || 0)}
-                </span>
-              </div>
+              <Collapsible open={openRecurringList} onOpenChange={setOpenRecurringList}>
+                <CollapsibleTrigger className="w-full" data-testid="trigger-recurring-list">
+                  <div className="flex items-center justify-between gap-2 hover-elevate p-1 -m-1 rounded cursor-pointer">
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-muted-foreground">Регулярные</span>
+                      {openRecurringList ? (
+                        <ChevronUp className="h-3 w-3 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </div>
+                    <span className="font-semibold text-blue-600 text-sm sm:text-base" data-testid="text-cashflow-recurring">
+                      {formatCurrency(stats.monthlyCashFlow.recurring || 0)}
+                    </span>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <RecurringList year={selectedYear} month={selectedMonth} isOpen={openRecurringList} />
+                </CollapsibleContent>
+              </Collapsible>
             )}
             <div className="pt-2 border-t">
               <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">

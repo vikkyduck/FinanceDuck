@@ -13,7 +13,7 @@ interface InvoiceCalculatorProps {
 export const InvoiceCalculator = ({
   scheme,
   clientBill,
-  partnerCommissionRate = 10,
+  partnerCommissionRate = 0,
 }: InvoiceCalculatorProps) => {
   if (!clientBill || clientBill <= 0) {
     return (

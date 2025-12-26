@@ -192,8 +192,9 @@ export function calculateInvoice(
       // Долг партнёра:
       // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
       // - Без резерва: уменьшается с расходами
+      // ВАЖНО: По умолчанию 0% комиссия (вся сумма идёт админу)
       
-      const commissionRate = partnerCommissionRate || 10;
+      const commissionRate = partnerCommissionRate ?? 0;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
       const partnerTransferDue = plannedExpenses > 0
@@ -215,8 +216,8 @@ export function calculateInvoice(
     }
 
     default: {
-      // Fallback: treat as commission_based with 10%
-      const commissionRate = partnerCommissionRate || 10;
+      // Fallback: treat as commission_based with 0% (вся сумма админу)
+      const commissionRate = partnerCommissionRate ?? 0;
       const commissionAmount = clientBill * (commissionRate / 100);
       const amountToAdmin = clientBill - commissionAmount;
       const partnerTransferDue = plannedExpenses > 0
@@ -301,7 +302,8 @@ export function calculatePartnerDebt(
     } else if (scheme === 'partner_15') {
       commissionRate = 15;
     } else {
-      commissionRate = (partnerCommission / clientBill) * 100 || 10;
+      // По умолчанию 0% - вся сумма идёт админу
+      commissionRate = clientBill > 0 ? (partnerCommission / clientBill) * 100 : 0;
     }
     const commissionAmount = clientBill * (commissionRate / 100);
     calculatedDebt = clientBill - commissionAmount - expensesPaidByPartner;

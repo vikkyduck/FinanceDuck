@@ -39,7 +39,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
   const [selectedPartner, setSelectedPartner] = useState("");
   const [selectedClient, setSelectedClient] = useState("");
   const [scheme, setScheme] = useState<string>("agency_30");
-  const [partnerCommissionRate, setPartnerCommissionRate] = useState("10");
+  const [partnerCommissionRate, setPartnerCommissionRate] = useState("0");
   const [clientBill, setClientBill] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [notes, setNotes] = useState("");
@@ -95,14 +95,14 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
       switch(scheme) {
         case 'commission_based':
           dbScheme = 'commission_based';
-          commissionRate = 10;
+          commissionRate = 0; // По умолчанию 0% - вся сумма идёт админу
           break;
         case 'partner_10':
-          dbScheme = 'commission_based';
+          dbScheme = 'partner_10';
           commissionRate = 10;
           break;
         case 'partner_15':
-          dbScheme = 'commission_based';
+          dbScheme = 'partner_15';
           commissionRate = 15;
           break;
         case 'custom':

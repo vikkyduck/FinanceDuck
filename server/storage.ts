@@ -2132,8 +2132,9 @@ export class DatabaseStorage implements IStorage {
         }
       }
       
-      // Expected this month - unpaid invoices with planned payment date in selected month
-      if (status !== 'paid' && status !== 'cancelled' && paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
+      // Expected this month - unpaid invoices CREATED in selected month (not by planned payment date)
+      // This shows all pending profit from invoices created in the selected month
+      if (status !== 'paid' && status !== 'cancelled' && createdAt && createdAt >= monthStart && createdAt <= monthEnd) {
         monthlyExpected += netProfit;
       }
     }

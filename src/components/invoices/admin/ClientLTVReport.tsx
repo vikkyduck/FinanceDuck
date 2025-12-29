@@ -4,7 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { TrendingUp, Users, AlertCircle, Clock, ChevronRight } from "lucide-react";
+import { TrendingUp, Users, AlertCircle, Clock, ChevronRight, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -108,9 +113,20 @@ export const ClientLTVReport = () => {
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <Users className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
                 LTV Драконов (Клиентов)
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-sm">
+                      LTV считается по <strong>чистой прибыли админа</strong> (netProfitAdmin), 
+                      а не по обороту. Это сумма после вычета доли партнёра, расходов и резервов.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Чистая прибыль админа по каждому клиенту
+                Чистая прибыль админа по каждому клиенту (не оборот)
               </CardDescription>
             </div>
             <Select value={selectedYear} onValueChange={setSelectedYear}>
@@ -158,11 +174,18 @@ export const ClientLTVReport = () => {
                       onClick={() => setSortBy('total_admin_profit')}
                       data-testid="sort-total-profit"
                     >
-                      <div className="flex items-center justify-end gap-1">
-                        <span className="hidden sm:inline">Доход (оплачено)</span>
-                        <span className="sm:hidden">Доход</span>
-                        {sortBy === 'total_admin_profit' && <TrendingUp className="h-3 w-3" />}
-                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="hidden sm:inline">ЧП (оплачено)</span>
+                            <span className="sm:hidden">ЧП</span>
+                            {sortBy === 'total_admin_profit' && <TrendingUp className="h-3 w-3" />}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Чистая прибыль админа по оплаченным счетам</p>
+                        </TooltipContent>
+                      </Tooltip>
                     </TableHead>
                     <TableHead 
                       className="text-xs sm:text-sm text-right cursor-pointer hover:bg-muted/50 transition-colors duration-150"
@@ -175,7 +198,16 @@ export const ClientLTVReport = () => {
                         {sortBy === 'potential_profit' && <TrendingUp className="h-3 w-3" />}
                       </div>
                     </TableHead>
-                    <TableHead className="text-xs sm:text-sm text-right">Всего LTV</TableHead>
+                    <TableHead className="text-xs sm:text-sm text-right">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>Всего LTV</span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">ЧП оплаченных + ожидаемая ЧП</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

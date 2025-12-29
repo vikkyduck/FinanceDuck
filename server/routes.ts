@@ -1140,8 +1140,9 @@ export function registerRoutes(app: Express): void {
   // Admin: Client LTV report
   app.get("/api/admin/client-ltv", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const data = await storage.getClientLTV();
-      res.json(data);
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const result = await storage.getClientLTV(year);
+      res.json(result);
     } catch (error) {
       console.error("Get client LTV error:", error);
       res.status(500).json({ error: "Failed to get client LTV" });

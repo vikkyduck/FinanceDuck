@@ -7,6 +7,13 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 import { TrendingUp, Users, AlertCircle, Clock, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -24,19 +31,28 @@ interface ClientLTV {
   potential_profit: number;
 }
 
+interface ClientLTVResponse {
+  data: ClientLTV[];
+  availableYears: number[];
+}
+
 export const ClientLTVReport = () => {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<'total_admin_profit' | 'potential_profit' | 'total_invoices'>('total_admin_profit');
+  const [selectedYear, setSelectedYear] = useState<string>("all");
 
   const openClientInvoices = (clientId: string) => {
     navigate(`/stats?tab=invoices&clientId=${clientId}`);
   };
 
-  const { data: clients = [], isLoading, error } = useQuery<ClientLTV[]>({
-    queryKey: ["/api/admin/client-ltv"],
-    queryFn: () => apiGet<ClientLTV[]>("/admin/client-ltv"),
+  const { data: response, isLoading, error } = useQuery<ClientLTVResponse>({
+    queryKey: ["/api/admin/client-ltv", selectedYear],
+    queryFn: () => apiGet<ClientLTVResponse>(`/admin/client-ltv${selectedYear !== "all" ? `?year=${selectedYear}` : ""}`),
     retry: 1,
   });
+
+  const clients = response?.data || [];
+  const availableYears = response?.availableYears || [];
 
   if (isLoading) {
     return (
@@ -87,14 +103,29 @@ export const ClientLTVReport = () => {
     <Card>
       <CardHeader className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <Users className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
-              LTV Драконов (Клиентов)
-            </CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Чистая прибыль админа по каждому клиенту
-            </CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <Users className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+                LTV Драконов (Клиентов)
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Чистая прибыль админа по каждому клиенту
+              </CardDescription>
+            </div>
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-[120px]" data-testid="select-ltv-year">
+                <SelectValue placeholder="Год" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все годы</SelectItem>
+                {availableYears.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
             <div className="text-center">

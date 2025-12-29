@@ -267,7 +267,7 @@ export interface IStorage {
   updateWorkingCapital(amount: number, notes: string | null, updatedBy: string): Promise<WorkingCapitalData>;
   
   // Client LTV
-  getClientLTV(): Promise<ClientLTVData[]>;
+  getClientLTV(year?: number): Promise<{ data: ClientLTVData[]; availableYears: number[] }>;
   
   // Assistant action logs
   logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog>;
@@ -4544,7 +4544,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getClientLTV(): Promise<ClientLTVData[]> {
+  async getClientLTV(year?: number): Promise<{ data: ClientLTVData[]; availableYears: number[] }> {
     // Get all invoices with client info and calculations
     // LTV = чистая прибыль админа (netProfitAdmin) от клиента
     const allInvoices = await db
@@ -4558,6 +4558,26 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(clients, eq(invoices.clientId, clients.id))
       .where(isNotNull(invoices.clientId));
 
+    // Collect available years from paid invoices (use paymentDate with fallback to createdAt)
+    const yearsSet = new Set<number>();
+    for (const row of allInvoices) {
+      if (row.invoice.status === 'paid') {
+        const dateStr = row.invoice.paymentDate || row.invoice.createdAt;
+        if (dateStr) {
+          yearsSet.add(new Date(dateStr).getFullYear());
+        }
+      }
+    }
+    const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
+
+    // Filter by year if specified
+    let yearStart: Date | null = null;
+    let yearEnd: Date | null = null;
+    if (year !== undefined) {
+      yearStart = new Date(year, 0, 1);
+      yearEnd = new Date(year, 11, 31, 23, 59, 59);
+    }
+
     const clientMap = new Map<string, ClientLTVData>();
 
     for (const row of allInvoices) {
@@ -4565,9 +4585,20 @@ export class DatabaseStorage implements IStorage {
 
       const clientId = row.invoice.clientId;
       const clientName = row.clientName || 'Неизвестный клиент';
-      // Используем netProfitAdmin как доход админа от клиента
       const adminProfit = parseFloat(row.calculations?.netProfitAdmin || "0");
       const isPaid = row.invoice.status === 'paid';
+      const isSent = row.invoice.status === 'sent';
+
+      // For year filter, get payment date with fallback
+      const paymentDateStr = row.invoice.paymentDate || row.invoice.createdAt;
+      const paymentDate = paymentDateStr ? new Date(paymentDateStr) : null;
+
+      // When year filter is applied, skip paid invoices outside the year entirely
+      if (year !== undefined && yearStart && yearEnd && isPaid) {
+        if (!paymentDate || paymentDate < yearStart || paymentDate > yearEnd) {
+          continue; // Skip this invoice completely
+        }
+      }
 
       if (!clientMap.has(clientId)) {
         clientMap.set(clientId, {
@@ -4584,18 +4615,26 @@ export class DatabaseStorage implements IStorage {
       client.total_invoices += 1;
 
       if (isPaid) {
-        // Оплаченные счета - реальная прибыль
         client.paid_invoices += 1;
         client.total_admin_profit += adminProfit;
-      } else if (row.invoice.status === 'sent') {
-        // Неоплаченные счета - потенциальная прибыль
+      } else if (isSent) {
+        // Потенциальная прибыль - не фильтруем по году, если год не указан
+        // При фильтре по году показываем только текущие ожидающие счета
         client.potential_profit += adminProfit;
       }
     }
 
-    // Сортируем по total_admin_profit (реальной прибыли)
-    return Array.from(clientMap.values())
-      .sort((a, b) => b.total_admin_profit - a.total_admin_profit);
+    // Filter out clients with no activity in the selected period
+    let data = Array.from(clientMap.values());
+    if (year !== undefined) {
+      // When filtering by year, only show clients with paid invoices or potential profit
+      data = data.filter(c => c.paid_invoices > 0 || c.potential_profit > 0);
+    }
+
+    // Sort by total_admin_profit (realized profit)
+    data.sort((a, b) => b.total_admin_profit - a.total_admin_profit);
+    
+    return { data, availableYears };
   }
 
   async getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts'): Promise<DashboardInvoiceDetail[]> {

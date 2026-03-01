@@ -2579,9 +2579,7 @@ export function registerRoutes(app: Express): void {
         { header: 'Примечание', key: 'notes', width: 30 },
       ];
 
-      if (role === 'accountant') {
-        columns.push({ header: 'Закрывающий документ', key: 'closingDoc', width: 40 });
-      }
+      columns.push({ header: 'Закрывающий документ', key: 'closingDoc', width: 40 });
 
       sheet.columns = columns;
 
@@ -2615,9 +2613,7 @@ export function registerRoutes(app: Express): void {
           notes: inv.notes || '',
         };
 
-        if (role === 'accountant') {
-          row.closingDoc = (inv as any).closingDocumentUrl || '';
-        }
+        row.closingDoc = (inv as any).closingDocumentUrl || '';
 
         sheet.addRow(row);
       }

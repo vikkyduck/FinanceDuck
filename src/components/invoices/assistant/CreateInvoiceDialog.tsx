@@ -153,7 +153,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         status: 'draft',
         notes: validated.notes || undefined,
         paymentDate: formattedPaymentDate,
-        hideFromAssistant: effectiveRole === 'admin' ? hideFromAssistant : false,
+        hideFromAssistant: effectiveRole === 'admin' ? hideFromAssistant : effectiveRole === 'accountant' ? true : false,
         clientBill: validated.clientBill,
         calculations: calculations,
         plannedExpenses: plannedExpensesValue,
@@ -261,7 +261,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                           description="Маржа 40%: партнёру 16%, админу 24%"
                         />
 
-                        {effectiveRole === 'assistant' && (
+                        {(effectiveRole === 'assistant' || effectiveRole === 'accountant') && (
                           <SchemeCard
                             value="commission_based"
                             selected={scheme === "commission_based"}
@@ -418,7 +418,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
             </div>
 
             <div className="lg:col-span-1">
-              {effectiveRole === 'admin' && (
+              {(effectiveRole === 'admin' || effectiveRole === 'accountant') && (
                 <InvoiceCalculator
                   scheme={scheme as any}
                   clientBill={parseFloat(clientBill) || 0}

@@ -665,6 +665,70 @@ export function registerRoutes(app: Express): void {
 
   // Client acts status dashboard - real-time view of which clients have acts attached
   // NOTE: This route MUST be defined BEFORE /api/clients/:id to avoid "acts-status" being matched as an ID
+  app.get("/api/closing-docs-status", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const clients = await storage.getClients();
+      const allInvoices = await storage.getInvoices('admin' as UserRole);
+      const hiddenInvoices = allInvoices.filter(inv => inv.hideFromAssistant);
+
+      const clientDocsMap = new Map<string, {
+        clientId: string;
+        clientName: string;
+        totalInvoices: number;
+        invoicesWithDoc: number;
+        invoicesWithoutDoc: number;
+        invoiceDetails: Array<{
+          id: string;
+          invoiceNumber: string | null;
+          status: string;
+          hasClosingDoc: boolean;
+          closingDocumentUrl: string | null;
+          paymentDate: string | null;
+        }>;
+      }>();
+
+      for (const client of clients) {
+        clientDocsMap.set(client.id, {
+          clientId: client.id,
+          clientName: client.name,
+          totalInvoices: 0,
+          invoicesWithDoc: 0,
+          invoicesWithoutDoc: 0,
+          invoiceDetails: [],
+        });
+      }
+
+      for (const invoice of hiddenInvoices) {
+        if (!invoice.clientId) continue;
+        const clientData = clientDocsMap.get(invoice.clientId);
+        if (!clientData) continue;
+
+        const hasDoc = !!invoice.closingDocumentUrl;
+        clientData.totalInvoices++;
+        if (hasDoc) clientData.invoicesWithDoc++;
+        else clientData.invoicesWithoutDoc++;
+
+        clientData.invoiceDetails.push({
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          status: invoice.status || 'draft',
+          hasClosingDoc: hasDoc,
+          closingDocumentUrl: invoice.closingDocumentUrl || null,
+          paymentDate: invoice.paymentDate,
+        });
+      }
+
+      const result = Array.from(clientDocsMap.values())
+        .filter(c => c.totalInvoices > 0)
+        .sort((a, b) => b.invoicesWithoutDoc - a.invoicesWithoutDoc || b.totalInvoices - a.totalInvoices);
+
+      res.json(result);
+    } catch (error) {
+      console.error("Get closing docs status error:", error);
+      res.status(500).json({ error: "Failed to get closing docs status" });
+    }
+  });
+
   app.get("/api/clients/acts-status", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role as UserRole || "client";

@@ -10,7 +10,6 @@ import { CreateInvoiceDialog } from "./assistant/CreateInvoiceDialog";
 import { InvoicesList } from "./assistant/InvoicesList";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
-import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -130,15 +129,7 @@ export const AccountantDashboard = () => {
           </div>
 
           <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-4 flex flex-row items-center justify-between gap-4">
-              <CardTitle className="text-2xl">Счета (скрытые от ассистента)</CardTitle>
-              <ViewModeToggle
-                value={viewMode}
-                onValueChange={setViewMode}
-                className="hidden sm:flex"
-              />
-            </CardHeader>
-            <CardContent className="px-0">
+            <CardContent className="px-0 pt-4">
               <InvoicesList
                 viewMode={viewMode}
                 key={createDialogOpen ? 'dialog-open' : 'dialog-closed'}

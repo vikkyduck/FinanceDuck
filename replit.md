@@ -14,7 +14,7 @@ The frontend is built with React 18, TypeScript, and Vite, utilizing React Route
 
 ## Backend Architecture
 
-The backend utilizes an Express.js server with a Neon PostgreSQL database accessed via Drizzle ORM. It employs cookie-based session management with HttpOnly cookies and CSRF protection. A robust Role-Based Access Control (RBAC) system manages four roles: admin, assistant, partner, and client, with server-side allowlist filtering. The database schema supports invoices, partners, clients, expenses, documents, and various payment and relationship entities. Server-side privacy rules strictly control data visibility, especially for assistants.
+The backend utilizes an Express.js server with a Neon PostgreSQL database accessed via Drizzle ORM. It employs cookie-based session management with HttpOnly cookies and CSRF protection. A robust Role-Based Access Control (RBAC) system manages five roles: admin, assistant, partner, client, and accountant (бухгалтерия), with server-side allowlist filtering. The database schema supports invoices, partners, clients, expenses, documents, and various payment and relationship entities. Server-side privacy rules strictly control data visibility, especially for assistants and accountants.
 
 ## Financial Calculation Engine
 

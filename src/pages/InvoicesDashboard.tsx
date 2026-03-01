@@ -3,6 +3,7 @@ import { AssistantDashboard } from "@/components/invoices/AssistantDashboard";
 import { PartnerDashboard } from "@/components/invoices/PartnerDashboard";
 import { AdminDashboard } from "@/components/invoices/AdminDashboard";
 import { ClientDashboard } from "@/components/invoices/ClientDashboard";
+import { AccountantDashboard } from "@/components/invoices/AccountantDashboard";
 
 const InvoicesDashboard = () => {
   const { role } = useAuth();
@@ -17,6 +18,7 @@ const InvoicesDashboard = () => {
       {role === 'partner' && <PartnerDashboard />}
       {role === 'admin' && <AdminDashboard />}
       {role === 'client' && <ClientDashboard />}
+      {role === 'accountant' && <AccountantDashboard />}
     </>
   );
 };

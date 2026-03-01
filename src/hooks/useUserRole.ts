@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 
-export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
+export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
 
 interface UserRoleData {
   role: UserRole | null;

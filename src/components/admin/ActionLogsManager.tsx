@@ -310,6 +310,7 @@ export const ActionLogsManager = () => {
                       <SelectItem value="all">Все</SelectItem>
                       <SelectItem value="admin">Админ</SelectItem>
                       <SelectItem value="assistant">Ассистент</SelectItem>
+                      <SelectItem value="accountant">Бухгалтерия</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

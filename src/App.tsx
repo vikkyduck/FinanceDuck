@@ -37,8 +37,7 @@ const RoleBasedHome = () => {
     );
   }
   
-  // Partners and Admins go directly to their dashboard
-  if (role === 'partner' || role === 'admin' || role === 'assistant') {
+  if (role === 'partner' || role === 'admin' || role === 'assistant' || role === 'accountant') {
     return <InvoicesDashboard />;
   }
   

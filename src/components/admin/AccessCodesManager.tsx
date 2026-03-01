@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Trash2, Plus, Loader2, Key } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
-type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
+type UserRole = 'admin' | 'assistant' | 'partner' | 'client' | 'accountant';
 
 interface AccessToken {
   id: string;
@@ -106,12 +106,13 @@ export const AccessCodesManager = () => {
   };
 
   const generateCode = (role: UserRole) => {
-    const prefix = {
+    const prefix = ({
       admin: 'ADM',
       assistant: 'AST',
       partner: 'PTR',
-      client: 'CLT'
-    }[role];
+      client: 'CLT',
+      accountant: 'ACC',
+    } as Record<string, string>)[role];
     
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const array = new Uint8Array(8);
@@ -206,12 +207,14 @@ export const AccessCodesManager = () => {
       assistant: "Ассистент",
       partner: "Партнер",
       client: "Клиент",
+      accountant: "Бухгалтерия",
     };
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       admin: "destructive",
       assistant: "default",
       partner: "secondary",
       client: "outline",
+      accountant: "default",
     };
     return <Badge variant={variants[role]}>{labels[role] || role}</Badge>;
   };
@@ -243,6 +246,7 @@ export const AccessCodesManager = () => {
                 <SelectContent>
                   <SelectItem value="admin">Администратор</SelectItem>
                   <SelectItem value="assistant">Ассистент</SelectItem>
+                  <SelectItem value="accountant">Бухгалтерия</SelectItem>
                   <SelectItem value="partner">Партнер</SelectItem>
                   <SelectItem value="client">Клиент</SelectItem>
                 </SelectContent>

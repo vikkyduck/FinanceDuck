@@ -1,6 +1,6 @@
 import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index } from "drizzle-orm/pg-core";
 
-export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client']);
+export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client', 'accountant']);
 export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based']);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'cancelled']);
 export const actTypeEnum = pgEnum('act_type', ['executor', 'company']);
@@ -86,6 +86,7 @@ export const invoices = pgTable("invoices", {
   hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
   recurringInvoiceId: uuid("recurring_invoice_id"),
   plannedExpenses: numeric("planned_expenses", { precision: 15, scale: 2 }),
+  closingDocumentUrl: text("closing_document_url"),
 });
 
 export const assistantBonusPayments = pgTable("assistant_bonus_payments", {
@@ -265,7 +266,7 @@ export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
 export type InsertRecurringInvoice = typeof recurringInvoices.$inferInsert;
 export type AssistantActionLog = typeof assistantActionLogs.$inferSelect;
 export type InsertAssistantActionLog = typeof assistantActionLogs.$inferInsert;
-export type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
+export type UserRole = 'admin' | 'assistant' | 'partner' | 'client' | 'accountant';
 export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'agency_40' | 'commission_based';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 export type ActType = 'executor' | 'company';

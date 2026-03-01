@@ -3,6 +3,7 @@ import { AdminInvoicesList } from "@/components/invoices/admin/AdminInvoicesList
 import { RecurringInvoicesManager } from "@/components/invoices/admin/RecurringInvoicesManager";
 import { useAuth } from "@/hooks/useAuth";
 import { AssistantDashboard } from "@/components/invoices/AssistantDashboard";
+import { AccountantDashboard } from "@/components/invoices/AccountantDashboard";
 import { PartnerDashboard } from "@/components/invoices/PartnerDashboard";
 import { ClientDashboard } from "@/components/invoices/ClientDashboard";
 import { useViewMode } from "@/hooks/useViewMode";
@@ -32,6 +33,10 @@ const InvoicesListPage = () => {
 
   if (role === 'assistant') {
     return <AssistantDashboard />;
+  }
+
+  if (role === 'accountant') {
+    return <AccountantDashboard />;
   }
 
   if (role === 'partner') {

@@ -9,7 +9,8 @@ import {
   UserCheck,
   Key,
   Database,
-  History
+  History,
+  Calculator
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -75,8 +76,6 @@ export function AppSidebar() {
       }>;
     }> = [];
 
-    // Main section - for everyone
-    // Partner gets single-page dashboard - no extra menu items
     if (role === "partner") {
       groups.push({
         label: "Главное",
@@ -88,7 +87,26 @@ export function AppSidebar() {
           },
         ]
       });
-      return groups; // Partner only sees one menu item
+      return groups;
+    }
+
+    if (role === "accountant") {
+      groups.push({
+        label: "Бухгалтерия",
+        items: [
+          { 
+            title: "Главная", 
+            url: "/", 
+            icon: Calculator,
+          },
+          { 
+            title: "Счета", 
+            url: "/invoices", 
+            icon: FileText,
+          },
+        ]
+      });
+      return groups;
     }
 
     groups.push({
@@ -155,13 +173,14 @@ export function AppSidebar() {
   const totalAlerts = alertCounts.overdueInvoices;
 
   const getRoleLabel = () => {
-    const labels = {
+    const labels: Record<string, string> = {
       admin: "Администратор",
       assistant: "Ассистент",
       partner: "Партнёр",
       client: "Клиент",
+      accountant: "Бухгалтерия",
     };
-    return labels[role as keyof typeof labels] || "";
+    return labels[role as string] || "";
   };
 
   return (

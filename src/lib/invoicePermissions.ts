@@ -1,4 +1,4 @@
-export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
+export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
 export type InvoiceScheme = 'agency_30' | 'agency_40' | 'commission_based';
 
 export interface VisibleFields {
@@ -135,6 +135,32 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
         showExpensesList: false, // Don't show expenses
       };
     }
+  }
+
+  // Accountant permissions - same as assistant but for hidden invoices
+  if (userRole === 'accountant') {
+    return {
+      showBasicInfo: true,
+      showClientBill: true,
+      showCommissionDetails: false,
+      showAgencyMargin: scheme === 'agency_30' || scheme === 'agency_40',
+      showClientBudget: scheme === 'agency_30' || scheme === 'agency_40',
+      showExpensesTotal: true,
+      showClientRemaining: scheme === 'agency_30' || scheme === 'agency_40',
+      showPartnerShare: false,
+      showAdminShare: false,
+      showNetProfitAdmin: false,
+      showAdminCatSplit: false,
+      showAssistantBonus: false,
+      canEditStatus: true,
+      canEditPaymentDates: true,
+      canEditNotes: true,
+      canEditInvoiceNumber: true,
+      canAddExpenses: true,
+      canUploadDocuments: true,
+      canDeleteExpenses: true,
+      showExpensesList: true,
+    };
   }
 
   // Partner permissions - видит свои комиссии и обязательства, НЕ видит внутреннюю кухню админа

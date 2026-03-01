@@ -140,7 +140,7 @@ const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
     'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
-    'plannedExpenses',
+    'plannedExpenses', 'closingDocumentUrl',
   ],
   partner: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description',
@@ -157,6 +157,12 @@ const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'clientBill', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
     'plannedExpenses',
+  ],
+  accountant: [
+    'id', 'invoiceNumber', 'clientId', 'status', 'description',
+    'clientBill', 'createdAt', 'updatedAt', 'createdBy',
+    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
+    'plannedExpenses', 'closingDocumentUrl',
   ],
 };
 
@@ -180,7 +186,10 @@ const ROLE_CALCULATION_PERMISSIONS: Record<UserRole, readonly string[]> = {
   ],
   assistant: [
     'id', 'invoiceId', 'clientBill', 'executorExpensesTotal',
-    // Для Agency 30% показываем бюджет клиента и остаток, но НЕ разбивку партнёр/админ
+    'agencyMargin', 'clientBaseAfterMargin', 'clientRemaining',
+  ],
+  accountant: [
+    'id', 'invoiceId', 'clientBill', 'executorExpensesTotal',
     'agencyMargin', 'clientBaseAfterMargin', 'clientRemaining',
   ],
 };
@@ -201,6 +210,10 @@ const ROLE_STATS_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'totalClientBill', 'totalExpenses', 'clientRemaining',
   ],
   assistant: [
+    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
+    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
+  ],
+  accountant: [
     'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
     'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
   ],
@@ -242,7 +255,7 @@ function projectInvoiceForRole(invoice: Record<string, any>, role: UserRole): Re
   }
   
   if (invoice.client) {
-    if (role === 'assistant') {
+    if (role === 'assistant' || role === 'accountant') {
       result.client = { id: invoice.client.id, name: invoice.client.name };
     } else {
       result.client = invoice.client;
@@ -282,13 +295,13 @@ function projectStatsForRole(stats: Record<string, any>, role: UserRole): Record
 }
 
 function stripPartnerInfoFromClient<T extends Record<string, any>>(client: T, role: UserRole): T {
-  if (role !== 'assistant') return client;
+  if (role !== 'assistant' && role !== 'accountant') return client;
   const { partnerId, partner, ...rest } = client;
   return rest as T;
 }
 
 function stripPartnerInfoFromClients<T extends Record<string, any>>(clients: T[], role: UserRole): T[] {
-  if (role !== 'assistant') return clients;
+  if (role !== 'assistant' && role !== 'accountant') return clients;
   return clients.map(client => {
     const { partnerId, partner, ...rest } = client;
     return rest as T;
@@ -514,7 +527,7 @@ export function registerRoutes(app: Express): void {
     res.json({ success: true, expiresAt: newExpiresAt });
   });
 
-  app.get("/api/partners", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/partners", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const result = await storage.getPartners();
       res.json(result);
@@ -543,13 +556,12 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/partners", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/partners", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";
       const partner = await storage.createPartner(req.body);
       
-      // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_partner",
@@ -569,7 +581,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.patch("/api/partners/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/partners/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const role = req.user?.role || "client";
@@ -578,8 +590,7 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Partner not found" });
       }
       
-      // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_partner",
@@ -618,8 +629,8 @@ export function registerRoutes(app: Express): void {
       const { id } = req.params;
       const role = req.user?.role;
       
-      if (role === "assistant") {
-        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      if (role === "assistant" || role === "accountant") {
+        return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
       }
       
       if (role === "partner" && req.user?.partnerId !== id) {
@@ -654,7 +665,7 @@ export function registerRoutes(app: Express): void {
 
   // Client acts status dashboard - real-time view of which clients have acts attached
   // NOTE: This route MUST be defined BEFORE /api/clients/:id to avoid "acts-status" being matched as an ID
-  app.get("/api/clients/acts-status", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.get("/api/clients/acts-status", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role as UserRole || "client";
       
@@ -763,13 +774,12 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/clients", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/clients", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";
       const client = await storage.createClient(req.body);
       
-      // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_client",
@@ -790,7 +800,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.patch("/api/clients/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/clients/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const role = req.user?.role || "client";
@@ -799,8 +809,7 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Client not found" });
       }
       
-      // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_client",
@@ -840,8 +849,8 @@ export function registerRoutes(app: Express): void {
       const { id } = req.params;
       const role = req.user?.role || "client";
       
-      if (role === "assistant") {
-        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      if (role === "assistant" || role === "accountant") {
+        return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
       }
       
       const client = await storage.getClientWithPartner(id);
@@ -866,8 +875,8 @@ export function registerRoutes(app: Express): void {
       const { id } = req.params;
       const role = req.user?.role || "client";
       
-      if (role === "assistant") {
-        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      if (role === "assistant" || role === "accountant") {
+        return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
       }
       
       const partners = await storage.getClientPartners(id);
@@ -900,8 +909,8 @@ export function registerRoutes(app: Express): void {
     try {
       const role = req.user?.role || "client";
       
-      if (role === "assistant") {
-        return res.status(403).json({ error: "Forbidden: assistants cannot view partner-client relationships" });
+      if (role === "assistant" || role === "accountant") {
+        return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
       }
       
       const clients = await storage.getClientsWithPartners();
@@ -1329,8 +1338,10 @@ export function registerRoutes(app: Express): void {
         return res.status(404).json({ error: "Invoice not found" });
       }
       
-      // Assistant cannot see invoices hidden from them
       if (role === "assistant" && invoice.hideFromAssistant) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      if (role === "accountant" && !invoice.hideFromAssistant) {
         return res.status(403).json({ error: "Forbidden" });
       }
       
@@ -1350,7 +1361,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/invoices", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const role = req.user?.role || "client";
       const { calculations, ...invoiceData } = req.body;
@@ -1363,7 +1374,7 @@ export function registerRoutes(app: Express): void {
       const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
       
       // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         const client = invoiceData.clientId ? await storage.getClient(invoiceData.clientId) : null;
         const partner = invoiceData.partnerId ? await storage.getPartner(invoiceData.partnerId) : null;
         const invoiceNumber = fullInvoice?.invoiceNumber;
@@ -1395,11 +1406,19 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const role = req.user?.role || "client";
       const { calculations, ...invoiceData } = req.body;
+      
+      // Accountant can only modify hideFromAssistant=true invoices
+      if (role === "accountant") {
+        const existing = await storage.getInvoice(id);
+        if (!existing || !existing.hideFromAssistant) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
       
       const invoice = await storage.updateInvoice(id, invoiceData);
       if (!invoice) {
@@ -1416,7 +1435,7 @@ export function registerRoutes(app: Express): void {
       const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
       
       // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         const client = fullInvoice?.clientId ? await storage.getClient(fullInvoice.clientId) : null;
         const partner = fullInvoice?.partnerId ? await storage.getPartner(fullInvoice.partnerId) : null;
         const invoiceNumber = fullInvoice?.invoiceNumber;
@@ -1459,10 +1478,18 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/invoices/:id/expenses", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/invoices/:id/expenses", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const role = req.user?.role || "client";
+      
+      if (role === "accountant") {
+        const inv = await storage.getInvoice(id);
+        if (!inv || !inv.hideFromAssistant) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+      
       const expense = await storage.createInvoiceExpense({
         ...req.body,
         invoiceId: id,
@@ -1470,7 +1497,7 @@ export function registerRoutes(app: Express): void {
       });
       
       // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "create_expense",
@@ -1490,7 +1517,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const role = req.user?.role || "client";
@@ -1500,7 +1527,7 @@ export function registerRoutes(app: Express): void {
       }
       
       // Log action
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "update_expense",
@@ -1520,13 +1547,13 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const role = req.user?.role || "client";
       
       // Log action before delete
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         await storage.logAssistantAction({
           accessTokenId: req.user!.token.id,
           actionType: "delete_expense",
@@ -1556,7 +1583,7 @@ export function registerRoutes(app: Express): void {
       const invoice = await storage.getInvoice(id);
       
       // Log action before delete
-      if (role === "assistant" || role === "admin") {
+      if (role === "assistant" || role === "admin" || role === "accountant") {
         const invoiceNumber = invoice?.invoiceNumber;
         const clientName = invoice?.clientId ? (await storage.getClient(invoice.clientId))?.name : null;
         const partnerName = invoice?.partnerId ? (await storage.getPartner(invoice.partnerId))?.name : null;
@@ -1589,7 +1616,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/documents/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/documents/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       await storage.deleteDocument(id);
@@ -1604,8 +1631,8 @@ export function registerRoutes(app: Express): void {
     try {
       const role = req.user?.role;
       
-      if (role === "assistant") {
-        return res.status(403).json({ error: "Forbidden: assistants cannot view partner payments" });
+      if (role === "assistant" || role === "accountant") {
+        return res.status(403).json({ error: "Forbidden" });
       }
       
       let partnerId: string | undefined;
@@ -2121,6 +2148,9 @@ export function registerRoutes(app: Express): void {
       if (role === "assistant" && invoice.hideFromAssistant) {
         return res.status(403).json({ error: "Forbidden" });
       }
+      if (role === "accountant" && !invoice.hideFromAssistant) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
       if (role === "partner" && invoice.partnerId !== req.user?.partnerId) {
         return res.status(403).json({ error: "Forbidden" });
       }
@@ -2144,7 +2174,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { actType, fileName, fileData, mimeType, isLink, url } = req.body;
@@ -2155,6 +2185,11 @@ export function registerRoutes(app: Express): void {
       const invoice = await storage.getInvoice(id);
       if (!invoice) {
         return res.status(404).json({ error: "Invoice not found" });
+      }
+      
+      // Accountant can only upload acts for hidden invoices
+      if (req.user?.role === "accountant" && !invoice.hideFromAssistant) {
+        return res.status(403).json({ error: "Forbidden" });
       }
       
       // Validate: either file data or URL must be provided
@@ -2260,7 +2295,7 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  app.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
       
@@ -2778,7 +2813,7 @@ export function registerRoutes(app: Express): void {
     try {
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
-      const role = req.query.role as 'admin' | 'assistant' | undefined;
+      const role = req.query.role as 'admin' | 'assistant' | 'accountant' | undefined;
       const dateFrom = req.query.dateFrom as string | undefined;
       const dateTo = req.query.dateTo as string | undefined;
       
@@ -2793,6 +2828,63 @@ export function registerRoutes(app: Express): void {
     } catch (error: any) {
       console.error("Get assistant logs error:", error);
       res.status(500).json({ error: error.message || "Failed to fetch assistant action logs" });
+    }
+  });
+
+  // Accountant action logs (accountant sees own logs)
+  app.get("/api/accountant-logs", authMiddleware, requireRole("accountant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      const result = await storage.getAssistantActionLogs({
+        limit,
+        offset,
+        role: 'accountant',
+        dateFrom: null,
+        dateTo: null,
+      });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Get accountant logs error:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch accountant action logs" });
+    }
+  });
+
+  // Closing document URL update
+  app.patch("/api/invoices/:id/closing-document", authMiddleware, requireRole("admin", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { closingDocumentUrl } = req.body;
+      const role = req.user?.role || "client";
+      
+      const invoice = await storage.getInvoice(id);
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+      
+      if (role === "accountant" && !invoice.hideFromAssistant) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      
+      const updated = await storage.updateInvoice(id, { closingDocumentUrl });
+      
+      // Log action
+      await storage.logAssistantAction({
+        accessTokenId: req.user!.token.id,
+        actionType: "update_invoice",
+        entityType: "invoice",
+        entityId: id,
+        description: `${closingDocumentUrl ? 'Прикреплён' : 'Удалён'} закрывающий документ: ${invoice.invoiceNumber || id}`,
+        details: JSON.stringify({ closingDocumentUrl, invoiceNumber: invoice.invoiceNumber }),
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || null,
+        userAgent: req.headers['user-agent'] || null,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Update closing document error:", error);
+      res.status(500).json({ error: "Failed to update closing document" });
     }
   });
 }

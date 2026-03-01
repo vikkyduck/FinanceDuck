@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-export type UserRole = 'assistant' | 'partner' | 'admin' | 'client';
+export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
 
 export interface LoginResult {
   success: boolean;

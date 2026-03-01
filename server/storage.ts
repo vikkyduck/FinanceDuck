@@ -745,12 +745,15 @@ export class DatabaseStorage implements IStorage {
     } else if (role === 'client' && clientId) {
       results = await baseQuery.where(eq(invoices.clientId, clientId));
     } else if (role === 'assistant') {
-      // Filter out invoices hidden from assistant (allow NULL or false)
       results = await baseQuery.where(
         or(
           isNull(invoices.hideFromAssistant),
           eq(invoices.hideFromAssistant, false)
         )
+      );
+    } else if (role === 'accountant') {
+      results = await baseQuery.where(
+        eq(invoices.hideFromAssistant, true)
       );
     } else {
       results = await baseQuery;
@@ -1786,7 +1789,7 @@ export class DatabaseStorage implements IStorage {
       summary.totalPlannedExpenses += plannedExpenses;
       summary.totalSpent += spent;
       // Only add commission to totals for non-assistant roles
-      summary.totalCommission += role === 'assistant' ? 0 : commission;
+      summary.totalCommission += (role === 'assistant' || role === 'accountant') ? 0 : commission;
       summary.totalDoNotSpend += doNotSpend;
       summary.totalPartnerDebt += partnerDebt;
       summary.totalClientBill += clientBill;
@@ -1800,7 +1803,7 @@ export class DatabaseStorage implements IStorage {
         plannedExpenses,
         spent,
         remaining,
-        commission: role === 'assistant' ? 0 : commission,
+        commission: (role === 'assistant' || role === 'accountant') ? 0 : commission,
         partnerDebt,
         doNotSpend,
         createdAt: row.invoice.createdAt,
@@ -1812,7 +1815,7 @@ export class DatabaseStorage implements IStorage {
       .map(s => ({
         ...s,
         // Ensure assistant never sees any commission data
-        totalCommission: role === 'assistant' ? 0 : s.totalCommission,
+        totalCommission: (role === 'assistant' || role === 'accountant') ? 0 : s.totalCommission,
         invoices: s.invoices.sort((a, b) => {
           if (!a.createdAt || !b.createdAt) return 0;
           return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -2552,7 +2555,6 @@ export class DatabaseStorage implements IStorage {
     let pendingCount = 0;
 
     if (role === 'admin' || role === 'assistant') {
-      // Overdue invoices - sent but past payment date
       const overdueInvoices = await db
         .select({ id: invoices.id })
         .from(invoices)

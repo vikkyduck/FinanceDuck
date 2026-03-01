@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, FileText, History, Link2, ExternalLink, X, Loader2 } from "lucide-react";
+import { Plus, FileText, History, Link2, ExternalLink, X, Loader2, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { useExportMyInvoices } from "@/hooks/useExportMyInvoices";
 
 interface ActionLog {
   id: string;
@@ -51,6 +52,7 @@ export const AccountantDashboard = () => {
   const [activeTab, setActiveTab] = useState("invoices");
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState("");
+  const { handleExport, isExporting } = useExportMyInvoices();
 
   const { data: logs } = useQuery<{ logs: ActionLog[]; total: number }>({
     queryKey: ['/api/accountant-logs'],
@@ -121,10 +123,21 @@ export const AccountantDashboard = () => {
         </TabsList>
 
         <TabsContent value="invoices" className="space-y-6">
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-accountant-create-invoice">
               <Plus className="h-5 w-5 mr-2" />
               Создать счёт
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg"
+              onClick={handleExport} 
+              disabled={isExporting}
+              data-testid="button-export-excel"
+            >
+              {isExporting ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <Download className="h-5 w-5 mr-2" />}
+              <span className="hidden sm:inline">Выгрузить в Excel</span>
+              <span className="sm:hidden">Excel</span>
             </Button>
           </div>
 

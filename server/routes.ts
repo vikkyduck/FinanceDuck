@@ -2538,6 +2538,129 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/my-invoices/export", authMiddleware, requireRole("assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const ExcelJS = await import("exceljs");
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Invoice Management System';
+      workbook.created = new Date();
+
+      const role = req.user?.role as UserRole;
+      const invoices = await storage.getInvoices(role);
+      const allClients = await storage.getClients();
+      const clientMap = new Map(allClients.map(c => [c.id, c.name]));
+
+      const statusMap: Record<string, string> = {
+        draft: 'Черновик',
+        sent: 'Отправлен',
+        paid: 'Оплачен',
+        cancelled: 'Отменён',
+      };
+
+      const schemeMap: Record<string, string> = {
+        agency_30: 'Агентство 30%',
+        agency_40: 'Агентство 40%',
+        partner_10: 'Партнёрское 10%',
+        partner_15: 'Партнёрское 15%',
+        commission_based: 'Партнёрское соглашение',
+      };
+
+      const sheet = workbook.addWorksheet('Счета');
+      const columns: any[] = [
+        { header: 'Номер счёта', key: 'number', width: 20 },
+        { header: 'Клиент', key: 'client', width: 25 },
+        { header: 'Статус', key: 'status', width: 14 },
+        { header: 'Схема', key: 'scheme', width: 22 },
+        { header: 'Сумма клиенту', key: 'clientBill', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        { header: 'План. расходы', key: 'plannedExpenses', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        { header: 'Факт. расходы', key: 'actualExpenses', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        { header: 'Остаток', key: 'remaining', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        { header: 'Дата оплаты', key: 'paymentDate', width: 14 },
+        { header: 'Примечание', key: 'notes', width: 30 },
+      ];
+
+      if (role === 'accountant') {
+        columns.push({ header: 'Закрывающий документ', key: 'closingDoc', width: 40 });
+      }
+
+      sheet.columns = columns;
+
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+
+      for (const inv of invoices) {
+        const clientBill = parseFloat(inv.clientBill || '0');
+        const actualExpenses = parseFloat(inv.calculations?.executorExpensesTotal || '0');
+        const plannedExpenses = parseFloat(inv.plannedExpenses || '0');
+
+        let remaining: number;
+        if (inv.scheme === 'agency_30' || inv.scheme === 'agency_40') {
+          const clientBase = parseFloat(inv.calculations?.clientBaseAfterMargin || '0');
+          remaining = clientBase - actualExpenses;
+        } else {
+          remaining = clientBill - actualExpenses;
+        }
+
+        const row: any = {
+          number: inv.invoiceNumber || '—',
+          client: clientMap.get(inv.clientId || '') || '—',
+          status: statusMap[inv.status || ''] || inv.status,
+          scheme: schemeMap[inv.scheme || ''] || inv.scheme || '—',
+          clientBill,
+          plannedExpenses: plannedExpenses || 0,
+          actualExpenses,
+          remaining,
+          paymentDate: inv.paymentDate ? new Date(inv.paymentDate).toLocaleDateString('ru-RU') : '—',
+          notes: inv.notes || '',
+        };
+
+        if (role === 'accountant') {
+          row.closingDoc = (inv as any).closingDocumentUrl || '';
+        }
+
+        sheet.addRow(row);
+      }
+
+      const expSheet = workbook.addWorksheet('Расходы');
+      expSheet.columns = [
+        { header: 'Номер счёта', key: 'invoiceNumber', width: 20 },
+        { header: 'Клиент', key: 'client', width: 25 },
+        { header: 'Описание расхода', key: 'description', width: 30 },
+        { header: 'Сумма', key: 'amount', width: 18, style: { numFmt: '#,##0.00 ₽' } },
+        { header: 'Дата', key: 'date', width: 14 },
+        { header: 'Оплачено админом', key: 'paidByAdmin', width: 16 },
+      ];
+
+      const expHeaderRow = expSheet.getRow(1);
+      expHeaderRow.font = { bold: true };
+      expHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+
+      for (const inv of invoices) {
+        const expenses = await storage.getInvoiceExpenses(inv.id);
+        for (const exp of expenses) {
+          expSheet.addRow({
+            invoiceNumber: inv.invoiceNumber || '—',
+            client: clientMap.get(inv.clientId || '') || '—',
+            description: exp.description || '—',
+            amount: parseFloat(exp.amount || '0'),
+            date: exp.date ? new Date(exp.date).toLocaleDateString('ru-RU') : '—',
+            paidByAdmin: exp.paidByAdmin ? 'Да' : 'Нет',
+          });
+        }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const roleLabel = role === 'accountant' ? 'бухгалтерия' : 'ассистент';
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=export_${roleLabel}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      res.send(Buffer.from(buffer as ArrayBuffer));
+    } catch (error) {
+      console.error("Export my invoices error:", error);
+      res.status(500).json({ error: "Failed to export data" });
+    }
+  });
+
   // Export to Excel endpoint
   app.post("/api/admin/export", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
     try {

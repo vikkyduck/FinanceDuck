@@ -6,7 +6,7 @@ import { Plus, Users } from "lucide-react";
 import { ManageClientsDialog } from "@/components/invoices/assistant/ManageClientsDialog";
 import { ClientLTVReport } from "@/components/invoices/admin/ClientLTVReport";
 import { ClientActsDashboard } from "@/components/invoices/admin/ClientActsDashboard";
-import { ClosingDocsDashboard } from "@/components/invoices/admin/ClosingDocsDashboard";
+
 import { useUserRole } from "@/hooks/useUserRole";
 
 const ClientsPage = () => {
@@ -60,10 +60,6 @@ const ClientsPage = () => {
         </div>
 
         <ClientActsDashboard />
-
-        {isAdmin && (
-          <ClosingDocsDashboard />
-        )}
 
         {isAdmin && (
           <ClientLTVReport />

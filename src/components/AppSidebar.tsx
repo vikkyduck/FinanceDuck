@@ -141,7 +141,10 @@ export function AppSidebar() {
         items: [
           { title: "Клиенты", url: "/clients", icon: Users },
           { title: "Партнёры", url: "/partners", icon: Building },
-          ...(role === "admin" ? [{ title: "Ассистент", url: "/assistant-logs", icon: UserCheck }] : []),
+          ...(role === "admin" ? [
+            { title: "Ассистент", url: "/assistant-logs", icon: UserCheck },
+            { title: "Бухгалтерия", url: "/accounting", icon: Calculator },
+          ] : []),
         ]
       });
     }

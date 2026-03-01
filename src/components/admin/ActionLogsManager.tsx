@@ -80,6 +80,7 @@ const ACTION_TYPE_VARIANTS: Record<string, "default" | "secondary" | "destructiv
 const ROLE_LABELS: Record<string, string> = {
   admin: "Админ",
   assistant: "Ассистент",
+  accountant: "Бухгалтерия",
 };
 
 function getActionIcon(actionType: string) {
@@ -190,7 +191,7 @@ function ActionLogCard({ log }: { log: AssistantActionLogWithDetails }) {
             </Badge>
             {log.tokenRole && (
               <Badge 
-                variant={log.tokenRole === "admin" ? "default" : "secondary"}
+                variant={log.tokenRole === "admin" ? "default" : log.tokenRole === "accountant" ? "outline" : "secondary"}
                 className="text-[10px] sm:text-xs"
               >
                 {ROLE_LABELS[log.tokenRole] || log.tokenRole}

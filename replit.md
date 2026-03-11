@@ -54,7 +54,7 @@ Optimizations include code splitting, TanStack Query for data caching and effici
 - **Production Deployment Fixes**: Includes cookie security, cookie path, health checks, and optimized deployment configurations.
 - **Waterfall Chart Fix**: Correctly displays expenses based on payer and uses stored `netProfitAdmin` for net profit.
 - **Centralized Expense Recalculation**: `recalculateInvoiceExpenses()` helper ensures consistent expense splitting by payer for all CRUD operations.
-- **Recurring Invoices System**: Manages recurring invoice templates with automatic draft generation, backdating, and inheritance of `hideFromAssistant` settings. Integrated into Cash Flow Forecasts.
+- **Recurring Invoices System**: Manages recurring invoice templates with automatic draft generation, backdating, and inheritance of `hideFromAssistant` settings. Integrated into Cash Flow Forecasts. Deduplication: recurring forecast excludes months where a real invoice (linked via `recurringInvoiceId`) already exists, preventing double-counting in dashboard totals.
 - **Excel Export System**: Comprehensive data export functionality for invoices, clients, partners, and expenses with configurable filters. Assistant and accountant roles have their own export (`/api/my-invoices/export`) limited to their permitted invoices, including per-invoice expenses, remaining budget, and closing document links (accountant only).
 - **Automatic Backup System**: Hourly database backups to Replit Object Storage, daily at 3 AM, with 7-day retention. Supports manual creation, download, restore, and deletion via UI.
 

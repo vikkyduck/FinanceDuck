@@ -2232,6 +2232,27 @@ export class DatabaseStorage implements IStorage {
       .from(recurringInvoices)
       .where(eq(recurringInvoices.isActive, true));
     
+    const existingFromRecurring = await db
+      .select({
+        recurringInvoiceId: invoices.recurringInvoiceId,
+        paymentDate: invoices.paymentDate,
+        createdAt: invoices.createdAt,
+      })
+      .from(invoices)
+      .where(and(
+        isNotNull(invoices.recurringInvoiceId),
+        sql`${invoices.status} != 'cancelled'`
+      ));
+    
+    const createdKeys = new Set<string>();
+    for (const inv of existingFromRecurring) {
+      const dateStr = inv.paymentDate || inv.createdAt;
+      if (!dateStr || !inv.recurringInvoiceId) continue;
+      const d = new Date(dateStr);
+      const key = `${inv.recurringInvoiceId}:${d.getFullYear()}-${d.getMonth()}`;
+      createdKeys.add(key);
+    }
+    
     let monthlyAmount = 0;
     let yearlyTotal = 0;
     const monthStart = new Date(year, month, 1);
@@ -2239,7 +2260,6 @@ export class DatabaseStorage implements IStorage {
     const yearStart = new Date(year, 0, 1);
     const yearEnd = new Date(year, 11, 31);
     
-    // Helper to advance date by frequency
     const advanceByFrequency = (date: Date, freq: 'monthly' | 'quarterly' | 'yearly', day: number): Date => {
       switch (freq) {
         case 'monthly':
@@ -2251,8 +2271,6 @@ export class DatabaseStorage implements IStorage {
       }
     };
     
-    // Generator: yields all occurrences in [rangeStart, rangeEnd]
-    // CRITICAL: Always iterate from scheduleStart anchor to preserve frequency alignment
     const generateOccurrences = function*(
       scheduleStart: Date,
       frequency: 'monthly' | 'quarterly' | 'yearly',
@@ -2261,11 +2279,8 @@ export class DatabaseStorage implements IStorage {
       rangeEnd: Date,
       scheduleEnd: Date | null
     ): Generator<Date> {
-      // ALWAYS start from schedule anchor to preserve frequency alignment
-      // e.g., quarterly starting May 10 → May, Aug, Nov, Feb, May...
       let cursor = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth(), dayOfMonth);
       
-      // If cursor is before scheduleStart, set to scheduleStart's month
       if (cursor < scheduleStart) {
         cursor = new Date(scheduleStart.getFullYear(), scheduleStart.getMonth(), dayOfMonth);
       }
@@ -2273,14 +2288,8 @@ export class DatabaseStorage implements IStorage {
       let iterations = 0;
       while (cursor <= rangeEnd && iterations < 500) {
         iterations++;
-        
-        // Stop if past schedule end
         if (scheduleEnd && cursor > scheduleEnd) break;
         
-        // Yield occurrence only if:
-        // 1. cursor >= scheduleStart (schedule has begun)
-        // 2. cursor >= rangeStart (within query range)
-        // 3. cursor <= rangeEnd (within query range)
         if (cursor >= scheduleStart && cursor >= rangeStart && cursor <= rangeEnd) {
           yield cursor;
         }
@@ -2301,8 +2310,6 @@ export class DatabaseStorage implements IStorage {
         ? parseFloat(recurring.defaultExpenses) 
         : 0;
       
-      // For partner schemes, expenses reduce the amount admin receives
-      // plannedExpenses parameter (7th) affects partner debt calculation
       const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
       const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
       
@@ -2313,23 +2320,24 @@ export class DatabaseStorage implements IStorage {
       const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
       const baseStartDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
       
-      // Use nextInvoiceDate if available (respects manual adjustments), otherwise use startDate
       const nextInvoiceDate = recurring.nextInvoiceDate ? new Date(recurring.nextInvoiceDate) : null;
       const effectiveStartDate = nextInvoiceDate && nextInvoiceDate > baseStartDate ? nextInvoiceDate : baseStartDate;
       
-      // Check if schedule is active for this year
       if (effectiveStartDate > yearEnd) continue;
       if (endDateValue && endDateValue < yearStart) continue;
       
-      // 1. Calculate monthlyAmount - all occurrences in selected month
-      // Use effectiveStartDate to respect nextInvoiceDate (manual adjustments)
       for (const occurrence of generateOccurrences(effectiveStartDate, frequency, dayOfMonth, monthStart, monthEnd, endDateValue)) {
-        monthlyAmount += expectedProfit;
+        const key = `${recurring.id}:${occurrence.getFullYear()}-${occurrence.getMonth()}`;
+        if (!createdKeys.has(key)) {
+          monthlyAmount += expectedProfit;
+        }
       }
       
-      // 2. Calculate yearlyTotal - all occurrences from yearStart to yearEnd
       for (const occurrence of generateOccurrences(effectiveStartDate, frequency, dayOfMonth, yearStart, yearEnd, endDateValue)) {
-        yearlyTotal += expectedProfit;
+        const key = `${recurring.id}:${occurrence.getFullYear()}-${occurrence.getMonth()}`;
+        if (!createdKeys.has(key)) {
+          yearlyTotal += expectedProfit;
+        }
       }
     }
     
@@ -2347,6 +2355,27 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
       .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
       .where(eq(recurringInvoices.isActive, true));
+    
+    const existingFromRecurring = await db
+      .select({
+        recurringInvoiceId: invoices.recurringInvoiceId,
+        paymentDate: invoices.paymentDate,
+        createdAt: invoices.createdAt,
+      })
+      .from(invoices)
+      .where(and(
+        isNotNull(invoices.recurringInvoiceId),
+        sql`${invoices.status} != 'cancelled'`
+      ));
+    
+    const createdKeys = new Set<string>();
+    for (const inv of existingFromRecurring) {
+      const dateStr = inv.paymentDate || inv.createdAt;
+      if (!dateStr || !inv.recurringInvoiceId) continue;
+      const d = new Date(dateStr);
+      const key = `${inv.recurringInvoiceId}:${d.getFullYear()}-${d.getMonth()}`;
+      createdKeys.add(key);
+    }
     
     const result: RecurringInvoiceForMonth[] = [];
     const monthStart = new Date(year, month, 1);
@@ -2400,7 +2429,6 @@ export class DatabaseStorage implements IStorage {
         ? parseFloat(recurring.defaultExpenses) 
         : 0;
       
-      // For partner schemes, expenses reduce the amount admin receives
       const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
       const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
       
@@ -2411,12 +2439,14 @@ export class DatabaseStorage implements IStorage {
       const endDateValue = recurring.endDate ? new Date(recurring.endDate) : null;
       const baseStartDate = recurring.startDate ? new Date(recurring.startDate) : new Date();
       
-      // Use nextInvoiceDate if available (respects manual adjustments), otherwise use startDate
       const nextInvoiceDateValue = recurring.nextInvoiceDate ? new Date(recurring.nextInvoiceDate) : null;
       const effectiveStartDate = nextInvoiceDateValue && nextInvoiceDateValue > baseStartDate ? nextInvoiceDateValue : baseStartDate;
       
       if (effectiveStartDate > monthEnd) continue;
       if (endDateValue && endDateValue < monthStart) continue;
+      
+      const key = `${recurring.id}:${year}-${month}`;
+      if (createdKeys.has(key)) continue;
       
       if (hasOccurrenceInMonth(effectiveStartDate, frequency, dayOfMonth, endDateValue)) {
         result.push({

@@ -2160,9 +2160,9 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Drafts (sales pipeline) for selected month
+    // Sales for selected month - all non-cancelled invoices created in this month
     const monthlyDrafts = allInvoices.filter(row => {
-      if (row.invoice.status === 'paid' || row.invoice.status === 'sent' || row.invoice.status === 'cancelled') {
+      if (row.invoice.status === 'cancelled') {
         return false;
       }
       const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
@@ -4701,8 +4701,8 @@ export class DatabaseStorage implements IStorage {
           paymentDate: paymentDateStr?.toString() || null,
         });
       } else if (category === 'drafts') {
-        // Draft invoices created in selected month
-        if (status === 'paid' || status === 'sent' || status === 'cancelled') continue;
+        // All non-cancelled invoices created in selected month (sales)
+        if (status === 'cancelled') continue;
         const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
         if (!createdAt || createdAt < monthStart || createdAt > monthEnd) continue;
         

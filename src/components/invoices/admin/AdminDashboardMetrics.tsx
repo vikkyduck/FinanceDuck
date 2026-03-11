@@ -483,7 +483,7 @@ export const AdminDashboardMetrics = () => {
               </span>
             </div>
             <p className="text-xs text-muted-foreground pt-2 border-t">
-              Счета в работе, ожидающие оплаты
+              Все счета, созданные в этом месяце
             </p>
           </CardContent>
         </Card>

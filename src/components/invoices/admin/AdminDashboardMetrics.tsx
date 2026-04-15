@@ -486,7 +486,7 @@ export const AdminDashboardMetrics = () => {
               </CollapsibleContent>
             </Collapsible>
             <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-muted-foreground">Сумма</span>
+              <span className="text-sm text-muted-foreground">Прибыль (итого)</span>
               <span className="font-semibold text-sm sm:text-base" data-testid="text-drafts-total">
                 {formatCurrency(stats.monthlySales.draftsTotal)}
               </span>

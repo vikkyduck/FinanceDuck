@@ -2173,8 +2173,11 @@ export class DatabaseStorage implements IStorage {
       return createdAt && createdAt >= monthStart && createdAt <= monthEnd;
     });
     const draftsCount = monthlyDrafts.length;
+    // Use netProfitAdmin to match what the per-invoice list rows display —
+    // using clientBill here would show gross client billing (inflated by agency budget split)
+    // while the rows show net profit, causing a confusing mismatch in totals.
     const draftsTotal = monthlyDrafts.reduce((sum, row) => {
-      return sum + parseFloat(row.calculations?.clientBill || "0");
+      return sum + parseFloat(row.calculations?.netProfitAdmin || "0");
     }, 0);
     
     // Net Profit Margin = (Net Profit / Revenue) * 100

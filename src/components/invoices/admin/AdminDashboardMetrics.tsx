@@ -506,7 +506,7 @@ export const AdminDashboardMetrics = () => {
             </CardTitle>
             <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
               <Info className="h-3 w-3 shrink-0 mt-0.5" />
-              Прибыль других партнёров / Вика Уткина за {stats.selectedYear} год
+              Прибыль других партнёров / Вика Уткина за {MONTH_NAMES[selectedMonth]}
             </p>
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
@@ -515,7 +515,7 @@ export const AdminDashboardMetrics = () => {
                 {stats.leverage.ratio.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                За {stats.selectedYear} год · Другие / Вика
+                {MONTH_NAMES[selectedMonth]} · Другие / Вика
               </p>
             </div>
             <div className="pt-2 border-t space-y-1 text-sm">

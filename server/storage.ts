@@ -2090,8 +2090,8 @@ export class DatabaseStorage implements IStorage {
     let yearlyProfit = 0;
     let monthlyReceived = 0;
     let monthlyExpected = 0;
-    let yearlyVikaProfit = 0;
-    let yearlyOthersProfit = 0;
+    let monthlyVikaProfit = 0;
+    let monthlyOthersProfit = 0;
     let monthlyProfit = 0;
     
     // Collect available years from invoices
@@ -2137,13 +2137,6 @@ export class DatabaseStorage implements IStorage {
         if (paymentDate && paymentDate >= yearStart && paymentDate <= yearEnd) {
           yearlyRevenue += clientBill;
           yearlyProfit += netProfit;
-          
-          // Yearly leverage calculation (stable, not volatile like monthly)
-          if (isVika) {
-            yearlyVikaProfit += netProfit;
-          } else {
-            yearlyOthersProfit += netProfit;
-          }
         }
         
         // Monthly net profit - based on payment date within selected month
@@ -2157,6 +2150,17 @@ export class DatabaseStorage implements IStorage {
       // Uses paymentDate (planned payment) to show expected profit for the selected month
       if (status !== 'paid' && status !== 'cancelled' && paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
         monthlyExpected += netProfit;
+      }
+      
+      // Monthly leverage: ALL non-cancelled invoices with paymentDate in selected month.
+      // Counts both paid AND expected (sent/draft) so the coefficient reflects who generated
+      // business this month, not just who already received payment.
+      if (status !== 'cancelled' && paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
+        if (isVika) {
+          monthlyVikaProfit += netProfit;
+        } else {
+          monthlyOthersProfit += netProfit;
+        }
       }
     }
     
@@ -2176,8 +2180,8 @@ export class DatabaseStorage implements IStorage {
     // Net Profit Margin = (Net Profit / Revenue) * 100
     const netProfitMargin = yearlyRevenue > 0 ? (yearlyProfit / yearlyRevenue) * 100 : 0;
     
-    // Leverage ratio for selected year (yearly basis is stable and meaningful)
-    const leverageRatio = yearlyVikaProfit > 0 ? yearlyOthersProfit / yearlyVikaProfit : 0;
+    // Leverage ratio for selected month (all non-cancelled invoices with paymentDate in month)
+    const leverageRatio = monthlyVikaProfit > 0 ? monthlyOthersProfit / monthlyVikaProfit : 0;
     
     // Sort available years descending
     const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
@@ -2215,8 +2219,8 @@ export class DatabaseStorage implements IStorage {
         draftsTotal,
       },
       leverage: {
-        othersProfit: yearlyOthersProfit,
-        vikaProfit: yearlyVikaProfit,
+        othersProfit: monthlyOthersProfit,
+        vikaProfit: monthlyVikaProfit,
         ratio: leverageRatio,
       },
       recurringExpected: recurringStats,

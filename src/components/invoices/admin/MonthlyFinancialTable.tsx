@@ -105,7 +105,6 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
     return {
       monthNumber: row.monthNumber,
       month: monthNames[row.monthNumber - 1],
-      totalSold: row.totalSales,
       totalReceived: row.totalSales,
       expenses: row.expenses,
       netProfit: row.totalProfit,
@@ -148,8 +147,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                       <GrowthIndicator value={row.growthPercent} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-muted-foreground pl-6">
-                    <span>Продано: {formatCurrency(row.totalSold)}</span>
+                  <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground pl-6">
                     <span>Поступило: {formatCurrency(row.totalReceived)}</span>
                     <span>Расходы: {formatCurrency(row.expenses)}</span>
                   </div>
@@ -173,7 +171,6 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
             <TableHeader>
               <TableRow>
                 <TableHead className="text-sm">Месяц</TableHead>
-                <TableHead className="text-sm text-right">Продано</TableHead>
                 <TableHead className="text-sm text-right">Поступило</TableHead>
                 <TableHead className="text-sm text-right">Расходы</TableHead>
                 <TableHead className="text-sm text-right">Чистая прибыль</TableHead>
@@ -202,7 +199,6 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                           <span className="font-medium text-primary">{row.month}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalSold)}</TableCell>
                       <TableCell className="text-sm text-right py-2">{formatCurrency(row.totalReceived)}</TableCell>
                       <TableCell className="text-sm text-right text-muted-foreground py-2">{formatCurrency(row.expenses)}</TableCell>
                       <TableCell className="text-sm text-right font-semibold text-primary py-2">
@@ -214,7 +210,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                     </TableRow>
                     {isExpanded && (
                       <TableRow key={`${row.monthNumber}-details`}>
-                        <TableCell colSpan={6} className="p-0 bg-muted/20">
+                        <TableCell colSpan={5} className="p-0 bg-muted/20">
                           <MonthInvoices 
                             month={row.monthNumber} 
                             year={year}

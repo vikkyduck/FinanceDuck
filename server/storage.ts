@@ -2160,19 +2160,13 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Sales for selected month: invoices created this month whose payment date falls
-    // in a DIFFERENT month (or has no payment date yet).
-    // Invoices with paymentDate in this month are already counted in "Доходы" (received/expected).
+    // Sales for selected month: non-cancelled invoices created this month,
+    // excluding auto-generated recurring invoices (those are ongoing agreements, not new sales).
     const monthlyDrafts = allInvoices.filter(row => {
       if (row.invoice.status === 'cancelled') return false;
+      if (row.invoice.recurringInvoiceId) return false; // auto-generated — not a new sale
       const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
-      if (!createdAt || createdAt < monthStart || createdAt > monthEnd) return false;
-      // Exclude if paymentDate (or createdAt fallback) lands in the same selected month
-      const pd = row.invoice.paymentDate
-        ? new Date(row.invoice.paymentDate)
-        : createdAt;
-      const pdInThisMonth = pd >= monthStart && pd <= monthEnd;
-      return !pdInThisMonth;
+      return createdAt && createdAt >= monthStart && createdAt <= monthEnd;
     });
     const draftsCount = monthlyDrafts.length;
     const draftsTotal = monthlyDrafts.reduce((sum, row) => {
@@ -4737,12 +4731,11 @@ export class DatabaseStorage implements IStorage {
           paymentDate: paymentDateStr?.toString() || null,
         });
       } else if (category === 'drafts') {
-        // Sales: non-cancelled invoices created this month whose paymentDate is NOT in this month
+        // Sales: non-cancelled, non-recurring invoices created in selected month
         if (status === 'cancelled') continue;
+        if (row.invoice.recurringInvoiceId) continue; // auto-generated, not a new sale
         const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
         if (!createdAt || createdAt < monthStart || createdAt > monthEnd) continue;
-        const pd = row.invoice.paymentDate ? new Date(row.invoice.paymentDate) : createdAt;
-        if (pd >= monthStart && pd <= monthEnd) continue;
         
         result.push({
           id: row.invoice.id,

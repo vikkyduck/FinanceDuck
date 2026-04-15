@@ -18,7 +18,8 @@ import {
   Users,
   ChevronDown,
   ChevronUp,
-  ExternalLink
+  ExternalLink,
+  Info
 } from "lucide-react";
 
 interface DashboardStats {
@@ -368,6 +369,10 @@ export const AdminDashboardMetrics = () => {
               <Banknote className="h-4 w-4 text-green-600" />
               Чистая прибыль ({MONTH_NAMES[selectedMonth]})
             </CardTitle>
+            <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
+              <Info className="h-3 w-3 shrink-0 mt-0.5" />
+              Деньги, поступившие или ожидаемые к получению именно в этом месяце
+            </p>
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
             {/* Received - expandable */}
@@ -454,6 +459,10 @@ export const AdminDashboardMetrics = () => {
               <FileText className="h-4 w-4 text-blue-600" />
               Продажи ({MONTH_NAMES[selectedMonth]})
             </CardTitle>
+            <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
+              <Info className="h-3 w-3 shrink-0 mt-0.5" />
+              Новые проекты, заключённые в этом месяце. Регулярные платежи сюда не включаются
+            </p>
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
             <Collapsible open={openDraftsList} onOpenChange={setOpenDraftsList}>
@@ -483,7 +492,7 @@ export const AdminDashboardMetrics = () => {
               </span>
             </div>
             <p className="text-xs text-muted-foreground pt-2 border-t">
-              Сделки месяца с оплатой в будущем периоде
+              Может пересекаться с «Доходами», если проект продан и оплачен в одном месяце
             </p>
           </CardContent>
         </Card>

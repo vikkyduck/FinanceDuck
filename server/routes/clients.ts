@@ -1,0 +1,215 @@
+import { Router, Response } from "express";
+import { storage } from "../storage";
+import { UserRole } from "../../shared/schema";
+import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { stripPartnerInfoFromClient, stripPartnerInfoFromClients } from "../permissions";
+
+export const clientsRouter = Router();
+
+clientsRouter.get("/api/clients", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const role = req.user?.role || "client";
+    const partnerId = role === "partner" ? req.user?.partnerId : undefined;
+    const result = await storage.getClients(partnerId);
+    res.json(stripPartnerInfoFromClients(result, role));
+  } catch (error) {
+    console.error("Get clients error:", error);
+    res.status(500).json({ error: "Failed to get clients" });
+  }
+});
+
+clientsRouter.get("/api/closing-docs-status", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const clients = await storage.getClients();
+    const allInvoices = await storage.getInvoices("admin" as UserRole);
+    const hiddenInvoices = allInvoices.filter(inv => inv.hideFromAssistant);
+
+    const clientDocsMap = new Map<string, any>();
+    for (const client of clients) {
+      clientDocsMap.set(client.id, { clientId: client.id, clientName: client.name, totalInvoices: 0, invoicesWithDoc: 0, invoicesWithoutDoc: 0, invoiceDetails: [] });
+    }
+    for (const invoice of hiddenInvoices) {
+      if (!invoice.clientId) continue;
+      const clientData = clientDocsMap.get(invoice.clientId);
+      if (!clientData) continue;
+      const hasDoc = !!invoice.closingDocumentUrl;
+      clientData.totalInvoices++;
+      if (hasDoc) clientData.invoicesWithDoc++; else clientData.invoicesWithoutDoc++;
+      clientData.invoiceDetails.push({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, status: invoice.status || "draft", hasClosingDoc: hasDoc, closingDocumentUrl: invoice.closingDocumentUrl || null, paymentDate: invoice.paymentDate });
+    }
+    const result = Array.from(clientDocsMap.values())
+      .filter(c => c.totalInvoices > 0)
+      .sort((a, b) => b.invoicesWithoutDoc - a.invoicesWithoutDoc || b.totalInvoices - a.totalInvoices);
+    res.json(result);
+  } catch (error) {
+    console.error("Get closing docs status error:", error);
+    res.status(500).json({ error: "Failed to get closing docs status" });
+  }
+});
+
+clientsRouter.get("/api/clients/acts-status", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const role = (req.user?.role as UserRole) || "client";
+    const clients = await storage.getClients();
+    const allInvoices = await storage.getInvoices(role);
+    const paidInvoices = allInvoices.filter(inv => inv.status === "paid");
+
+    const clientActsMap = new Map<string, any>();
+    for (const client of clients) {
+      clientActsMap.set(client.id, { clientId: client.id, clientName: client.name, totalInvoices: 0, invoicesWithCompanyAct: 0, invoicesWithExecutorAct: 0, invoicesWithBothActs: 0, invoicesWithoutActs: 0, invoiceDetails: [] });
+    }
+    for (const invoice of paidInvoices) {
+      if (!invoice.clientId) continue;
+      const clientData = clientActsMap.get(invoice.clientId);
+      if (!clientData) continue;
+      const acts = await storage.getSignedActsByInvoice(invoice.id);
+      const hasCompanyAct = acts.some(a => a.actType === "company");
+      const hasExecutorAct = acts.some(a => a.actType === "executor");
+      clientData.totalInvoices++;
+      if (hasCompanyAct) clientData.invoicesWithCompanyAct++;
+      if (hasExecutorAct) clientData.invoicesWithExecutorAct++;
+      if (hasCompanyAct && hasExecutorAct) clientData.invoicesWithBothActs++;
+      if (!hasCompanyAct && !hasExecutorAct) clientData.invoicesWithoutActs++;
+      clientData.invoiceDetails.push({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, hasCompanyAct, hasExecutorAct, paymentDate: invoice.paymentDate });
+    }
+    const result = Array.from(clientActsMap.values())
+      .filter(c => c.totalInvoices > 0)
+      .sort((a, b) => b.invoicesWithoutActs - a.invoicesWithoutActs || b.totalInvoices - a.totalInvoices);
+    res.json(result);
+  } catch (error) {
+    console.error("Get clients acts status error:", error);
+    res.status(500).json({ error: "Failed to get clients acts status" });
+  }
+});
+
+clientsRouter.get("/api/clients/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const role = req.user?.role || "client";
+    const client = await storage.getClient(id);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+    if (role === "partner" && client.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
+    res.json(stripPartnerInfoFromClient(client, role));
+  } catch (error) {
+    console.error("Get client error:", error);
+    res.status(500).json({ error: "Failed to get client" });
+  }
+});
+
+clientsRouter.post("/api/clients", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const role = req.user?.role || "client";
+    const client = await storage.createClient(req.body);
+    if (role === "assistant" || role === "admin" || role === "accountant") {
+      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_client", entityType: "client", entityId: client.id, description: `Создан клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+    }
+    res.status(201).json(stripPartnerInfoFromClient(client, role));
+  } catch (error) {
+    console.error("Create client error:", error);
+    res.status(500).json({ error: "Failed to create client" });
+  }
+});
+
+clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const role = req.user?.role || "client";
+    const client = await storage.updateClient(id, req.body);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+    if (role === "assistant" || role === "admin" || role === "accountant") {
+      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_client", entityType: "client", entityId: id, description: `Обновлён клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+    }
+    res.json(stripPartnerInfoFromClient(client, role));
+  } catch (error) {
+    console.error("Update client error:", error);
+    res.status(500).json({ error: "Failed to update client" });
+  }
+});
+
+clientsRouter.delete("/api/clients/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await storage.deleteClient(id);
+    if (!result.success) return res.status(400).json({ error: result.error });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete client error:", error);
+    res.status(500).json({ error: "Failed to delete client" });
+  }
+});
+
+clientsRouter.get("/api/clients/:id/with-partner", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const role = req.user?.role || "client";
+    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    const client = await storage.getClientWithPartner(id);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+    if (role === "partner" && client.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
+    res.json(client);
+  } catch (error) {
+    console.error("Get client with partner error:", error);
+    res.status(500).json({ error: "Failed to get client" });
+  }
+});
+
+clientsRouter.get("/api/clients/:id/partners", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const role = req.user?.role || "client";
+    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    const partners = await storage.getClientPartners(id);
+    res.json(partners);
+  } catch (error) {
+    console.error("Get client partners error:", error);
+    res.status(500).json({ error: "Failed to get client partners" });
+  }
+});
+
+clientsRouter.put("/api/clients/:id/partners", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { partnerIds } = req.body;
+    if (!Array.isArray(partnerIds)) return res.status(400).json({ error: "partnerIds must be an array" });
+    await storage.setClientPartners(id, partnerIds);
+    const updatedPartners = await storage.getClientPartners(id);
+    res.json(updatedPartners);
+  } catch (error) {
+    console.error("Set client partners error:", error);
+    res.status(500).json({ error: "Failed to set client partners" });
+  }
+});
+
+clientsRouter.get("/api/clients-with-partners", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const role = req.user?.role || "client";
+    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    const clients = await storage.getClientsWithPartners();
+    res.json(clients);
+  } catch (error) {
+    console.error("Get clients with partners error:", error);
+    res.status(500).json({ error: "Failed to get clients" });
+  }
+});
+
+clientsRouter.get("/api/client/budget", authMiddleware, requireRole("client"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const clientId = req.user?.clientId;
+    if (!clientId) return res.status(403).json({ error: "No client ID found" });
+    res.json(await storage.getClientBudget(clientId));
+  } catch (error) {
+    console.error("Get client budget error:", error);
+    res.status(500).json({ error: "Failed to get client budget" });
+  }
+});
+
+clientsRouter.get("/api/client/agency30", authMiddleware, requireRole("client"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const clientId = req.user?.clientId;
+    if (!clientId) return res.status(403).json({ error: "No client ID found" });
+    res.json(await storage.getClientAgency30Report(clientId));
+  } catch (error) {
+    console.error("Get client agency30 report error:", error);
+    res.status(500).json({ error: "Failed to get agency30 report" });
+  }
+});

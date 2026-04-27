@@ -62,7 +62,19 @@ Security is implemented through XSS protection via input sanitization and React'
 
 **IDOR Protection**: `getInvoice(db, id, role, partnerId, clientId)` adds ownership WHERE clauses for partner/client roles so no cross-tenant data leaks via direct ID lookup. `IStorage.getInvoiceForRole()` is the typed interface used by routes.
 
-**Type Safety**: All numeric conversions use `parseNum()` from `shared/financialEngine.ts` — no raw `parseFloat` calls anywhere in the server.
+**Type Safety**: All numeric conversions use `parseNum()` from `shared/financialEngine.ts` — no raw `parseFloat` calls anywhere in the server (confirmed across all repos and route files).
+
+**Route Architecture**: `server/routes.ts` is a thin 43-line orchestrator that mounts 10 domain routers from `server/routes/`:
+- `auth.ts` — login/logout/validate/refresh + admin lockout management
+- `clients.ts` — clients CRUD + acts-status + closing-docs-status + client budget/agency30
+- `partners.ts` — partners CRUD + payments + debt + history + partner dashboard endpoints
+- `dashboard.ts` — admin analytics, financial plans, dashboard stats, financial summary
+- `invoices.ts` — invoices/expenses/documents CRUD + closing-document
+- `acts.ts` — signed acts + bonus payments + access-tokens + assistant stats
+- `recurring.ts` — recurring invoice templates + my-invoices/export
+- `export.ts` — admin Excel export
+- `backup.ts` — database backup management
+- `actionLog.ts` — assistant/accountant action logs
 
 **DB Indexes** (applied to production DB): `idx_invoices_status`, `idx_invoices_payment_date`, `idx_invoices_created_at`, `idx_invoices_partner_id`, `idx_invoices_client_id`, `idx_invoices_recurring_id`, `idx_invoices_status_payment` (composite), `idx_invoice_calc_invoice_id`.
 

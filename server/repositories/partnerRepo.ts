@@ -140,7 +140,7 @@ export async function getPartnerPaymentHistory(
   let runningBalance = totalDebt;
   const history: PaymentHistoryEntry[] = [];
   for (const payment of payments) {
-    const amount = parseFloat(payment.amount);
+    const amount = parseNum(payment.amount);
     runningBalance -= amount;
     history.push({
       id: payment.id,

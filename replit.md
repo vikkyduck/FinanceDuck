@@ -18,7 +18,7 @@ The backend utilizes an Express.js server with a Neon PostgreSQL database access
 
 ## Financial Calculation Engine
 
-The system supports five primary commission schemes: `partner_10`, `partner_15`, `agency_30`, `agency_40`, and `commission_based`. A core `calculateInvoice()` function computes all financial metrics, accurately distinguishing between expenses paid by partners and those paid by admins for net profit calculations. The `agency_30` scheme features a fixed admin share (15% admin + 15% partner, 70% client budget), and `agency_40` scheme (24% admin + 16% partner, 60% client budget). Assistant bonus payouts are based on signed acts. Net profit calculation formulas are specifically defined for partner and agency schemes. Unified partner debt tracking is managed via `partnerTransferDue` stored in `invoice_calculations` table. All roles receive data from the same stored values, filtered by centralized permission constants.
+The system supports five primary commission schemes: `partner_10`, `partner_15`, `agency_30`, `agency_40`, and `commission_based`. All financial formula logic is centralized in **`shared/financialEngine.ts`** — a pure, side-effect-free module used by both the backend and the frontend. `calculateFinancials()` returns numbers; each consumer converts to its own format (strings for Drizzle DB, numbers for React UI). The frontend adapter is `src/lib/invoiceCalculations.ts` which maps camelCase → snake_case. The backend adapter is the thin `calculateInvoiceServer()` wrapper in `server/storage.ts`. The `agency_30` scheme features a fixed admin share (15% admin + 15% partner, 70% client budget), and `agency_40` scheme (24% admin + 16% partner, 60% client budget). Assistant bonus payouts are based on signed acts. Net profit calculation formulas are specifically defined for partner and agency schemes. Unified partner debt tracking is managed via `partnerTransferDue` stored in `invoice_calculations` table. All roles receive data from the same stored values, filtered by centralized permission constants.
 
 ## Dashboard Data Rules
 
@@ -41,7 +41,20 @@ The system supports five primary commission schemes: `partner_10`, `partner_15`,
 
 ## Security Architecture
 
-Security is implemented through XSS protection via input sanitization and React's auto-escaping, coupled with file upload validation. Rate limiting employs a token bucket algorithm. Input validation is handled by Zod schemas on both frontend and backend. Centralized error handling provides user feedback and logs critical errors. Authentication uses secure cookie-based sessions with CSRF protection and role-based access control.
+Security is implemented through XSS protection via input sanitization and React's auto-escaping, coupled with file upload validation. **Rate limiting** is backed by the PostgreSQL `login_rate_limits` table (5 attempts → 15-min lockout, 1-hr reset window) via `server/rateLimiter.ts` — survives server restarts. Input validation is handled by Zod schemas on both frontend and backend. Centralized error handling provides user feedback and logs critical errors. Authentication uses secure cookie-based sessions with CSRF protection and role-based access control.
+
+## Backend Repository Architecture
+
+`server/storage.ts` is gradually being split into domain repositories under `server/repositories/`:
+- **`userRepo.ts`**: auth/session/access-token methods
+- **`partnerRepo.ts`**: partners, partner-payments
+- **`clientRepo.ts`**: clients, client-partner relations
+
+`DatabaseStorage` in `server/storage.ts` delegates all moved methods to these repos (thin one-liner delegates). Cross-repo calls use structural duck typing — all repos accept the same `db` instance.
+
+**DB Indexes** (applied to production DB): `idx_invoices_status`, `idx_invoices_payment_date`, `idx_invoices_created_at`, `idx_invoices_partner_id`, `idx_invoices_client_id`, `idx_invoices_recurring_id`, `idx_invoices_status_payment` (composite), `idx_invoice_calc_invoice_id`.
+
+**SQL Aggregation**: `getAdminDashboardStats()` uses 6 parallel SQL aggregate queries (no JS loop over all invoices), with `effectiveDate = COALESCE(payment_date, DATE(created_at))`.
 
 ## Performance Optimizations
 

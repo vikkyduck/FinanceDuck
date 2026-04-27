@@ -87,7 +87,15 @@ export const invoices = pgTable("invoices", {
   recurringInvoiceId: uuid("recurring_invoice_id"),
   plannedExpenses: numeric("planned_expenses", { precision: 15, scale: 2 }),
   closingDocumentUrl: text("closing_document_url"),
-});
+}, (table) => [
+  index("idx_invoices_status").on(table.status),
+  index("idx_invoices_payment_date").on(table.paymentDate),
+  index("idx_invoices_created_at").on(table.createdAt),
+  index("idx_invoices_partner_id").on(table.partnerId),
+  index("idx_invoices_client_id").on(table.clientId),
+  index("idx_invoices_recurring_id").on(table.recurringInvoiceId),
+  index("idx_invoices_status_payment_date").on(table.status, table.paymentDate),
+]);
 
 export const assistantBonusPayments = pgTable("assistant_bonus_payments", {
   id: uuid("id").defaultRandom().primaryKey(),

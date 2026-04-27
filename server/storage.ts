@@ -6,28 +6,17 @@ import {
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment, InsertAssistantActionLog,
   AccessToken, UserSession, UserRole, InvoiceScheme, ActType, AssistantActionType
 } from "../shared/schema";
-import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or, type SQL } from "drizzle-orm";
+import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or, sum, count, type SQL } from "drizzle-orm";
+import { calculateFinancials, parseNum, type FinancialResult } from "../shared/financialEngine";
 import { randomBytes } from "crypto";
+import * as userRepo   from "./repositories/userRepo";
+import * as partnerRepo from "./repositories/partnerRepo";
+import * as clientRepo  from "./repositories/clientRepo";
 
 /**
- * Server-side invoice calculations
- * 
- * CRITICAL BUSINESS RULE:
- * For partner schemes (partner_10, partner_15, commission_based):
- *   - Partner receives client payment
- *   - Partner pays expenses from client money (expensesPaidByPartner)
- *   - Partner transfers remainder to admin: amountToAdmin - expensesPaidByPartner
- *   - Admin may also pay expenses from own pocket (expensesPaidByAdmin)
- *   - Admin net profit = (amountToAdmin - expensesPaidByPartner) - expensesPaidByAdmin - plannedExpenses
- * 
- * For agency_30:
- *   - 70% stays with partner for project expenses
- *   - 30% is agency margin (15% partner + 15% admin)
- *   - Admin's 15% is FIXED, not affected by expenses (they come from 70%)
- * 
- * @param expensesPaidByPartner - Expenses paid by partner from client money (paidByAdmin=false)
- * @param expensesPaidByAdmin - Expenses paid by admin from own funds (paidByAdmin=true)
- * @param plannedExpenses - Planned project expenses (reserved, not yet spent) - affects net profit for partner schemes
+ * DB adapter: delegates to the shared financial engine and converts
+ * the number result into Drizzle-compatible string fields for invoice_calculations.
+ * All financial formula logic lives in shared/financialEngine.ts.
  */
 function calculateInvoiceServer(
   scheme: InvoiceScheme,
@@ -38,132 +27,35 @@ function calculateInvoiceServer(
   expensesPaidByAdmin: number = 0,
   plannedExpenses: number = 0
 ): Partial<InvoiceCalculation> {
-  const result: Partial<InvoiceCalculation> = {
-    clientBill: clientBill.toString(),
-    executorExpensesTotal: executorExpenses.toString(),
+  const f = calculateFinancials(
+    scheme,
+    clientBill,
+    partnerCommissionRate ?? 0,
+    executorExpenses,
+    expensesPaidByPartner,
+    expensesPaidByAdmin,
+    plannedExpenses,
+  );
+
+  const r: Partial<InvoiceCalculation> = {
+    clientBill:            f.clientBill.toString(),
+    executorExpensesTotal: f.executorExpensesTotal.toString(),
+    partnerTransferDue:    f.partnerTransferDue.toString(),
+    netProfitAdmin:        f.netProfitAdmin.toString(),
+    adminShare50:          f.adminShare50.toString(),
+    catShare50:            f.catShare50.toString(),
   };
 
-  switch (scheme) {
-    case 'agency_30': {
-      // Agency 30%: расходы идут из клиентского бюджета (70%), не из доли админа
-      const agencyMargin = clientBill * 0.30;
-      const partnerShare = clientBill * 0.15;
-      const adminShare = clientBill * 0.15;
-      const clientBase = clientBill * 0.70;
-      const clientRemaining = clientBase - executorExpenses;
-      // Для agency_30: партнёр должен перевести 15% (фиксировано)
-      const partnerTransferDue = adminShare;
-      // Чистая прибыль админа = то же самое (расходы из 70% клиента)
-      const netProfitAdmin = adminShare;
-      
-      result.agencyMargin = agencyMargin.toString();
-      result.partnerShareFromMargin = partnerShare.toString();
-      result.adminShareFromMargin = adminShare.toString();
-      result.clientBaseAfterMargin = clientBase.toString();
-      result.clientRemaining = clientRemaining.toString();
-      result.partnerTransferDue = partnerTransferDue.toString();
-      result.netProfitAdmin = netProfitAdmin.toString();
-      result.adminShare50 = (netProfitAdmin / 2).toString();
-      result.catShare50 = (netProfitAdmin / 2).toString();
-      break;
-    }
-    case 'agency_40': {
-      // Agency 40%: расходы идут из клиентского бюджета (60%), не из доли админа
-      const agencyMargin40 = clientBill * 0.40;
-      const partnerShare40 = clientBill * 0.16;
-      const adminShare40 = clientBill * 0.24;
-      const clientBase40 = clientBill * 0.60;
-      const clientRemaining40 = clientBase40 - executorExpenses;
-      // Для agency_40: партнёр должен перевести 24% (фиксировано)
-      const partnerTransferDue40 = adminShare40;
-      // Чистая прибыль админа = 24% (расходы из 60% клиента)
-      const netProfitAdmin40 = adminShare40;
-      
-      result.agencyMargin = agencyMargin40.toString();
-      result.partnerShareFromMargin = partnerShare40.toString();
-      result.adminShareFromMargin = adminShare40.toString();
-      result.clientBaseAfterMargin = clientBase40.toString();
-      result.clientRemaining = clientRemaining40.toString();
-      result.partnerTransferDue = partnerTransferDue40.toString();
-      result.netProfitAdmin = netProfitAdmin40.toString();
-      result.adminShare50 = (netProfitAdmin40 / 2).toString();
-      result.catShare50 = (netProfitAdmin40 / 2).toString();
-      break;
-    }
-    case 'partner_10': {
-      // Partner 10%: партнёр платит расходы из денег клиента, потом переводит остаток админу
-      const commissionRate = 10;
-      const commissionAmount = clientBill * 0.10;
-      const amountToAdmin = clientBill * 0.90;
-      // Долг партнёра зависит от наличия резерва:
-      // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
-      // - Без резерва: уменьшается с расходами = amountToAdmin - expensesPaidByPartner
-      const partnerTransferDue = plannedExpenses > 0
-        ? Math.max(0, amountToAdmin - plannedExpenses)
-        : Math.max(0, amountToAdmin - expensesPaidByPartner);
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
-      
-      result.commissionRate = commissionRate.toString();
-      result.commissionAmount = commissionAmount.toString();
-      result.amountToAdmin = amountToAdmin.toString();
-      result.partnerTransferDue = partnerTransferDue.toString();
-      result.netProfitAdmin = netProfitAdmin.toString();
-      result.adminShare50 = (netProfitAdmin / 2).toString();
-      result.catShare50 = (netProfitAdmin / 2).toString();
-      break;
-    }
-    case 'partner_15': {
-      // Partner 15%: партнёр платит расходы из денег клиента, потом переводит остаток админу
-      const commissionRate = 15;
-      const commissionAmount = clientBill * 0.15;
-      const amountToAdmin = clientBill * 0.85;
-      // Долг партнёра зависит от наличия резерва:
-      // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
-      // - Без резерва: уменьшается с расходами = amountToAdmin - expensesPaidByPartner
-      const partnerTransferDue = plannedExpenses > 0
-        ? Math.max(0, amountToAdmin - plannedExpenses)
-        : Math.max(0, amountToAdmin - expensesPaidByPartner);
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
-      
-      result.commissionRate = commissionRate.toString();
-      result.commissionAmount = commissionAmount.toString();
-      result.amountToAdmin = amountToAdmin.toString();
-      result.partnerTransferDue = partnerTransferDue.toString();
-      result.netProfitAdmin = netProfitAdmin.toString();
-      result.adminShare50 = (netProfitAdmin / 2).toString();
-      result.catShare50 = (netProfitAdmin / 2).toString();
-      break;
-    }
-    case 'commission_based':
-    default: {
-      // Commission-based: партнёр платит расходы из денег клиента, потом переводит остаток админу
-      // Если комиссия не указана (null/undefined), используем 0% (вся сумма идёт админу)
-      const commissionRate = partnerCommissionRate ?? 0;
-      const commissionAmount = clientBill * (commissionRate / 100);
-      const amountToAdmin = clientBill - commissionAmount;
-      // Долг партнёра зависит от наличия резерва:
-      // - С резервом: ФИКСИРОВАННЫЙ = amountToAdmin - plannedExpenses
-      // - Без резерва: уменьшается с расходами = amountToAdmin - expensesPaidByPartner
-      const partnerTransferDue = plannedExpenses > 0
-        ? Math.max(0, amountToAdmin - plannedExpenses)
-        : Math.max(0, amountToAdmin - expensesPaidByPartner);
-      // Чистая прибыль админа = долг партнёра - расходы оплаченные админом
-      const netProfitAdmin = partnerTransferDue - expensesPaidByAdmin;
-      
-      result.commissionRate = commissionRate.toString();
-      result.commissionAmount = commissionAmount.toString();
-      result.amountToAdmin = amountToAdmin.toString();
-      result.partnerTransferDue = partnerTransferDue.toString();
-      result.netProfitAdmin = netProfitAdmin.toString();
-      result.adminShare50 = (netProfitAdmin / 2).toString();
-      result.catShare50 = (netProfitAdmin / 2).toString();
-      break;
-    }
-  }
+  if (f.commissionRate   !== undefined) r.commissionRate   = f.commissionRate.toString();
+  if (f.commissionAmount !== undefined) r.commissionAmount = f.commissionAmount.toString();
+  if (f.amountToAdmin    !== undefined) r.amountToAdmin    = f.amountToAdmin.toString();
+  if (f.agencyMargin           !== undefined) r.agencyMargin           = f.agencyMargin.toString();
+  if (f.partnerShareFromMargin !== undefined) r.partnerShareFromMargin = f.partnerShareFromMargin.toString();
+  if (f.adminShareFromMargin   !== undefined) r.adminShareFromMargin   = f.adminShareFromMargin.toString();
+  if (f.clientBaseAfterMargin  !== undefined) r.clientBaseAfterMargin  = f.clientBaseAfterMargin.toString();
+  if (f.clientRemaining        !== undefined) r.clientRemaining        = f.clientRemaining.toString();
 
-  return result;
+  return r;
 }
 
 export interface IStorage {
@@ -458,272 +350,41 @@ export interface DashboardStats {
 
 export class DatabaseStorage implements IStorage {
   async verifyAccessCode(code: string): Promise<AccessToken | null> {
-    const [token] = await db
-      .select()
-      .from(accessTokens)
-      .where(and(
-        eq(accessTokens.code, code),
-        eq(accessTokens.isActive, true)
-      ))
-      .limit(1);
-    
-    if (token) {
-      await db.update(accessTokens)
-        .set({ lastUsedAt: new Date() })
-        .where(eq(accessTokens.id, token.id));
-    }
-    
-    return token || null;
+    return userRepo.verifyAccessCode(db, code);
   }
 
-  async createSession(tokenId: string, ipAddress?: string, userAgent?: string): Promise<{ sessionId: string; csrfToken: string; expiresAt: Date }> {
-    const sessionId = randomBytes(32).toString('base64');
-    const csrfToken = randomBytes(32).toString('base64');
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    
-    await db.insert(userSessions).values({
-      sessionId,
-      accessTokenId: tokenId,
-      csrfToken,
-      ipAddress,
-      userAgent,
-      expiresAt,
-    });
-    
-    return { sessionId, csrfToken, expiresAt };
+  async createSession(tokenId: string, ipAddress?: string, userAgent?: string) {
+    return userRepo.createSession(db, tokenId, ipAddress, userAgent);
   }
 
-  async validateSession(sessionId: string, csrfToken?: string): Promise<{ isValid: boolean; token?: AccessToken } | null> {
-    const [session] = await db
-      .select()
-      .from(userSessions)
-      .where(and(
-        eq(userSessions.sessionId, sessionId),
-        eq(userSessions.revoked, false),
-        gte(userSessions.expiresAt, new Date())
-      ))
-      .limit(1);
-    
-    if (!session) {
-      return { isValid: false };
-    }
-    
-    if (csrfToken && session.csrfToken !== csrfToken) {
-      return { isValid: false };
-    }
-    
-    await db.update(userSessions)
-      .set({ lastActivity: new Date() })
-      .where(eq(userSessions.id, session.id));
-    
-    const [token] = await db
-      .select()
-      .from(accessTokens)
-      .where(and(
-        eq(accessTokens.id, session.accessTokenId),
-        eq(accessTokens.isActive, true)
-      ))
-      .limit(1);
-    
-    if (!token) {
-      return { isValid: false };
-    }
-    
-    return { isValid: true, token };
+  async validateSession(sessionId: string, csrfToken?: string) {
+    return userRepo.validateSession(db, sessionId, csrfToken);
   }
 
   async refreshSession(sessionId: string): Promise<Date | null> {
-    const newExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
-    
-    const result = await db.update(userSessions)
-      .set({ 
-        expiresAt: newExpiresAt,
-        lastActivity: new Date()
-      })
-      .where(and(
-        eq(userSessions.sessionId, sessionId),
-        eq(userSessions.revoked, false),
-        gte(userSessions.expiresAt, new Date())
-      ))
-      .returning();
-    
-    return result.length > 0 ? newExpiresAt : null;
+    return userRepo.refreshSession(db, sessionId);
   }
 
   async revokeSession(sessionId: string): Promise<void> {
-    await db.update(userSessions)
-      .set({ revoked: true })
-      .where(eq(userSessions.sessionId, sessionId));
+    return userRepo.revokeSession(db, sessionId);
   }
 
-  async getPartners(): Promise<Partner[]> {
-    return db.select().from(partners).orderBy(partners.name);
-  }
+  async getPartners() { return partnerRepo.getPartners(db); }
+  async getPartner(id: string) { return partnerRepo.getPartner(db, id); }
+  async createPartner(partner: InsertPartner) { return partnerRepo.createPartner(db, partner); }
+  async updatePartner(id: string, partner: Partial<InsertPartner>) { return partnerRepo.updatePartner(db, id, partner); }
+  async deletePartner(id: string) { return partnerRepo.deletePartner(db, id); }
+  async getPartnerClients(partnerId: string) { return partnerRepo.getPartnerClients(db, partnerId); }
 
-  async getPartner(id: string): Promise<Partner | null> {
-    const [partner] = await db.select().from(partners).where(eq(partners.id, id)).limit(1);
-    return partner || null;
-  }
-
-  async createPartner(partner: InsertPartner): Promise<Partner> {
-    const [created] = await db.insert(partners).values(partner).returning();
-    return created;
-  }
-
-  async updatePartner(id: string, partner: Partial<InsertPartner>): Promise<Partner | null> {
-    const [updated] = await db.update(partners)
-      .set({ ...partner, updatedAt: new Date() })
-      .where(eq(partners.id, id))
-      .returning();
-    return updated || null;
-  }
-
-  async deletePartner(id: string): Promise<{ success: boolean; error?: string }> {
-    const linkedInvoices = await db.select({ id: invoices.id })
-      .from(invoices)
-      .where(eq(invoices.partnerId, id))
-      .limit(1);
-    
-    if (linkedInvoices.length > 0) {
-      return { success: false, error: "Нельзя удалить партнёра: есть связанные счета" };
-    }
-    
-    const linkedClients = await db.select({ id: clientPartners.clientId })
-      .from(clientPartners)
-      .where(eq(clientPartners.partnerId, id))
-      .limit(1);
-    
-    if (linkedClients.length > 0) {
-      return { success: false, error: "Нельзя удалить партнёра: есть связанные клиенты" };
-    }
-    
-    await db.delete(accessTokens).where(eq(accessTokens.partnerId, id));
-    await db.delete(partners).where(eq(partners.id, id));
-    
-    return { success: true };
-  }
-
-  async getPartnerClients(partnerId: string): Promise<Client[]> {
-    const results = await db
-      .select({ client: clients })
-      .from(clientPartners)
-      .innerJoin(clients, eq(clientPartners.clientId, clients.id))
-      .where(eq(clientPartners.partnerId, partnerId))
-      .orderBy(clients.name);
-    
-    return results.map(r => r.client);
-  }
-
-  async getClients(partnerId?: string): Promise<Client[]> {
-    if (partnerId) {
-      return db.select().from(clients).where(eq(clients.partnerId, partnerId)).orderBy(clients.name);
-    }
-    return db.select().from(clients).orderBy(clients.name);
-  }
-
-  async getClient(id: string): Promise<Client | null> {
-    const [client] = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
-    return client || null;
-  }
-
-  async createClient(client: InsertClient): Promise<Client> {
-    const [created] = await db.insert(clients).values(client).returning();
-    return created;
-  }
-
-  async updateClient(id: string, client: Partial<InsertClient>): Promise<Client | null> {
-    const [updated] = await db.update(clients)
-      .set({ ...client, updatedAt: new Date() })
-      .where(eq(clients.id, id))
-      .returning();
-    return updated || null;
-  }
-
-  async getClientWithPartner(id: string): Promise<(Client & { partner?: Partner }) | null> {
-    const [result] = await db
-      .select({
-        client: clients,
-        partner: partners,
-      })
-      .from(clients)
-      .leftJoin(partners, eq(clients.partnerId, partners.id))
-      .where(eq(clients.id, id))
-      .limit(1);
-    
-    if (!result) return null;
-    
-    return {
-      ...result.client,
-      partner: result.partner || undefined,
-    };
-  }
-
-  async getClientPartners(clientId: string): Promise<Partner[]> {
-    const results = await db
-      .select({ partner: partners })
-      .from(clientPartners)
-      .innerJoin(partners, eq(clientPartners.partnerId, partners.id))
-      .where(eq(clientPartners.clientId, clientId))
-      .orderBy(partners.name);
-    
-    return results.map(r => r.partner);
-  }
-
-  async getClientsWithPartners(): Promise<(Client & { partners: Partner[] })[]> {
-    const allClients = await db.select().from(clients).orderBy(clients.name);
-    
-    const clientsWithPartners = await Promise.all(
-      allClients.map(async (client) => {
-        const clientPartnerList = await this.getClientPartners(client.id);
-        return {
-          ...client,
-          partners: clientPartnerList,
-        };
-      })
-    );
-    
-    return clientsWithPartners;
-  }
-
-  async setClientPartners(clientId: string, partnerIds: string[]): Promise<void> {
-    await db.delete(clientPartners).where(eq(clientPartners.clientId, clientId));
-    
-    if (partnerIds.length > 0) {
-      await db.insert(clientPartners).values(
-        partnerIds.map(partnerId => ({
-          clientId,
-          partnerId,
-        }))
-      );
-    }
-    
-    if (partnerIds.length === 1) {
-      await db.update(clients)
-        .set({ partnerId: partnerIds[0], updatedAt: new Date() })
-        .where(eq(clients.id, clientId));
-    } else if (partnerIds.length === 0) {
-      await db.update(clients)
-        .set({ partnerId: null, updatedAt: new Date() })
-        .where(eq(clients.id, clientId));
-    }
-  }
-
-  async deleteClient(id: string): Promise<{ success: boolean; error?: string }> {
-    const linkedInvoices = await db.select({ id: invoices.id })
-      .from(invoices)
-      .where(eq(invoices.clientId, id))
-      .limit(1);
-    
-    if (linkedInvoices.length > 0) {
-      return { success: false, error: "Нельзя удалить клиента: есть связанные счета" };
-    }
-    
-    await db.delete(clientPartners).where(eq(clientPartners.clientId, id));
-    await db.delete(accessTokens).where(eq(accessTokens.clientId, id));
-    await db.delete(clients).where(eq(clients.id, id));
-    
-    return { success: true };
-  }
+  async getClients(partnerId?: string) { return clientRepo.getClients(db, partnerId); }
+  async getClient(id: string) { return clientRepo.getClient(db, id); }
+  async createClient(client: InsertClient) { return clientRepo.createClient(db, client); }
+  async updateClient(id: string, client: Partial<InsertClient>) { return clientRepo.updateClient(db, id, client); }
+  async getClientWithPartner(id: string) { return clientRepo.getClientWithPartner(db, id); }
+  async getClientPartners(clientId: string) { return clientRepo.getClientPartners(db, clientId); }
+  async getClientsWithPartners() { return clientRepo.getClientsWithPartners(db); }
+  async setClientPartners(clientId: string, partnerIds: string[]) { return clientRepo.setClientPartners(db, clientId, partnerIds); }
+  async deleteClient(id: string) { return clientRepo.deleteClient(db, id); }
 
   async getInvoices(role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client })[]> {
     const baseQuery = db
@@ -1040,119 +701,16 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`DELETE FROM invoice_documents WHERE id = ${id}`);
   }
 
-  async getPartnerPayments(partnerId?: string): Promise<PartnerPayment[]> {
-    if (partnerId) {
-      return db.select().from(partnerPayments)
-        .where(eq(partnerPayments.partnerId, partnerId))
-        .orderBy(desc(partnerPayments.paymentDate));
-    }
-    return db.select().from(partnerPayments).orderBy(desc(partnerPayments.paymentDate));
-  }
+  async getPartnerPayments(partnerId?: string) { return partnerRepo.getPartnerPayments(db, partnerId); }
+  async getPartnerPayment(id: string) { return partnerRepo.getPartnerPayment(db, id); }
+  async createPartnerPayment(payment: InsertPartnerPayment) { return partnerRepo.createPartnerPayment(db, payment); }
+  async updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>) { return partnerRepo.updatePartnerPayment(db, id, updates); }
+  async deletePartnerPayment(id: string) { return partnerRepo.deletePartnerPayment(db, id); }
+  async getPartnerPaymentHistory(partnerId: string) { return partnerRepo.getPartnerPaymentHistory(db, partnerId); }
 
-  async createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment> {
-    const [created] = await db.insert(partnerPayments).values(payment).returning();
-    return created;
-  }
-
-  async getPartnerPayment(id: string): Promise<PartnerPayment | null> {
-    const [payment] = await db.select().from(partnerPayments).where(eq(partnerPayments.id, id)).limit(1);
-    return payment || null;
-  }
-
-  async updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>): Promise<PartnerPayment | null> {
-    const [updated] = await db
-      .update(partnerPayments)
-      .set(updates)
-      .where(eq(partnerPayments.id, id))
-      .returning();
-    return updated || null;
-  }
-
-  async deletePartnerPayment(id: string): Promise<void> {
-    await db.delete(partnerPayments).where(eq(partnerPayments.id, id));
-  }
-
-  async getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]> {
-    // Get all partner's paid invoices with stored partnerTransferDue (single source of truth)
-    const paidInvoices = await db
-      .select({
-        invoice: invoices,
-        calculations: invoiceCalculations,
-      })
-      .from(invoices)
-      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-      .where(and(
-        eq(invoices.partnerId, partnerId),
-        eq(invoices.status, 'paid')
-      ));
-
-    // Calculate total debt using stored partnerTransferDue values
-    let totalDebt = 0;
-    for (const r of paidInvoices) {
-      if (r.calculations) {
-        // Use stored value as single source of truth
-        const storedDebt = parseFloat(r.calculations.partnerTransferDue || "0");
-        totalDebt += Math.max(0, storedDebt);
-      }
-    }
-
-    // Get all payments sorted by date ascending
-    const payments = await db.select().from(partnerPayments)
-      .where(eq(partnerPayments.partnerId, partnerId))
-      .orderBy(partnerPayments.paymentDate);
-
-    // Calculate running balance (allow negative for overpayments)
-    let runningBalance = totalDebt;
-    const history: PaymentHistoryEntry[] = [];
-    
-    for (const payment of payments) {
-      const amount = parseFloat(payment.amount);
-      runningBalance -= amount;
-      history.push({
-        id: payment.id,
-        paymentDate: payment.paymentDate,
-        amount,
-        notes: payment.notes,
-        runningBalance, // Allow negative to show overpayments
-      });
-    }
-
-    // Return in reverse chronological order (newest first)
-    return history.reverse();
-  }
-
-  async getAccessTokens(): Promise<(AccessToken & { partnerName?: string; clientName?: string })[]> {
-    const results = await db
-      .select({
-        token: accessTokens,
-        partnerName: partners.name,
-        clientName: clients.name,
-      })
-      .from(accessTokens)
-      .leftJoin(partners, eq(accessTokens.partnerId, partners.id))
-      .leftJoin(clients, eq(accessTokens.clientId, clients.id))
-      .orderBy(desc(accessTokens.createdAt));
-    
-    return results.map(r => ({
-      ...r.token,
-      partnerName: r.partnerName ?? undefined,
-      clientName: r.clientName ?? undefined,
-    }));
-  }
-
-  async createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string): Promise<AccessToken> {
-    const [created] = await db.insert(accessTokens).values({
-      code,
-      role,
-      partnerId,
-      clientId,
-    }).returning();
-    return created;
-  }
-
-  async deleteAccessToken(id: string): Promise<void> {
-    await db.delete(accessTokens).where(eq(accessTokens.id, id));
-  }
+  async getAccessTokens() { return userRepo.getAccessTokens(db); }
+  async createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string) { return userRepo.createAccessToken(db, code, role, partnerId, clientId); }
+  async deleteAccessToken(id: string) { return userRepo.deleteAccessToken(db, id); }
 
   async getDashboardStats(role: UserRole, partnerId?: string, clientId?: string): Promise<DashboardStats> {
     let query = db
@@ -2069,133 +1627,131 @@ export class DatabaseStorage implements IStorage {
     const now = new Date();
     const selectedYear = year ?? now.getFullYear();
     const selectedMonth = month ?? now.getMonth();
-    const monthStart = new Date(selectedYear, selectedMonth, 1);
-    const monthEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
-    const yearStart = new Date(selectedYear, 0, 1);
-    const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59);
-    
-    // Get all invoices with calculations
-    const allInvoices = await db
-      .select({
-        invoice: invoices,
-        calculations: invoiceCalculations,
-        partnerName: partners.name,
+
+    // Build ISO date-string bounds for SQL date comparisons
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+    const monthStartStr = `${selectedYear}-${pad(selectedMonth + 1)}-01`;
+    const monthEndStr   = `${selectedYear}-${pad(selectedMonth + 1)}-${pad(lastDayOfMonth)}`;
+    const yearStartStr  = `${selectedYear}-01-01`;
+    const yearEndStr    = `${selectedYear}-12-31`;
+
+    // Effective date expression: paymentDate when set, otherwise DATE(createdAt)
+    const effectiveDate = sql`COALESCE(${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
+
+    // Run all aggregation queries in parallel for performance
+    const [
+      yearlyRows,
+      monthlyPaidRows,
+      monthlyExpectedRows,
+      leverageRows,
+      salesRows,
+      availableYearsRows,
+    ] = await Promise.all([
+      // 1. Yearly metrics — paid invoices whose effective date falls within the selected year
+      db.select({
+        revenue: sql<string>`COALESCE(SUM(${invoiceCalculations.clientBill}::numeric), 0)`,
+        profit:  sql<string>`COALESCE(SUM(${invoiceCalculations.netProfitAdmin}::numeric), 0)`,
       })
-      .from(invoices)
-      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-      .leftJoin(partners, eq(invoices.partnerId, partners.id));
-    
-    // Calculate yearly metrics
-    let yearlyRevenue = 0;
-    let yearlyProfit = 0;
-    let monthlyReceived = 0;
-    let monthlyExpected = 0;
-    let monthlyVikaProfit = 0;
-    let monthlyOthersProfit = 0;
-    let monthlyProfit = 0;
-    
-    // Collect available years from invoices
-    const yearsSet = new Set<number>();
-    
-    for (const row of allInvoices) {
-      // Track available years
-      if (row.invoice.paymentDate) {
-        yearsSet.add(new Date(row.invoice.paymentDate).getFullYear());
-      } else if (row.invoice.createdAt) {
-        yearsSet.add(new Date(row.invoice.createdAt).getFullYear());
-      }
-      
-      if (!row.calculations) continue;
-      
-      const scheme = row.invoice.scheme;
-      const status = row.invoice.status;
-      const paymentDate = row.invoice.paymentDate 
-        ? new Date(row.invoice.paymentDate) 
-        : (row.invoice.createdAt ? new Date(row.invoice.createdAt) : null);
-      const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
-      
-      // Client bill is the revenue
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
-      
-      // Use partnerTransferDue for cash flow - this is what partner actually transfers after expenses
-      let cashToAdmin: number;
-      if (scheme === 'agency_30' || scheme === 'agency_40') {
-        cashToAdmin = parseFloat(row.calculations.adminShareFromMargin || "0");
-      } else {
-        // Partner transfers partnerTransferDue = amountToAdmin - expensesPaidByPartner
-        cashToAdmin = parseFloat(row.calculations.partnerTransferDue || "0");
-      }
-      
-      const netProfit = parseFloat(row.calculations.netProfitAdmin || "0");
-      
-      const isVika = row.partnerName?.toLowerCase().includes("вика уткина") || 
-                     row.partnerName?.toLowerCase().includes("vika utkina");
-      
-      // Only count paid invoices
-      if (status === 'paid') {
-        // Yearly metrics - based on payment date within selected year
-        if (paymentDate && paymentDate >= yearStart && paymentDate <= yearEnd) {
-          yearlyRevenue += clientBill;
-          yearlyProfit += netProfit;
-        }
-        
-        // Monthly net profit - based on payment date within selected month
-        if (paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
-          monthlyReceived += netProfit;
-          monthlyProfit += netProfit;
-        }
-      }
-      
-      // Expected this month - unpaid invoices with planned PAYMENT DATE in selected month
-      // Uses paymentDate (planned payment) to show expected profit for the selected month
-      if (status !== 'paid' && status !== 'cancelled' && paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
-        monthlyExpected += netProfit;
-      }
-      
-      // Monthly leverage: ALL non-cancelled invoices with paymentDate in selected month.
-      // Counts both paid AND expected (sent/draft) so the coefficient reflects who generated
-      // business this month, not just who already received payment.
-      if (status !== 'cancelled' && paymentDate && paymentDate >= monthStart && paymentDate <= monthEnd) {
-        if (isVika) {
-          monthlyVikaProfit += netProfit;
-        } else {
-          monthlyOthersProfit += netProfit;
-        }
-      }
-    }
-    
-    // Sales for selected month: non-cancelled invoices created this month,
-    // excluding auto-generated recurring invoices (those are ongoing agreements, not new sales).
-    const monthlyDrafts = allInvoices.filter(row => {
-      if (row.invoice.status === 'cancelled') return false;
-      if (row.invoice.recurringInvoiceId) return false; // auto-generated — not a new sale
-      const createdAt = row.invoice.createdAt ? new Date(row.invoice.createdAt) : null;
-      return createdAt && createdAt >= monthStart && createdAt <= monthEnd;
-    });
-    const draftsCount = monthlyDrafts.length;
-    // Use netProfitAdmin to match what the per-invoice list rows display —
-    // using clientBill here would show gross client billing (inflated by agency budget split)
-    // while the rows show net profit, causing a confusing mismatch in totals.
-    const draftsTotal = monthlyDrafts.reduce((sum, row) => {
-      return sum + parseFloat(row.calculations?.netProfitAdmin || "0");
-    }, 0);
-    
+        .from(invoices)
+        .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+        .where(and(
+          eq(invoices.status, 'paid'),
+          sql`${effectiveDate} BETWEEN ${yearStartStr}::date AND ${yearEndStr}::date`,
+        )),
+
+      // 2. Monthly received — paid invoices whose effective date falls within the selected month
+      db.select({
+        profit: sql<string>`COALESCE(SUM(${invoiceCalculations.netProfitAdmin}::numeric), 0)`,
+      })
+        .from(invoices)
+        .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+        .where(and(
+          eq(invoices.status, 'paid'),
+          sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
+        )),
+
+      // 3. Monthly expected — non-paid, non-cancelled with effective date in month
+      db.select({
+        profit: sql<string>`COALESCE(SUM(${invoiceCalculations.netProfitAdmin}::numeric), 0)`,
+      })
+        .from(invoices)
+        .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+        .where(and(
+          sql`${invoices.status} NOT IN ('paid', 'cancelled')`,
+          sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
+        )),
+
+      // 4. Leverage — non-cancelled with effective date in month, split by Vika Utkina
+      db.select({
+        vikaProfit: sql<string>`COALESCE(SUM(
+          CASE WHEN LOWER(${partners.name}) LIKE '%вика уткина%'
+                 OR LOWER(${partners.name}) LIKE '%vika utkina%'
+               THEN ${invoiceCalculations.netProfitAdmin}::numeric
+               ELSE 0
+          END), 0)`,
+        othersProfit: sql<string>`COALESCE(SUM(
+          CASE WHEN LOWER(${partners.name}) NOT LIKE '%вика уткина%'
+               AND (${partners.name} IS NULL OR LOWER(${partners.name}) NOT LIKE '%vika utkina%')
+               THEN ${invoiceCalculations.netProfitAdmin}::numeric
+               ELSE 0
+          END), 0)`,
+      })
+        .from(invoices)
+        .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+        .leftJoin(partners, eq(invoices.partnerId, partners.id))
+        .where(and(
+          sql`${invoices.status} != 'cancelled'`,
+          sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
+        )),
+
+      // 5. Monthly sales — non-cancelled, non-recurring invoices created this month
+      db.select({
+        draftsCount: sql<string>`COUNT(*)`,
+        draftsTotal: sql<string>`COALESCE(SUM(${invoiceCalculations.netProfitAdmin}::numeric), 0)`,
+      })
+        .from(invoices)
+        .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+        .where(and(
+          sql`${invoices.status} != 'cancelled'`,
+          isNull(invoices.recurringInvoiceId),
+          sql`DATE(${invoices.createdAt}) BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
+        )),
+
+      // 6. Available years — one row per distinct year found in effective dates
+      db.select({
+        yr: sql<number>`EXTRACT(YEAR FROM ${effectiveDate})::integer`,
+      })
+        .from(invoices)
+        .groupBy(sql`EXTRACT(YEAR FROM ${effectiveDate})`),
+    ]);
+
+    // Unpack SQL results
+    const yearlyRevenue     = parseNum(yearlyRows[0]?.revenue     ?? '0');
+    const yearlyProfit      = parseNum(yearlyRows[0]?.profit      ?? '0');
+    const monthlyReceived   = parseNum(monthlyPaidRows[0]?.profit ?? '0');
+    const monthlyExpected   = parseNum(monthlyExpectedRows[0]?.profit ?? '0');
+    const monthlyVikaProfit   = parseNum(String(leverageRows[0]?.vikaProfit   ?? '0'));
+    const monthlyOthersProfit = parseNum(String(leverageRows[0]?.othersProfit ?? '0'));
+    const draftsCount = parseInt(String(salesRows[0]?.draftsCount ?? '0'), 10);
+    const draftsTotal = parseNum(String(salesRows[0]?.draftsTotal ?? '0'));
+    const monthlyProfit = monthlyReceived;
+
     // Net Profit Margin = (Net Profit / Revenue) * 100
     const netProfitMargin = yearlyRevenue > 0 ? (yearlyProfit / yearlyRevenue) * 100 : 0;
-    
-    // Leverage ratio for selected month (all non-cancelled invoices with paymentDate in month)
+
+    // Leverage ratio for selected month
     const leverageRatio = monthlyVikaProfit > 0 ? monthlyOthersProfit / monthlyVikaProfit : 0;
-    
-    // Sort available years descending
+
+    // Available years — ensure current year is always present
+    const yearsSet = new Set(availableYearsRows.map(r => r.yr).filter(Boolean));
+    if (!yearsSet.has(now.getFullYear())) yearsSet.add(now.getFullYear());
     const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
-    if (!availableYears.includes(now.getFullYear())) {
-      availableYears.unshift(now.getFullYear());
-    }
-    
-    // Owner shares: split profit 50/50 between Kря and Kot
-    const yearlyOwnerShare = yearlyProfit / 2;
+
+    // Owner shares: split profit 50/50
+    const yearlyOwnerShare  = yearlyProfit / 2;
     const monthlyOwnerShare = monthlyProfit / 2;
-    
+
     // Get recurring expected for selected month
     const recurringStats = await this.getRecurringExpectedForMonth(selectedYear, selectedMonth);
     

@@ -24,11 +24,11 @@ import AccessCodesPage from "./pages/AccessCodesPage";
 import StatsPage from "./pages/StatsPage";
 import AssistantLogsPage from "./pages/AssistantLogsPage";
 import AccountingPage from "./pages/AccountingPage";
-import { useAuth } from "@/hooks/useAuth";
+import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
 
 // Component that routes "/" based on role
 const RoleBasedHome = () => {
-  const { role, isLoading } = useAuth();
+  const { role, isLoading } = useAuthContext();
   
   if (isLoading) {
     return (
@@ -176,13 +176,15 @@ const AppContent = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

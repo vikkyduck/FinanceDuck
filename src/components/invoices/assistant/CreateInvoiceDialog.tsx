@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
-import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/hooks/useAuth";
 import { calculateInvoice, type InvoiceScheme } from "@/lib/invoiceCalculations";
 import { handleValidationError, showSuccess } from "@/lib/errorHandler";
@@ -29,9 +28,7 @@ interface CreateInvoiceDialogProps {
 }
 
 export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInvoiceDialogProps) => {
-  const { role } = useUserRole();
-  const { role: authRole } = useAuth();
-  const effectiveRole = role || authRole;
+  const { role: effectiveRole } = useAuth();
   const [loading, setLoading] = useState(false);
   const { checkLimit } = useRateLimit('form');
   

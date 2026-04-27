@@ -80,6 +80,20 @@ Security is implemented through XSS protection via input sanitization and React'
 
 **SQL Aggregation**: `getAdminDashboardStats()` uses 6 parallel SQL aggregate queries (no JS loop over all invoices), with `effectiveDate = COALESCE(payment_date, DATE(created_at))`.
 
+## State Management Architecture
+
+**Three-tier approach — no prop drilling:**
+
+1. **Server state** — TanStack Query is the primary global store. Components subscribe directly to query keys (`['/api/invoices']`, `['/api/dashboard/stats']`, etc.) without passing data through parent components. Mutations call `invalidateQueries` and all subscribers re-render automatically.
+
+2. **Auth state** — `src/contexts/AuthContext.tsx` is the single source of truth. A single `AuthProvider` in `App.tsx` makes **one** `/api/auth/validate` request on mount. All components read from context via hooks:
+   - `useAuth()` — re-export of `useAuthContext()`, keeps all existing imports unchanged
+   - `useUserRole()` — backward-compat shim over the same context (`isLoading → loading` alias)
+
+3. **UI state** — Local hooks: `useInvoiceFilters`, `useViewMode`, `useCookieSession`. Sidebar state in `SidebarContext` (Radix).
+
+**Key files:** `src/contexts/AuthContext.tsx`, `src/hooks/useAuth.ts`, `src/hooks/useUserRole.ts`
+
 ## Performance Optimizations
 
 Optimizations include code splitting, TanStack Query for data caching and efficient fetching, and rendering optimizations like skeleton components and debounced inputs. Real-time data synchronization uses visibility-aware polling with 120-second intervals and smart refresh on tab focus. An ErrorBoundary provides user-friendly error messages. Unified cache invalidation is managed via `useInvalidateInvoices()`.

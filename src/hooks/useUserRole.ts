@@ -1,16 +1,17 @@
-import { useEffect, useState, useCallback } from 'react';
+/**
+ * useUserRole — backward-compat shim over AuthContext.
+ *
+ * Previously made a standalone /api/auth/validate request on every mount.
+ * Now reads from the single AuthContext instance — zero extra network calls.
+ *
+ * Field mapping kept intentionally to avoid changing all consumers:
+ *   isLoading → loading
+ *   role, partnerId, clientId — same names
+ */
+import { useCallback } from 'react';
+import { useAuthContext, type UserRole } from '@/contexts/AuthContext';
 
-export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
-
-interface UserRoleData {
-  role: UserRole | null;
-  partnerId: string | null;
-  clientId: string | null;
-  loading: boolean;
-  accessCode: string | null;
-  accessTokenId: string | null;
-  getSession: () => AccessSession | null;
-}
+export type { UserRole };
 
 interface AccessSession {
   accessTokenId: string;
@@ -22,15 +23,8 @@ interface AccessSession {
   lastActivity?: number;
 }
 
-export function useUserRole(): UserRoleData {
-  const [roleData, setRoleData] = useState<Omit<UserRoleData, 'getSession'>>({
-    role: null,
-    partnerId: null,
-    clientId: null,
-    loading: true,
-    accessCode: null,
-    accessTokenId: null,
-  });
+export function useUserRole() {
+  const { isLoading, role, partnerId, clientId } = useAuthContext();
 
   const getSession = useCallback((): AccessSession | null => {
     try {
@@ -42,50 +36,13 @@ export function useUserRole(): UserRoleData {
     }
   }, []);
 
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        const response = await fetch('/api/auth/validate', {
-          method: 'GET',
-          credentials: 'include',
-        });
-        
-        const data = await response.json();
-        
-        if (!data?.valid) {
-          setRoleData({ 
-            role: null, 
-            partnerId: null, 
-            clientId: null, 
-            loading: false, 
-            accessCode: null, 
-            accessTokenId: null 
-          });
-          return;
-        }
-        
-        setRoleData({
-          role: data.user?.role as UserRole,
-          partnerId: data.user?.partnerId || null,
-          clientId: data.user?.clientId || null,
-          loading: false,
-          accessCode: null,
-          accessTokenId: null,
-        });
-      } catch {
-        setRoleData({ 
-          role: null, 
-          partnerId: null, 
-          clientId: null, 
-          loading: false, 
-          accessCode: null, 
-          accessTokenId: null 
-        });
-      }
-    };
-    
-    fetchUserRole();
-  }, []);
-
-  return { ...roleData, getSession };
+  return {
+    role,
+    partnerId,
+    clientId,
+    loading: isLoading,   // compat: consumers use `loading`, not `isLoading`
+    accessCode: null,
+    accessTokenId: null,
+    getSession,
+  };
 }

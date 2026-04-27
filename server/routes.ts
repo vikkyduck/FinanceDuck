@@ -9,6 +9,26 @@ import {
   clearAllLoginAttempts,
   getLockedCodes,
 } from "./rateLimiter";
+import {
+  SESSION_COOKIE,
+  AuthenticatedRequest,
+  authMiddleware,
+  requireRole,
+} from "./middleware";
+import {
+  ROLE_INVOICE_PERMISSIONS,
+  ROLE_CALCULATION_PERMISSIONS,
+  ROLE_STATS_PERMISSIONS,
+  ASSISTANT_ALLOWED_INVOICE_FIELDS,
+  ASSISTANT_ALLOWED_CALCULATION_FIELDS,
+  projectInvoiceForRole,
+  createAssistantInvoiceProjection,
+  stripSensitiveFieldsForRole,
+  stripSensitiveFieldsFromList,
+  projectStatsForRole,
+  stripPartnerInfoFromClient,
+  stripPartnerInfoFromClients,
+} from "./permissions";
 
 export function registerHealthCheck(app: Express) {
   app.get("/", (req: Request, res: Response, next: NextFunction) => {
@@ -28,239 +48,6 @@ export function registerHealthCheck(app: Express) {
   app.get("/api/health", (_req: Request, res: Response) => {
     res.status(200).json({ status: "ok", timestamp: Date.now() });
   });
-}
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    token: AccessToken;
-    role: UserRole;
-    partnerId?: string;
-    clientId?: string;
-  };
-}
-
-/**
- * UNIFIED SOURCE OF TRUTH: Role-based field visibility rules
- * 
- * All roles get data from the SAME stored values in invoice_calculations table.
- * This configuration determines what each role can SEE, not what is calculated.
- * 
- * BUSINESS RULES:
- * - Admin: sees everything (full financial transparency)
- * - Partner: sees their commission, debt, client remaining
- * - Client: sees their bill and remaining budget
- * - Assistant: sees basic invoice info + for Agency 30%: margin, client budget (70%), remaining
- *             BUT does NOT see partner/admin split (15%/15%)
- */
-const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
-  admin: [
-    'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
-    'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
-    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
-    'plannedExpenses', 'closingDocumentUrl',
-  ],
-  partner: [
-    'id', 'invoiceNumber', 'clientId', 'status', 'description',
-    'clientBill', 'scheme', 'createdAt', 'updatedAt',
-    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'plannedExpenses',
-  ],
-  client: [
-    'id', 'invoiceNumber', 'status', 'description', 'clientBill',
-    'scheme', 'createdAt', 'updatedAt',
-    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes',
-  ],
-  assistant: [
-    'id', 'invoiceNumber', 'clientId', 'status', 'description',
-    'clientBill', 'createdAt', 'updatedAt', 'createdBy',
-    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
-    'plannedExpenses',
-  ],
-  accountant: [
-    'id', 'invoiceNumber', 'clientId', 'status', 'description',
-    'clientBill', 'createdAt', 'updatedAt', 'createdBy',
-    'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
-    'plannedExpenses', 'closingDocumentUrl',
-  ],
-};
-
-const ROLE_CALCULATION_PERMISSIONS: Record<UserRole, readonly string[]> = {
-  admin: [
-    'id', 'invoiceId', 'clientBill', 'commissionRate', 'commissionAmount',
-    'amountToAdmin', 'agencyMargin', 'partnerShareFromMargin', 'adminShareFromMargin',
-    'clientBaseAfterMargin', 'clientSpent', 'clientRemaining', 'executorExpensesTotal',
-    'partnerTransferDue', 'netProfitAdmin', 'adminShare50', 'catShare50',
-    'assistantBonusActs', 'assistantBonusPaid',
-  ],
-  partner: [
-    'id', 'invoiceId', 'clientBill', 'commissionRate', 'commissionAmount',
-    'amountToAdmin', 'agencyMargin', 'partnerShareFromMargin', 'adminShareFromMargin',
-    'clientBaseAfterMargin', 'clientSpent', 'clientRemaining', 'executorExpensesTotal',
-    'partnerTransferDue',
-  ],
-  client: [
-    'id', 'invoiceId', 'clientBill', 'clientBaseAfterMargin',
-    'clientSpent', 'clientRemaining', 'executorExpensesTotal',
-  ],
-  assistant: [
-    'id', 'invoiceId', 'clientBill', 'executorExpensesTotal',
-    'agencyMargin', 'clientBaseAfterMargin', 'clientRemaining',
-  ],
-  accountant: [
-    'id', 'invoiceId', 'clientBill', 'executorExpensesTotal',
-    'agencyMargin', 'clientBaseAfterMargin', 'clientRemaining',
-  ],
-};
-
-const ROLE_STATS_PERMISSIONS: Record<UserRole, readonly string[]> = {
-  admin: [
-    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
-    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
-    'totalPartnerCommission', 'totalAdminShare', 'totalNetProfit', 'clientRemaining',
-  ],
-  partner: [
-    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
-    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
-    'totalPartnerCommission', 'partnerDebt', 'clientRemaining',
-  ],
-  client: [
-    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
-    'totalClientBill', 'totalExpenses', 'clientRemaining',
-  ],
-  assistant: [
-    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
-    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
-  ],
-  accountant: [
-    'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
-    'totalClientBill', 'paidClientBill', 'pendingClientBill', 'totalExpenses',
-  ],
-};
-
-const ASSISTANT_ALLOWED_INVOICE_FIELDS = ROLE_INVOICE_PERMISSIONS.assistant;
-const ASSISTANT_ALLOWED_CALCULATION_FIELDS = ROLE_CALCULATION_PERMISSIONS.assistant;
-
-/**
- * Project invoice data based on role permissions
- * Uses ROLE_INVOICE_PERMISSIONS and ROLE_CALCULATION_PERMISSIONS as single source of truth
- */
-function projectInvoiceForRole(invoice: Record<string, any>, role: UserRole): Record<string, any> {
-  const allowedInvoiceFields = ROLE_INVOICE_PERMISSIONS[role];
-  const allowedCalcFields = ROLE_CALCULATION_PERMISSIONS[role];
-  
-  const result: Record<string, any> = {};
-  
-  for (const field of allowedInvoiceFields) {
-    if (field in invoice) {
-      result[field] = invoice[field];
-    }
-  }
-  
-  if (invoice.calculations && typeof invoice.calculations === 'object') {
-    const calc: Record<string, any> = {};
-    for (const field of allowedCalcFields) {
-      if (field in invoice.calculations) {
-        calc[field] = invoice.calculations[field];
-      }
-    }
-    result.calculations = calc;
-  }
-  
-  if (invoice.partner && role === 'admin') {
-    result.partner = invoice.partner;
-  } else if (invoice.partner && role === 'partner') {
-    result.partner = { id: invoice.partner.id, name: invoice.partner.name };
-  }
-  
-  if (invoice.client) {
-    if (role === 'assistant' || role === 'accountant') {
-      result.client = { id: invoice.client.id, name: invoice.client.name };
-    } else {
-      result.client = invoice.client;
-    }
-  }
-  
-  return result;
-}
-
-function createAssistantInvoiceProjection(invoice: Record<string, any>): Record<string, any> {
-  return projectInvoiceForRole(invoice, 'assistant');
-}
-
-function stripSensitiveFieldsForRole<T extends Record<string, any>>(data: T, role: UserRole): T {
-  return projectInvoiceForRole(data, role) as T;
-}
-
-function stripSensitiveFieldsFromList<T extends Record<string, any>>(data: T[], role: UserRole): T[] {
-  return data.map(item => projectInvoiceForRole(item, role)) as T[];
-}
-
-/**
- * Project stats data based on role permissions
- * Uses ROLE_STATS_PERMISSIONS as single source of truth
- */
-function projectStatsForRole(stats: Record<string, any>, role: UserRole): Record<string, any> {
-  const allowedFields = ROLE_STATS_PERMISSIONS[role];
-  const result: Record<string, any> = {};
-  
-  for (const field of allowedFields) {
-    if (field in stats) {
-      result[field] = stats[field];
-    }
-  }
-  
-  return result;
-}
-
-function stripPartnerInfoFromClient<T extends Record<string, any>>(client: T, role: UserRole): T {
-  if (role !== 'assistant' && role !== 'accountant') return client;
-  const { partnerId, partner, ...rest } = client;
-  return rest as T;
-}
-
-function stripPartnerInfoFromClients<T extends Record<string, any>>(clients: T[], role: UserRole): T[] {
-  if (role !== 'assistant' && role !== 'accountant') return clients;
-  return clients.map(client => {
-    const { partnerId, partner, ...rest } = client;
-    return rest as T;
-  });
-}
-
-const SESSION_COOKIE = "session_id";
-
-async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const sessionId = req.cookies[SESSION_COOKIE];
-  
-  if (!sessionId) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-  
-  const csrfToken = req.headers["x-csrf-token"] as string | undefined;
-  const isModifying = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
-  
-  const result = await storage.validateSession(sessionId, isModifying ? csrfToken : undefined);
-  
-  if (!result?.isValid || !result.token) {
-    res.clearCookie(SESSION_COOKIE);
-    return res.status(401).json({ error: "Session expired" });
-  }
-  
-  req.user = {
-    token: result.token,
-    role: result.token.role,
-    partnerId: result.token.partnerId || undefined,
-    clientId: result.token.clientId || undefined,
-  };
-  
-  next();
-}
-
-function requireRole(...roles: UserRole[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    next();
-  };
 }
 
 export function registerRoutes(app: Express): void {
@@ -1312,28 +1099,17 @@ export function registerRoutes(app: Express): void {
   app.get("/api/invoices/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const role = req.user?.role || "client";
-      const invoice = await storage.getInvoice(id);
-      
+      const role      = req.user?.role      || "client";
+      const partnerId = req.user?.partnerId;
+      const clientId  = req.user?.clientId;
+
+      // Row-level ownership enforced inside getInvoiceForRole — returns null if not authorized
+      const invoice = await storage.getInvoiceForRole(id, role as any, partnerId, clientId);
+
       if (!invoice) {
         return res.status(404).json({ error: "Invoice not found" });
       }
-      
-      if (role === "assistant" && invoice.hideFromAssistant) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      if (role === "accountant" && !invoice.hideFromAssistant) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      
-      if (role === "partner" && invoice.partnerId !== req.user?.partnerId) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      
-      if (role === "client" && invoice.clientId !== req.user?.clientId) {
-        return res.status(403).json({ error: "Forbidden" });
-      }
-      
+
       const filtered = stripSensitiveFieldsForRole(invoice, role);
       res.json(filtered);
     } catch (error) {

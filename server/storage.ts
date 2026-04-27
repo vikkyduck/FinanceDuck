@@ -9,54 +9,15 @@ import {
 import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or, sum, count, type SQL } from "drizzle-orm";
 import { calculateFinancials, parseNum, type FinancialResult } from "../shared/financialEngine";
 import { randomBytes } from "crypto";
-import * as userRepo   from "./repositories/userRepo";
-import * as partnerRepo from "./repositories/partnerRepo";
-import * as clientRepo  from "./repositories/clientRepo";
+import * as userRepo       from "./repositories/userRepo";
+import * as partnerRepo     from "./repositories/partnerRepo";
+import * as clientRepo      from "./repositories/clientRepo";
+import * as invoiceRepo     from "./repositories/invoiceRepo";
+import * as recurringRepo   from "./repositories/recurringRepo";
+import * as actsRepo        from "./repositories/actsRepo";
+import * as actionLogRepo   from "./repositories/actionLogRepo";
+import { calculateInvoiceServer } from "./repositories/invoiceRepo";
 
-/**
- * DB adapter: delegates to the shared financial engine and converts
- * the number result into Drizzle-compatible string fields for invoice_calculations.
- * All financial formula logic lives in shared/financialEngine.ts.
- */
-function calculateInvoiceServer(
-  scheme: InvoiceScheme,
-  clientBill: number,
-  partnerCommissionRate?: number,
-  executorExpenses: number = 0,
-  expensesPaidByPartner: number = 0,
-  expensesPaidByAdmin: number = 0,
-  plannedExpenses: number = 0
-): Partial<InvoiceCalculation> {
-  const f = calculateFinancials(
-    scheme,
-    clientBill,
-    partnerCommissionRate ?? 0,
-    executorExpenses,
-    expensesPaidByPartner,
-    expensesPaidByAdmin,
-    plannedExpenses,
-  );
-
-  const r: Partial<InvoiceCalculation> = {
-    clientBill:            f.clientBill.toString(),
-    executorExpensesTotal: f.executorExpensesTotal.toString(),
-    partnerTransferDue:    f.partnerTransferDue.toString(),
-    netProfitAdmin:        f.netProfitAdmin.toString(),
-    adminShare50:          f.adminShare50.toString(),
-    catShare50:            f.catShare50.toString(),
-  };
-
-  if (f.commissionRate   !== undefined) r.commissionRate   = f.commissionRate.toString();
-  if (f.commissionAmount !== undefined) r.commissionAmount = f.commissionAmount.toString();
-  if (f.amountToAdmin    !== undefined) r.amountToAdmin    = f.amountToAdmin.toString();
-  if (f.agencyMargin           !== undefined) r.agencyMargin           = f.agencyMargin.toString();
-  if (f.partnerShareFromMargin !== undefined) r.partnerShareFromMargin = f.partnerShareFromMargin.toString();
-  if (f.adminShareFromMargin   !== undefined) r.adminShareFromMargin   = f.adminShareFromMargin.toString();
-  if (f.clientBaseAfterMargin  !== undefined) r.clientBaseAfterMargin  = f.clientBaseAfterMargin.toString();
-  if (f.clientRemaining        !== undefined) r.clientRemaining        = f.clientRemaining.toString();
-
-  return r;
-}
 
 export interface IStorage {
   verifyAccessCode(code: string): Promise<AccessToken | null>;
@@ -84,6 +45,8 @@ export interface IStorage {
   
   getInvoices(role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client })[]>;
   getInvoice(id: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client }) | null>;
+  /** IDOR-safe variant: filters by ownership based on role/partnerId/clientId */
+  getInvoiceForRole(id: string, role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client }) | null>;
   getInvoicesWithCalculations(): Promise<Array<{ id: string; status: string; paymentDate: string | null; adminShare50: string | null; catShare50: string | null; netProfitAdmin: string | null }>>;
   createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice>;
   updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | null>;
@@ -386,319 +349,20 @@ export class DatabaseStorage implements IStorage {
   async setClientPartners(clientId: string, partnerIds: string[]) { return clientRepo.setClientPartners(db, clientId, partnerIds); }
   async deleteClient(id: string) { return clientRepo.deleteClient(db, id); }
 
-  async getInvoices(role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client })[]> {
-    const baseQuery = db
-      .select({
-        invoice: invoices,
-        calculations: invoiceCalculations,
-        partner: partners,
-        client: clients,
-      })
-      .from(invoices)
-      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-      .leftJoin(partners, eq(invoices.partnerId, partners.id))
-      .leftJoin(clients, eq(invoices.clientId, clients.id))
-      .orderBy(desc(invoices.createdAt));
-    
-    let results;
-    if (partnerId) {
-      results = await baseQuery.where(eq(invoices.partnerId, partnerId));
-    } else if (role === 'client' && clientId) {
-      results = await baseQuery.where(eq(invoices.clientId, clientId));
-    } else if (role === 'assistant') {
-      results = await baseQuery.where(
-        or(
-          isNull(invoices.hideFromAssistant),
-          eq(invoices.hideFromAssistant, false)
-        )
-      );
-    } else if (role === 'accountant') {
-      results = await baseQuery.where(
-        eq(invoices.hideFromAssistant, true)
-      );
-    } else {
-      results = await baseQuery;
-    }
-    
-    return results.map(r => ({
-      ...r.invoice,
-      calculations: r.calculations || undefined,
-      partner: r.partner || undefined,
-      client: r.client || undefined,
-    }));
-  }
-
-  async getInvoice(id: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client }) | null> {
-    const [result] = await db
-      .select({
-        invoice: invoices,
-        calculations: invoiceCalculations,
-        partner: partners,
-        client: clients,
-      })
-      .from(invoices)
-      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-      .leftJoin(partners, eq(invoices.partnerId, partners.id))
-      .leftJoin(clients, eq(invoices.clientId, clients.id))
-      .where(eq(invoices.id, id))
-      .limit(1);
-    
-    if (!result) return null;
-    
-    return {
-      ...result.invoice,
-      calculations: result.calculations || undefined,
-      partner: result.partner || undefined,
-      client: result.client || undefined,
-    };
-  }
-
-  // Get raw invoice data with full calculations for internal use (plan-fact analysis)
-  // Includes ALL invoices with actualPaymentDate set (regardless of status) to match Supabase behavior
-  // Includes netProfitAdmin for fallback calculation when shares are null/zero
-  async getInvoicesWithCalculations(): Promise<Array<{
-    id: string;
-    status: string;
-    paymentDate: string | null;
-    adminShare50: string | null;
-    catShare50: string | null;
-    netProfitAdmin: string | null;
-  }>> {
-    const results = await db
-      .select({
-        id: invoices.id,
-        status: invoices.status,
-        actualPaymentDate: invoices.actualPaymentDate,
-        paymentDate: invoices.paymentDate,
-        adminShare50: invoiceCalculations.adminShare50,
-        catShare50: invoiceCalculations.catShare50,
-        netProfitAdmin: invoiceCalculations.netProfitAdmin,
-      })
-      .from(invoices)
-      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-      .where(or(
-        eq(invoices.status, 'paid'),
-        // Include ANY invoice with actualPaymentDate set (regardless of current status)
-        isNotNull(invoices.actualPaymentDate)
-      ));
-    
-    // Use actualPaymentDate if available, fallback to paymentDate
-    return results.map(r => ({
-      id: r.id,
-      status: r.status,
-      paymentDate: r.actualPaymentDate || r.paymentDate || null,
-      adminShare50: r.adminShare50,
-      catShare50: r.catShare50,
-      netProfitAdmin: r.netProfitAdmin,
-    }));
-  }
-
-  async createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice> {
-    const [created] = await db.insert(invoices).values(invoice).returning();
-    
-    // Auto-calculate all fields based on scheme
-    const clientBill = parseFloat(calculations.clientBill || "0");
-    const commissionRate = calculations.commissionRate ? parseFloat(calculations.commissionRate) : undefined;
-    const executorExpenses = parseFloat(calculations.executorExpensesTotal || "0");
-    const plannedExp = created.plannedExpenses ? parseFloat(created.plannedExpenses) : 0;
-    
-    const computed = calculateInvoiceServer(
-      created.scheme as InvoiceScheme,
-      clientBill,
-      commissionRate,
-      executorExpenses,
-      0, // expensesPaidByPartner
-      0, // expensesPaidByAdmin
-      plannedExp
-    );
-    
-    await db.insert(invoiceCalculations).values({
-      invoiceId: created.id,
-      clientBill: computed.clientBill || "0",
-      ...computed,
-    });
-    
-    return created;
-  }
-
-  async updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | null> {
-    const [updated] = await db.update(invoices)
-      .set({ ...invoice, updatedAt: new Date() })
-      .where(eq(invoices.id, id))
-      .returning();
-    return updated || null;
-  }
-
-  async updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>): Promise<InvoiceCalculation | null> {
-    // Get the invoice to know the scheme
-    const invoice = await this.getInvoice(invoiceId);
-    if (!invoice) return null;
-    
-    const [existing] = await db
-      .select()
-      .from(invoiceCalculations)
-      .where(eq(invoiceCalculations.invoiceId, invoiceId))
-      .limit(1);
-    
-    // Get current values or use new ones
-    const clientBill = calculations.clientBill 
-      ? parseFloat(calculations.clientBill) 
-      : (existing?.clientBill ? parseFloat(existing.clientBill) : 0);
-    const commissionRate = calculations.commissionRate 
-      ? parseFloat(calculations.commissionRate) 
-      : (existing?.commissionRate ? parseFloat(existing.commissionRate) : undefined);
-    const executorExpenses = calculations.executorExpensesTotal 
-      ? parseFloat(calculations.executorExpensesTotal)
-      : (existing?.executorExpensesTotal ? parseFloat(existing.executorExpensesTotal) : 0);
-    
-    // Calculate expenses by payer (for correct netProfitAdmin calculation)
-    const expenses = await this.getInvoiceExpenses(invoiceId);
-    const expensesPaidByPartner = expenses
-      .filter(e => e.paidByAdmin !== true)
-      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    const expensesPaidByAdmin = expenses
-      .filter(e => e.paidByAdmin === true)
-      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    const plannedExp = invoice.plannedExpenses ? parseFloat(invoice.plannedExpenses) : 0;
-    
-    // Recalculate all fields with both expense types
-    const computed = calculateInvoiceServer(
-      invoice.scheme as InvoiceScheme,
-      clientBill,
-      commissionRate,
-      executorExpenses,
-      expensesPaidByPartner,
-      expensesPaidByAdmin,
-      plannedExp
-    );
-    
-    if (existing) {
-      const [updated] = await db.update(invoiceCalculations)
-        .set({ ...computed, updatedAt: new Date() })
-        .where(eq(invoiceCalculations.invoiceId, invoiceId))
-        .returning();
-      return updated || null;
-    } else {
-      const [created] = await db.insert(invoiceCalculations)
-        .values({
-          invoiceId,
-          clientBill: computed.clientBill || "0",
-          ...computed,
-        })
-        .returning();
-      return created;
-    }
-  }
-
-  async getInvoiceExpenses(invoiceId: string): Promise<InvoiceExpense[]> {
-    return db
-      .select()
-      .from(invoiceExpenses)
-      .where(eq(invoiceExpenses.invoiceId, invoiceId))
-      .orderBy(desc(invoiceExpenses.date));
-  }
-
-  async getAllExpenses(): Promise<InvoiceExpense[]> {
-    return db
-      .select()
-      .from(invoiceExpenses)
-      .orderBy(desc(invoiceExpenses.date));
-  }
-
-  async createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense> {
-    const [created] = await db.insert(invoiceExpenses).values(expense).returning();
-    
-    // Recalculate with proper expense breakdown by payer
-    await this.recalculateInvoiceExpenses(expense.invoiceId);
-    
-    return created;
-  }
-  
-  private async recalculateInvoiceExpenses(invoiceId: string): Promise<void> {
-    const expenses = await this.getInvoiceExpenses(invoiceId);
-    const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    const expensesPaidByPartner = expenses
-      .filter(e => e.paidByAdmin !== true)
-      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    const expensesPaidByAdmin = expenses
-      .filter(e => e.paidByAdmin === true)
-      .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    
-    // Get invoice to know scheme and commission rate
-    const invoice = await this.getInvoice(invoiceId);
-    if (!invoice) return;
-    
-    const [existing] = await db
-      .select()
-      .from(invoiceCalculations)
-      .where(eq(invoiceCalculations.invoiceId, invoiceId))
-      .limit(1);
-    
-    if (!existing) return;
-    
-    const clientBill = parseFloat(existing.clientBill || "0");
-    const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
-    const plannedExp = invoice.plannedExpenses ? parseFloat(invoice.plannedExpenses) : 0;
-    
-    // Recalculate with correct expense breakdown
-    const computed = calculateInvoiceServer(
-      invoice.scheme as InvoiceScheme,
-      clientBill,
-      commissionRate,
-      total,
-      expensesPaidByPartner,
-      expensesPaidByAdmin,
-      plannedExp
-    );
-    
-    await db.update(invoiceCalculations)
-      .set({ ...computed, updatedAt: new Date() })
-      .where(eq(invoiceCalculations.invoiceId, invoiceId));
-  }
-
-  async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null> {
-    const [expense] = await db
-      .select()
-      .from(invoiceExpenses)
-      .where(eq(invoiceExpenses.id, id))
-      .limit(1);
-    
-    if (!expense) return null;
-    
-    const [updated] = await db.update(invoiceExpenses)
-      .set(updates)
-      .where(eq(invoiceExpenses.id, id))
-      .returning();
-    
-    // Recalculate with proper expense breakdown by payer
-    await this.recalculateInvoiceExpenses(expense.invoiceId);
-    
-    return updated || null;
-  }
-
-  async deleteInvoiceExpense(id: string): Promise<void> {
-    const [expense] = await db
-      .select()
-      .from(invoiceExpenses)
-      .where(eq(invoiceExpenses.id, id))
-      .limit(1);
-    
-    if (expense) {
-      await db.delete(invoiceExpenses).where(eq(invoiceExpenses.id, id));
-      
-      // Recalculate with proper expense breakdown by payer
-      await this.recalculateInvoiceExpenses(expense.invoiceId);
-    }
-  }
-
-  async deleteInvoice(id: string): Promise<void> {
-    await db.delete(invoiceExpenses).where(eq(invoiceExpenses.invoiceId, id));
-    await db.delete(invoiceCalculations).where(eq(invoiceCalculations.invoiceId, id));
-    await db.delete(invoices).where(eq(invoices.id, id));
-  }
-
-  async deleteDocument(id: string): Promise<void> {
-    await db.execute(sql`DELETE FROM invoice_documents WHERE id = ${id}`);
+  async getInvoices(role: UserRole, partnerId?: string, clientId?: string) { return invoiceRepo.getInvoices(db, role, partnerId, clientId); }
+  async getInvoice(id: string) { return invoiceRepo.getInvoice(db, id); }
+  async getInvoiceForRole(id: string, role: UserRole, partnerId?: string, clientId?: string) { return invoiceRepo.getInvoice(db, id, role, partnerId, clientId); }
+  async getInvoicesWithCalculations() { return invoiceRepo.getInvoicesWithCalculations(db); }
+  async createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.createInvoice(db, invoice, calculations); }
+  async updateInvoice(id: string, invoice: Partial<InsertInvoice>) { return invoiceRepo.updateInvoice(db, id, invoice); }
+  async updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.updateInvoiceCalculations(db, invoiceId, calculations); }
+  async getInvoiceExpenses(invoiceId: string) { return invoiceRepo.getInvoiceExpenses(db, invoiceId); }
+  async getAllExpenses() { return invoiceRepo.getAllExpenses(db); }
+  async createInvoiceExpense(expense: InsertInvoiceExpense) { return invoiceRepo.createInvoiceExpense(db, expense); }
+  async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>) { return invoiceRepo.updateInvoiceExpense(db, id, updates); }
+  async deleteInvoiceExpense(id: string) { return invoiceRepo.deleteInvoiceExpense(db, id); }
+  async deleteInvoice(id: string) { return invoiceRepo.deleteInvoice(db, id); }
+  async deleteDocument(id: string) { return invoiceRepo.deleteDocument(db, id);
   }
 
   async getPartnerPayments(partnerId?: string) { return partnerRepo.getPartnerPayments(db, partnerId); }
@@ -752,9 +416,9 @@ export class DatabaseStorage implements IStorage {
       const calc = r.calculations;
       
       totalInvoices++;
-      const clientBill = calc ? parseFloat(calc.clientBill || "0") : 0;
-      const expenses = calc ? parseFloat(calc.executorExpensesTotal || "0") : 0;
-      const plannedExp = inv.plannedExpenses ? parseFloat(inv.plannedExpenses) : 0;
+      const clientBill = calc ? parseNum(calc.clientBill) : 0;
+      const expenses = calc ? parseNum(calc.executorExpensesTotal) : 0;
+      const plannedExp = parseNum(inv.plannedExpenses);
       
       totalClientBill += clientBill;
       totalExpenses += expenses;
@@ -774,18 +438,18 @@ export class DatabaseStorage implements IStorage {
       
       if (calc) {
         const scheme = inv.scheme;
-        const netProfit = parseFloat(calc.netProfitAdmin || "0");
+        const netProfit = parseNum(calc.netProfitAdmin);
         
         if (scheme === 'agency_30' || scheme === 'agency_40') {
           // Agency schemes: partner & admin get from margin
-          totalPartnerCommission += parseFloat(calc.partnerShareFromMargin || "0");
-          totalAdminShare += parseFloat(calc.adminShareFromMargin || "0");
-          clientRemaining += parseFloat(calc.clientBaseAfterMargin || "0") - expenses;
+          totalPartnerCommission += parseNum(calc.partnerShareFromMargin);
+          totalAdminShare += parseNum(calc.adminShareFromMargin);
+          clientRemaining += parseNum(calc.clientBaseAfterMargin) - expenses;
         } else {
           // partner_10, partner_15, commission_based
-          totalPartnerCommission += parseFloat(calc.commissionAmount || "0");
-          totalAdminShare += parseFloat(calc.amountToAdmin || "0");
-          clientRemaining += parseFloat(calc.clientRemaining || "0");
+          totalPartnerCommission += parseNum(calc.commissionAmount);
+          totalAdminShare += parseNum(calc.amountToAdmin);
+          clientRemaining += parseNum(calc.clientRemaining);
         }
         
         totalNetProfit += netProfit;
@@ -802,14 +466,14 @@ export class DatabaseStorage implements IStorage {
     let partnerDebt = 0;
     if (role === 'partner' && partnerId) {
       const payments = await this.getPartnerPayments(partnerId);
-      const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      const totalPaid = payments.reduce((sum, p) => sum + parseNum(p.amount), 0);
       
       // Use stored partnerTransferDue as single source of truth
       let totalDebtToAdmin = 0;
       for (const r of results) {
         if (r.invoice.status === 'paid' && r.calculations) {
           // Read stored value instead of recalculating
-          const storedDebt = parseFloat(r.calculations.partnerTransferDue || "0");
+          const storedDebt = parseNum(r.calculations.partnerTransferDue);
           totalDebtToAdmin += Math.max(0, storedDebt);
         }
       }
@@ -863,20 +527,18 @@ export class DatabaseStorage implements IStorage {
     const yearEnd = new Date(now.getFullYear(), 11, 31);
     
     for (const recurring of activeRecurring) {
-      const amount = parseFloat(recurring.amount || "0");
+      const amount = parseNum(recurring.amount);
       if (amount <= 0) continue;
       
       const scheme = recurring.scheme as InvoiceScheme;
       const partnerCommissionRate = recurring.partnerCommissionRate 
-        ? parseFloat(recurring.partnerCommissionRate) 
+        ? parseNum(recurring.partnerCommissionRate) 
         : undefined;
-      const defaultExpenses = recurring.defaultExpenses 
-        ? parseFloat(recurring.defaultExpenses) 
-        : 0;
+      const defaultExpenses = parseNum(recurring.defaultExpenses);
       
       // Calculate expected admin profit (including default expenses)
       const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
-      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      const expectedProfit = parseNum(calculation.netProfitAdmin);
       
       if (expectedProfit <= 0) continue;
       
@@ -1026,8 +688,8 @@ export class DatabaseStorage implements IStorage {
       
       // Use stored values from calculations - single source of truth
       // Guard against NaN with || 0
-      const debt = parseFloat(row.calculations.partnerTransferDue || "0") || 0;
-      const commission = parseFloat(row.calculations.commissionAmount || "0") || 0;
+      const debt = parseNum(row.calculations.partnerTransferDue) || 0;
+      const commission = parseNum(row.calculations.commissionAmount) || 0;
 
       if (!partnerMap.has(pid)) {
         partnerMap.set(pid, {
@@ -1053,7 +715,7 @@ export class DatabaseStorage implements IStorage {
     for (const payment of allPayments) {
       if (partnerMap.has(payment.partnerId)) {
         const summary = partnerMap.get(payment.partnerId)!;
-        summary.totalPaid += parseFloat(payment.amount) || 0;
+        summary.totalPaid += parseNum(payment.amount) || 0;
       }
     }
 
@@ -1159,13 +821,13 @@ export class DatabaseStorage implements IStorage {
 
       const clientId = row.invoice.clientId;
       const clientName = row.clientName || 'Unknown';
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
-      const executorExpenses = parseFloat(row.calculations.executorExpensesTotal || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
+      const executorExpenses = parseNum(row.calculations.executorExpensesTotal);
       
       // Use stored clientBaseAfterMargin if available, else calculate based on scheme
       const scheme = row.invoice.scheme;
       const clientBaseRate = scheme === 'agency_40' ? 0.6 : 0.7; // agency_40: 60%, agency_30: 70%
-      const clientBase = parseFloat(row.calculations.clientBaseAfterMargin || "0") || (clientBill * clientBaseRate);
+      const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || (clientBill * clientBaseRate);
       const doNotSpendBudget = clientBase;
       const invoiceRemaining = Math.max(0, doNotSpendBudget - executorExpenses);
       
@@ -1266,7 +928,7 @@ export class DatabaseStorage implements IStorage {
     const expensesByInvoice = new Map<string, { paidByPartner: number; paidByAdmin: number }>();
     for (const expense of allExpenses) {
       const current = expensesByInvoice.get(expense.invoiceId) || { paidByPartner: 0, paidByAdmin: 0 };
-      const amount = parseFloat(expense.amount);
+      const amount = parseNum(expense.amount);
       if (expense.paidByAdmin === true) {
         current.paidByAdmin += amount;
       } else {
@@ -1306,9 +968,9 @@ export class DatabaseStorage implements IStorage {
 
       const pId = row.invoice.partnerId;
       const partnerName = row.partnerName || 'Unknown';
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
-      const plannedExpenses = row.invoice.plannedExpenses ? parseFloat(row.invoice.plannedExpenses) : 0;
-      const commissionRate = row.calculations.commissionRate ? parseFloat(row.calculations.commissionRate) : 10;
+      const clientBill = parseNum(row.calculations.clientBill);
+      const plannedExpenses = parseNum(row.invoice.plannedExpenses);
+      const commissionRate = row.calculations.commissionRate ? parseNum(row.calculations.commissionRate) : 10;
       
       // Get ACTUAL spent expenses from invoice_expenses table (partner-paid only)
       const invoiceExpensesData = expensesByInvoice.get(row.invoice.id) || { paidByPartner: 0, paidByAdmin: 0 };
@@ -1319,7 +981,7 @@ export class DatabaseStorage implements IStorage {
       const commission = clientBill * (commissionRate / 100);
       
       // Partner debt comes from stored calculation (FIXED value, doesn't change with expenses)
-      const partnerDebt = parseFloat(row.calculations.partnerTransferDue || "0");
+      const partnerDebt = parseNum(row.calculations.partnerTransferDue);
       
       // "Do not spend" calculation - only remaining planned expenses
       // Commission is now tracked separately for "Expected Commission" dashboard
@@ -1442,17 +1104,17 @@ export class DatabaseStorage implements IStorage {
 
       const pId = row.invoice.partnerId;
       const partnerName = row.partnerName || 'Unknown';
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
       const scheme = row.invoice.scheme || 'commission_based';
       
       // Calculate commission based on scheme
       let commission = 0;
       if (scheme === 'agency_30' || scheme === 'agency_40') {
         // For agency schemes: partner gets partnerShareFromMargin
-        commission = parseFloat(row.calculations.partnerShareFromMargin || "0");
+        commission = parseNum(row.calculations.partnerShareFromMargin);
       } else {
         // For partner_10, partner_15, commission_based: use commissionAmount
-        commission = parseFloat(row.calculations.commissionAmount || "0");
+        commission = parseNum(row.calculations.commissionAmount);
       }
       
       if (commission <= 0) continue;
@@ -1547,8 +1209,8 @@ export class DatabaseStorage implements IStorage {
 
       const pId = row.invoice.partnerId || 'no-partner';
       const partnerName = row.partnerName || 'Без партнёра';
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
-      const netProfitAdmin = parseFloat(row.calculations.netProfitAdmin || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
+      const netProfitAdmin = parseNum(row.calculations.netProfitAdmin);
       const scheme = row.invoice.scheme || 'commission_based';
       
       if (netProfitAdmin <= 0) continue;
@@ -1862,19 +1524,17 @@ export class DatabaseStorage implements IStorage {
     };
     
     for (const recurring of activeRecurring) {
-      const amount = parseFloat(recurring.amount || "0");
+      const amount = parseNum(recurring.amount);
       if (amount <= 0) continue;
       
       const scheme = recurring.scheme as InvoiceScheme;
       const partnerCommissionRate = recurring.partnerCommissionRate 
-        ? parseFloat(recurring.partnerCommissionRate) 
+        ? parseNum(recurring.partnerCommissionRate) 
         : undefined;
-      const defaultExpenses = recurring.defaultExpenses 
-        ? parseFloat(recurring.defaultExpenses) 
-        : 0;
+      const defaultExpenses = parseNum(recurring.defaultExpenses);
       
       const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
-      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      const expectedProfit = parseNum(calculation.netProfitAdmin);
       
       if (expectedProfit <= 0) continue;
       
@@ -1981,19 +1641,17 @@ export class DatabaseStorage implements IStorage {
     
     for (const row of activeRecurring) {
       const recurring = row.recurring;
-      const amount = parseFloat(recurring.amount || "0");
+      const amount = parseNum(recurring.amount);
       if (amount <= 0) continue;
       
       const scheme = recurring.scheme as InvoiceScheme;
       const partnerCommissionRate = recurring.partnerCommissionRate 
-        ? parseFloat(recurring.partnerCommissionRate) 
+        ? parseNum(recurring.partnerCommissionRate) 
         : undefined;
-      const defaultExpenses = recurring.defaultExpenses 
-        ? parseFloat(recurring.defaultExpenses) 
-        : 0;
+      const defaultExpenses = parseNum(recurring.defaultExpenses);
       
       const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
-      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      const expectedProfit = parseNum(calculation.netProfitAdmin);
       
       if (expectedProfit <= 0) continue;
       
@@ -2068,7 +1726,7 @@ export class DatabaseStorage implements IStorage {
 
     for (const row of allInvoices) {
       const { invoice, calculations, clientName, partnerName } = row;
-      const clientBill = calculations ? parseFloat(calculations.clientBill || "0") : 0;
+      const clientBill = calculations ? parseNum(calculations.clientBill) : 0;
 
       // 1. Overdue payments - sent but not paid, past due date
       if (invoice.status === 'sent' && !invoice.actualPaymentDate && invoice.paymentDate) {
@@ -2298,7 +1956,7 @@ export class DatabaseStorage implements IStorage {
 
     for (const inv of overdueInvoices) {
       const daysOverdue = Math.floor((today.getTime() - new Date(inv.paymentDate!).getTime()) / (1000 * 60 * 60 * 24));
-      const clientBill = parseFloat(inv.clientBill || "0");
+      const clientBill = parseNum(inv.clientBill);
       actions.push({
         id: inv.id,
         type: 'overdue',
@@ -2335,7 +1993,7 @@ export class DatabaseStorage implements IStorage {
         priority: 50,
         title: 'Заполните дату оплаты',
         description: `Счет ${inv.invoiceNumber} • ${inv.clientName || 'N/A'}`,
-        amount: parseFloat(inv.clientBill || "0"),
+        amount: parseNum(inv.clientBill),
         actionType: 'edit',
       });
     }
@@ -2368,7 +2026,7 @@ export class DatabaseStorage implements IStorage {
         priority: daysWaiting,
         title: `Ожидает ${daysWaiting} дней`,
         description: `Счет ${inv.invoiceNumber} • ${inv.clientName || 'N/A'}`,
-        amount: parseFloat(inv.clientBill || "0"),
+        amount: parseNum(inv.clientBill),
         actionType: 'remind',
       });
     }
@@ -2423,7 +2081,7 @@ export class DatabaseStorage implements IStorage {
         priority_level: inv.priorityLevel || 'normal',
         client_name: inv.clientName || '',
         partner_name: inv.partnerName || '',
-        client_bill: parseFloat(inv.clientBill || "0"),
+        client_bill: parseNum(inv.clientBill),
       };
     });
   }
@@ -2516,7 +2174,7 @@ export class DatabaseStorage implements IStorage {
       if (!paymentsMap.has(p.id)) {
         paymentsMap.set(p.id, {
           id: p.id,
-          amount: parseFloat(p.amount),
+          amount: parseNum(p.amount),
           paymentDate: p.paymentDate,
           notes: p.notes,
           invoiceId: p.invoiceId,
@@ -2578,7 +2236,7 @@ export class DatabaseStorage implements IStorage {
       }
       expensesByInvoice.get(exp.invoiceId)!.push({
         description: exp.description || '',
-        amount: parseFloat(exp.amount),
+        amount: parseNum(exp.amount),
         date: exp.date || '',
       });
     }
@@ -2589,9 +2247,9 @@ export class DatabaseStorage implements IStorage {
         invoiceId: row.invoice.id,
         invoiceNumber: row.invoice.invoiceNumber || '',
         partnerName: row.invoice.partnerId ? partnerMap.get(row.invoice.partnerId) || '—' : '—',
-        totalBudget: parseFloat(row.calculations?.clientBaseAfterMargin || '0'),
-        spent: parseFloat(row.calculations?.executorExpensesTotal || '0'),
-        remaining: parseFloat(row.calculations?.clientRemaining || '0'),
+        totalBudget: parseNum(row.calculations?.clientBaseAfterMargin),
+        spent: parseNum(row.calculations?.executorExpensesTotal),
+        remaining: parseNum(row.calculations?.clientRemaining),
         expenses: expensesByInvoice.get(row.invoice.id) || [],
       }));
   }
@@ -2635,16 +2293,16 @@ export class DatabaseStorage implements IStorage {
     for (const p of paymentsData) {
       if (p.invoiceId) {
         const current = paymentsByInvoice.get(p.invoiceId) || 0;
-        paymentsByInvoice.set(p.invoiceId, current + parseFloat(p.amount));
+        paymentsByInvoice.set(p.invoiceId, current + parseNum(p.amount));
       }
     }
 
     return partnerInvoices
       .map(row => {
         const calc = row.calculations;
-        const clientBill = parseFloat(calc?.clientBill || '0');
-        const partnerCommission = parseFloat(calc?.commissionAmount || '0') || parseFloat(calc?.partnerShareFromMargin || '0');
-        const storedDebt = parseFloat(calc?.partnerTransferDue || '0');
+        const clientBill = parseNum(calc?.clientBill);
+        const partnerCommission = parseNum(calc?.commissionAmount) || parseNum(calc?.partnerShareFromMargin);
+        const storedDebt = parseNum(calc?.partnerTransferDue);
         const debtToAdmin = Math.max(0, storedDebt);
         const paidAmount = paymentsByInvoice.get(row.invoice.id) || 0;
         const remaining = Math.max(0, debtToAdmin - paidAmount);
@@ -2694,11 +2352,11 @@ export class DatabaseStorage implements IStorage {
 
     for (const row of agencyInvoices) {
       if (!row.calculations) continue;
-      totalPaid += parseFloat(row.calculations.clientBill || '0');
-      agencyMargin += parseFloat(row.calculations.agencyMargin || '0');
-      clientBudget += parseFloat(row.calculations.clientBaseAfterMargin || '0');
-      totalSpent += parseFloat(row.calculations.clientSpent || '0');
-      remainingBudget += parseFloat(row.calculations.clientRemaining || '0');
+      totalPaid += parseNum(row.calculations.clientBill);
+      agencyMargin += parseNum(row.calculations.agencyMargin);
+      clientBudget += parseNum(row.calculations.clientBaseAfterMargin);
+      totalSpent += parseNum(row.calculations.clientSpent);
+      remainingBudget += parseNum(row.calculations.clientRemaining);
     }
 
     return {
@@ -2743,7 +2401,7 @@ export class DatabaseStorage implements IStorage {
     const expensesByInvoice = new Map<string, number>();
     for (const exp of allExpenses) {
       const current = expensesByInvoice.get(exp.invoiceId) || 0;
-      expensesByInvoice.set(exp.invoiceId, current + parseFloat(exp.amount));
+      expensesByInvoice.set(exp.invoiceId, current + parseNum(exp.amount));
     }
     
     for (const row of allInvoices) {
@@ -2761,9 +2419,9 @@ export class DatabaseStorage implements IStorage {
       const scheme = row.invoice.scheme;
       
       // Use netProfitAdmin for profit calculation (includes expense deduction for admin-paid expenses)
-      const profit = parseFloat(row.calculations.netProfitAdmin || "0");
+      const profit = parseNum(row.calculations.netProfitAdmin);
       
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
       const invoiceExpenses = expensesByInvoice.get(row.invoice.id) || 0;
       
       monthlyData[monthIndex].totalSales += clientBill;
@@ -2832,7 +2490,7 @@ export class DatabaseStorage implements IStorage {
       const paymentYear = paymentDate.getFullYear();
       
       // Use netProfitAdmin for profit calculation (includes expense deduction for admin-paid expenses)
-      const profit = parseFloat(row.calculations.netProfitAdmin || "0");
+      const profit = parseNum(row.calculations.netProfitAdmin);
       
       // Find matching forecast period
       const forecastIndex = forecastData.findIndex(f => 
@@ -2855,20 +2513,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(recurringInvoices.isActive, true));
     
     for (const recurring of activeRecurring) {
-      const amount = parseFloat(recurring.amount || "0");
+      const amount = parseNum(recurring.amount);
       if (amount <= 0) continue;
       
       const scheme = recurring.scheme as InvoiceScheme;
       const partnerCommissionRate = recurring.partnerCommissionRate 
-        ? parseFloat(recurring.partnerCommissionRate) 
+        ? parseNum(recurring.partnerCommissionRate) 
         : undefined;
-      const defaultExpenses = recurring.defaultExpenses 
-        ? parseFloat(recurring.defaultExpenses) 
-        : 0;
+      const defaultExpenses = parseNum(recurring.defaultExpenses);
       
       // Calculate expected admin profit for this recurring invoice (including default expenses)
       const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
-      const expectedProfit = parseFloat(calculation.netProfitAdmin || "0");
+      const expectedProfit = parseNum(calculation.netProfitAdmin);
       
       if (expectedProfit <= 0) continue;
       
@@ -2978,8 +2634,8 @@ export class DatabaseStorage implements IStorage {
       id: row.invoice.id,
       invoiceNumber: row.invoice.invoiceNumber,
       clientName: row.clientName,
-      clientBill: parseFloat(row.calculations?.clientBill || '0'),
-      netProfitAdmin: parseFloat(row.calculations?.netProfitAdmin || '0'),
+      clientBill: parseNum(row.calculations?.clientBill),
+      netProfitAdmin: parseNum(row.calculations?.netProfitAdmin),
       status: row.invoice.status,
       paymentDate: row.invoice.paymentDate,
       isExpected: row.invoice.status === 'sent',
@@ -3022,7 +2678,7 @@ export class DatabaseStorage implements IStorage {
         paymentDate: row.invoice.paymentDate,
         clientName: row.clientName || 'Неизвестно',
         partnerName: row.partnerName || 'Неизвестно',
-        amount: parseFloat(row.calculations?.clientBill || "0"),
+        amount: parseNum(row.calculations?.clientBill),
         daysOverdue,
       });
     }
@@ -3078,7 +2734,7 @@ export class DatabaseStorage implements IStorage {
         expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
       }
       const amounts = expensesByInvoice.get(exp.invoiceId)!;
-      const amount = parseFloat(exp.amount);
+      const amount = parseNum(exp.amount);
       if (exp.paidByAdmin) {
         amounts.byAdmin += amount;
       } else {
@@ -3110,12 +2766,12 @@ export class DatabaseStorage implements IStorage {
       if (!row.calculations) continue;
       
       const scheme = row.invoice.scheme;
-      const cBill = parseFloat(row.calculations.clientBill || "0");
+      const cBill = parseNum(row.calculations.clientBill);
       const expenses = expensesByInvoice.get(row.invoice.id) || { byPartner: 0, byAdmin: 0 };
       
       // Use stored values as single source of truth
-      const storedDebt = parseFloat(row.calculations.partnerTransferDue || "0");
-      const partnerCommission = parseFloat(row.calculations.commissionAmount || "0");
+      const storedDebt = parseNum(row.calculations.partnerTransferDue);
+      const partnerCommission = parseNum(row.calculations.commissionAmount);
       const debt = Math.max(0, storedDebt);
       
       totalDebt += debt;
@@ -3133,7 +2789,7 @@ export class DatabaseStorage implements IStorage {
     }
     
     // Calculate total paid
-    const totalPaid = partnerPaymentsList.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const totalPaid = partnerPaymentsList.reduce((sum, p) => sum + parseNum(p.amount), 0);
     
     // Map payments with invoice numbers
     const paymentDetails = await Promise.all(
@@ -3194,8 +2850,8 @@ export class DatabaseStorage implements IStorage {
     for (const plan of plans) {
       const monthIndex = parseInt(plan.month) - 1;
       if (monthIndex >= 0 && monthIndex < 12) {
-        planFactData[monthIndex].salesTarget = parseFloat(plan.salesTarget || "0");
-        planFactData[monthIndex].receiptsTarget = parseFloat(plan.receiptsTarget || "0");
+        planFactData[monthIndex].salesTarget = parseNum(plan.salesTarget);
+        planFactData[monthIndex].receiptsTarget = parseNum(plan.receiptsTarget);
       }
     }
     
@@ -3214,7 +2870,7 @@ export class DatabaseStorage implements IStorage {
     for (const row of sentOrPaidInvoices) {
       if (!row.calculations) continue;
       
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
       
       // Actual Sales: based on invoice creation date (when invoice was issued/sent)
       const createdDate = row.invoice.createdAt 
@@ -3290,231 +2946,19 @@ export class DatabaseStorage implements IStorage {
     }
   }
   
-  async recalculateAllInvoices(): Promise<{ updated: number; errors: number }> {
-    console.log('[recalculateAllInvoices] Starting recalculation...');
-    let updated = 0;
-    let errors = 0;
-    
-    // Get all invoices
-    const allInvoices = await db.select().from(invoices);
-    console.log(`[recalculateAllInvoices] Found ${allInvoices.length} invoices to process`);
-    
-    for (const invoice of allInvoices) {
-      try {
-        // Get existing calculations
-        const [existing] = await db
-          .select()
-          .from(invoiceCalculations)
-          .where(eq(invoiceCalculations.invoiceId, invoice.id))
-          .limit(1);
-        
-        if (!existing) continue;
-        
-        // Get expenses for this invoice
-        const expenses = await this.getInvoiceExpenses(invoice.id);
-        const totalExpenses = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-        const expensesPaidByPartner = expenses
-          .filter(e => e.paidByAdmin !== true)
-          .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-        const expensesPaidByAdmin = expenses
-          .filter(e => e.paidByAdmin === true)
-          .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-        
-        const clientBill = parseFloat(existing.clientBill || "0");
-        const commissionRate = existing.commissionRate ? parseFloat(existing.commissionRate) : undefined;
-        const plannedExp = invoice.plannedExpenses ? parseFloat(invoice.plannedExpenses) : 0;
-        
-        // Recalculate with correct expense breakdown
-        const computed = calculateInvoiceServer(
-          invoice.scheme as InvoiceScheme,
-          clientBill,
-          commissionRate,
-          totalExpenses,
-          expensesPaidByPartner,
-          expensesPaidByAdmin,
-          plannedExp
-        );
-        
-        // Update
-        await db.update(invoiceCalculations)
-          .set({ ...computed, updatedAt: new Date() })
-          .where(eq(invoiceCalculations.invoiceId, invoice.id));
-        
-        updated++;
-      } catch (err) {
-        console.error(`Error recalculating invoice ${invoice.id}:`, err);
-        errors++;
-      }
-    }
-    
-    console.log(`[recalculateAllInvoices] Completed: ${updated} updated, ${errors} errors`);
-    return { updated, errors };
-  }
+  async recalculateAllInvoices() { return invoiceRepo.recalculateAllInvoices(db); }
 
   // Signed Acts methods
-  async createSignedAct(act: InsertSignedAct): Promise<SignedAct> {
-    const [created] = await db.insert(signedActs).values(act).returning();
-    return created;
-  }
-
-  async getSignedActsByInvoice(invoiceId: string, actType?: ActType): Promise<SignedAct[]> {
-    if (actType) {
-      return await db.select().from(signedActs)
-        .where(and(
-          eq(signedActs.invoiceId, invoiceId),
-          eq(signedActs.actType, actType)
-        ))
-        .orderBy(desc(signedActs.createdAt));
-    }
-    return await db.select().from(signedActs)
-      .where(eq(signedActs.invoiceId, invoiceId))
-      .orderBy(desc(signedActs.createdAt));
-  }
-
-  async getSignedAct(id: string): Promise<SignedAct | null> {
-    const [act] = await db.select().from(signedActs).where(eq(signedActs.id, id)).limit(1);
-    return act || null;
-  }
-
-  async deleteSignedAct(id: string): Promise<void> {
-    await db.delete(signedActs).where(eq(signedActs.id, id));
-  }
-
-  async getActsStatistics(excludeHidden: boolean = false): Promise<{
-    executorActs: number;
-    companyActs: number;
-    totalPaidInvoices: number;
-  }> {
-    const visibleCondition = excludeHidden
-      ? and(
-          eq(invoices.status, 'paid'),
-          or(
-            isNull(invoices.hideFromAssistant),
-            eq(invoices.hideFromAssistant, false)
-          )
-        )
-      : eq(invoices.status, 'paid');
-    
-    const paidInvoicesCount = await db.select({ count: sql<number>`count(*)` })
-      .from(invoices)
-      .where(visibleCondition);
-    
-    const visibleInvoices = await db.select({ id: invoices.id })
-      .from(invoices)
-      .where(visibleCondition);
-    const visibleInvoiceIds = visibleInvoices.map(inv => inv.id.toString());
-    
-    let executorActsCount = 0;
-    let companyActsCount = 0;
-    
-    if (visibleInvoiceIds.length > 0) {
-      const executorResult = await db.select({ count: sql<number>`count(*)` })
-        .from(signedActs)
-        .where(and(
-          eq(signedActs.actType, 'executor'),
-          inArray(signedActs.invoiceId, visibleInvoiceIds)
-        ));
-      executorActsCount = Number(executorResult[0]?.count || 0);
-      
-      const companyResult = await db.select({ count: sql<number>`count(*)` })
-        .from(signedActs)
-        .where(and(
-          eq(signedActs.actType, 'company'),
-          inArray(signedActs.invoiceId, visibleInvoiceIds)
-        ));
-      companyActsCount = Number(companyResult[0]?.count || 0);
-    }
-    
-    return {
-      executorActs: executorActsCount,
-      companyActs: companyActsCount,
-      totalPaidInvoices: Number(paidInvoicesCount[0]?.count || 0),
-    };
-  }
-
-  async getAssistantStats(): Promise<{
-    paidInvoicesCount: number;
-    executorActsCount: number;
-    companyActsCount: number;
-    totalPaidInvoices: number;
-    assistantBonus: number;
-    totalEarned: number;
-    totalPaid: number;
-  }> {
-    const stats = await this.getActsStatistics(true);
-    
-    const totalEarned = (stats.executorActs * 1000) + (stats.companyActs * 2000);
-    
-    // Get total already paid from payment history
-    const paymentsResult = await db.select({ 
-      totalPaid: sql<string>`COALESCE(SUM(amount::numeric), 0)` 
-    }).from(assistantBonusPayments);
-    const totalPaid = parseFloat(paymentsResult[0]?.totalPaid || '0');
-    
-    // assistantBonus = unpaid amount (accumulated since last payment)
-    const assistantBonus = Math.max(0, totalEarned - totalPaid);
-    
-    return {
-      paidInvoicesCount: stats.totalPaidInvoices,
-      executorActsCount: stats.executorActs,
-      companyActsCount: stats.companyActs,
-      totalPaidInvoices: stats.totalPaidInvoices,
-      assistantBonus,
-      totalEarned,
-      totalPaid,
-    };
-  }
-
-  async getAssistantBonusPayments(): Promise<AssistantBonusPayment[]> {
-    return db.select()
-      .from(assistantBonusPayments)
-      .orderBy(desc(assistantBonusPayments.paymentDate));
-  }
-
-  async createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment> {
-    const [created] = await db.insert(assistantBonusPayments)
-      .values(payment)
-      .returning();
-    return created;
-  }
-
-  async getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number; totalEarned: number; totalPaid: number }> {
-    // Get all acts statistics (excluding hidden invoices)
-    const stats = await this.getActsStatistics(true);
-    const executorActs = stats.executorActs;
-    const companyActs = stats.companyActs;
-    const totalEarned = (executorActs * 1000) + (companyActs * 2000);
-    
-    // Get total already paid from payment history
-    const paymentsResult = await db.select({ 
-      totalPaid: sql<string>`COALESCE(SUM(amount::numeric), 0)` 
-    }).from(assistantBonusPayments);
-    const totalPaid = parseFloat(paymentsResult[0]?.totalPaid || '0');
-    
-    // Unpaid = earned - paid
-    const unpaidTotal = Math.max(0, totalEarned - totalPaid);
-    
-    // Get invoices with acts for reference
-    const invoicesWithActs = await db.selectDistinct({ invoiceId: signedActs.invoiceId })
-      .from(signedActs)
-      .innerJoin(invoices, eq(invoices.id, signedActs.invoiceId))
-      .where(eq(invoices.status, 'paid'));
-
-    return { 
-      total: unpaidTotal, 
-      invoiceCount: invoicesWithActs.length, 
-      invoiceIds: invoicesWithActs.map(r => r.invoiceId),
-      executorActs,
-      companyActs,
-      totalEarned,
-      totalPaid
-    };
-  }
-
-  async markBonusesAsPaid(invoiceIds: string[]): Promise<void> {
-    // No longer needed - payments are tracked via assistant_bonus_payments table
-    // Kept for backwards compatibility but does nothing
-  }
+  async createSignedAct(act: InsertSignedAct)                        { return actsRepo.createSignedAct(db, act); }
+  async getSignedActsByInvoice(invoiceId: string, actType?: ActType)  { return actsRepo.getSignedActsByInvoice(db, invoiceId, actType); }
+  async getSignedAct(id: string)                                      { return actsRepo.getSignedAct(db, id); }
+  async deleteSignedAct(id: string)                                   { return actsRepo.deleteSignedAct(db, id); }
+  async getActsStatistics(excludeHidden = false)                      { return actsRepo.getActsStatistics(db, excludeHidden); }
+  async getAssistantStats()                                           { return actsRepo.getAssistantStats(db); }
+  async getAssistantBonusPayments()                                   { return actsRepo.getAssistantBonusPayments(db); }
+  async createAssistantBonusPayment(payment: InsertAssistantBonusPayment) { return actsRepo.createAssistantBonusPayment(db, payment); }
+  async getUnpaidBonusTotal()                                         { return actsRepo.getUnpaidBonusTotal(db); }
+  async markBonusesAsPaid(invoiceIds: string[])                       { return actsRepo.markBonusesAsPaid(db, invoiceIds); }
 
   async getDraftsStats(): Promise<DraftsStats> {
     const now = new Date();
@@ -3538,7 +2982,7 @@ export class DatabaseStorage implements IStorage {
     let fromRecurringAmount = 0;
     
     for (const row of draftInvoices) {
-      const clientBill = row.calculations?.clientBill ? parseFloat(row.calculations.clientBill) : 0;
+      const clientBill = parseNum(row.calculations?.clientBill);
       const issueDate = row.invoice.issueDate ? new Date(row.invoice.issueDate) : null;
       
       totalDrafts++;
@@ -3565,281 +3009,17 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getRecurringInvoices(): Promise<any[]> {
-    const result = await db.select({
-      recurring: recurringInvoices,
-      clientName: clients.name,
-      partnerName: partners.name,
-    })
-    .from(recurringInvoices)
-    .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
-    .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
-    .orderBy(asc(recurringInvoices.nextInvoiceDate));
-    
-    return result.map(r => ({
-      ...r.recurring,
-      clients: { name: r.clientName },
-      partners: { name: r.partnerName },
-    }));
-  }
-
-  async getRecurringInvoice(id: string): Promise<any | null> {
-    const [result] = await db.select()
-      .from(recurringInvoices)
-      .where(eq(recurringInvoices.id, id));
-    return result || null;
-  }
-
-  async createRecurringInvoice(data: any): Promise<any> {
-    const [created] = await db.insert(recurringInvoices)
-      .values({
-        clientId: data.clientId,
-        partnerId: data.partnerId,
-        scheme: data.scheme,
-        partnerCommissionRate: data.partnerCommissionRate,
-        amount: data.amount,
-        description: data.description,
-        frequency: data.frequency,
-        dayOfMonth: data.dayOfMonth,
-        startDate: data.startDate,
-        endDate: data.endDate || null,
-        nextInvoiceDate: data.nextInvoiceDate,
-        notes: data.notes,
-        hideFromAssistant: data.hideFromAssistant ?? false,
-        createdBy: data.createdBy,
-      })
-      .returning();
-    return created;
-  }
-
-  async getDueRecurringInvoices(upToDate?: Date): Promise<any[]> {
-    const checkDate = upToDate || new Date();
-    const dateStr = checkDate.toISOString().split('T')[0];
-    
-    const result = await db.select({
-      recurring: recurringInvoices,
-      clientName: clients.name,
-      partnerName: partners.name,
-    })
-    .from(recurringInvoices)
-    .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
-    .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
-    .where(and(
-      eq(recurringInvoices.isActive, true),
-      lte(recurringInvoices.nextInvoiceDate, dateStr)
-    ))
-    .orderBy(asc(recurringInvoices.nextInvoiceDate));
-    
-    return result.map(r => ({
-      ...r.recurring,
-      clients: { name: r.clientName },
-      partners: { name: r.partnerName },
-    }));
-  }
-
-  async getActiveRecurringInvoicesForCashFlow(): Promise<any[]> {
-    const result = await db.select({
-      recurring: recurringInvoices,
-      clientName: clients.name,
-      partnerName: partners.name,
-    })
-    .from(recurringInvoices)
-    .leftJoin(clients, eq(recurringInvoices.clientId, clients.id))
-    .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
-    .where(eq(recurringInvoices.isActive, true))
-    .orderBy(asc(recurringInvoices.nextInvoiceDate));
-    
-    return result.map(r => ({
-      ...r.recurring,
-      clients: { name: r.clientName },
-      partners: { name: r.partnerName },
-    }));
-  }
-
-  calculateNextInvoiceDate(currentDate: string, frequency: string): string {
-    const date = new Date(currentDate);
-    switch (frequency) {
-      case 'monthly':
-        date.setMonth(date.getMonth() + 1);
-        break;
-      case 'quarterly':
-        date.setMonth(date.getMonth() + 3);
-        break;
-      case 'yearly':
-        date.setFullYear(date.getFullYear() + 1);
-        break;
-    }
-    return date.toISOString().split('T')[0];
-  }
-
-  async generateInvoiceNumber(): Promise<string> {
-    const result = await db.select({ count: sql<number>`count(*)` })
-      .from(invoices);
-    const count = Number(result[0]?.count || 0) + 1;
-    return `INV-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`;
-  }
-
-  async createDraftFromRecurring(recurringId: string, invoiceDate?: string): Promise<any> {
-    const recurring = await this.getRecurringInvoice(recurringId);
-    if (!recurring) {
-      throw new Error('Recurring invoice not found');
-    }
-
-    const targetDate = invoiceDate || recurring.nextInvoiceDate;
-    const invoiceNumber = await this.generateInvoiceNumber();
-    
-    const invoice = await this.createInvoice(
-      {
-        invoiceNumber,
-        clientId: recurring.clientId,
-        partnerId: recurring.partnerId,
-        scheme: recurring.scheme,
-        partnerCommissionRate: recurring.partnerCommissionRate,
-        clientBill: recurring.amount,
-        description: recurring.description || `Recurring invoice for ${targetDate}`,
-        issueDate: targetDate,
-        status: 'draft',
-        hideFromAssistant: recurring.hideFromAssistant ?? false,
-        recurringInvoiceId: recurring.id,
-        createdBy: recurring.createdBy,
-      },
-      { clientBill: recurring.amount }
-    );
-
-    // Create default expense if specified in recurring template
-    const defaultExpenses = Number(recurring.defaultExpenses) || 0;
-    if (defaultExpenses > 0 && invoice?.id) {
-      await this.createInvoiceExpense({
-        invoiceId: invoice.id,
-        description: 'Расходы по умолчанию',
-        amount: String(defaultExpenses),
-        paidByAdmin: true,
-        createdBy: recurring.createdBy,
-      });
-      // Recalculate invoice after adding expense
-      await this.recalculateInvoiceExpenses(invoice.id);
-    }
-
-    const newNextDate = this.calculateNextInvoiceDate(recurring.nextInvoiceDate, recurring.frequency);
-    
-    const shouldDeactivate = recurring.endDate && new Date(newNextDate) > new Date(recurring.endDate);
-    
-    await db.update(recurringInvoices)
-      .set({
-        nextInvoiceDate: newNextDate,
-        isActive: !shouldDeactivate,
-        updatedAt: new Date(),
-      })
-      .where(eq(recurringInvoices.id, recurringId));
-
-    return invoice;
-  }
-
-  async processAllDueRecurringInvoices(): Promise<{ created: number; errors: string[] }> {
-    const dueInvoices = await this.getDueRecurringInvoices();
-    let created = 0;
-    const errors: string[] = [];
-
-    for (const recurring of dueInvoices) {
-      try {
-        await this.createDraftFromRecurring(recurring.id);
-        created++;
-      } catch (error: any) {
-        errors.push(`Failed to create invoice for recurring ${recurring.id}: ${error.message}`);
-      }
-    }
-
-    return { created, errors };
-  }
-
-  async generateBackdatedInvoices(recurringId: string, fromDate: string): Promise<{ created: number; invoices: any[] }> {
-    const recurring = await this.getRecurringInvoice(recurringId);
-    if (!recurring) {
-      throw new Error('Recurring invoice not found');
-    }
-
-    const createdInvoices: any[] = [];
-    let currentDate = new Date(fromDate);
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    
-    const dayOfMonth = parseInt(recurring.dayOfMonth) || 1;
-    currentDate.setDate(dayOfMonth);
-    
-    const defaultExpenses = Number(recurring.defaultExpenses) || 0;
-
-    while (currentDate <= today) {
-      if (recurring.endDate && currentDate > new Date(recurring.endDate)) {
-        break;
-      }
-      
-      const invoiceDate = currentDate.toISOString().split('T')[0];
-      const invoiceNumber = await this.generateInvoiceNumber();
-
-      const invoice = await this.createInvoice(
-        {
-          invoiceNumber,
-          clientId: recurring.clientId,
-          partnerId: recurring.partnerId,
-          scheme: recurring.scheme,
-          partnerCommissionRate: recurring.partnerCommissionRate,
-          clientBill: recurring.amount,
-          description: recurring.description || `Backdated invoice for ${invoiceDate}`,
-          issueDate: invoiceDate,
-          status: 'draft',
-          hideFromAssistant: recurring.hideFromAssistant ?? false,
-          recurringInvoiceId: recurring.id,
-          createdBy: recurring.createdBy,
-        },
-        { clientBill: recurring.amount }
-      );
-
-      // Create default expense if specified in recurring template
-      if (defaultExpenses > 0 && invoice?.id) {
-        await this.createInvoiceExpense({
-          invoiceId: invoice.id,
-          description: 'Расходы по умолчанию',
-          amount: String(defaultExpenses),
-          paidByAdmin: true,
-          createdBy: recurring.createdBy,
-        });
-        // Recalculate invoice after adding expense
-        await this.recalculateInvoiceExpenses(invoice.id);
-      }
-
-      createdInvoices.push(invoice);
-
-      switch (recurring.frequency) {
-        case 'monthly':
-          currentDate.setMonth(currentDate.getMonth() + 1);
-          break;
-        case 'quarterly':
-          currentDate.setMonth(currentDate.getMonth() + 3);
-          break;
-        case 'yearly':
-          currentDate.setFullYear(currentDate.getFullYear() + 1);
-          break;
-      }
-    }
-
-    return { created: createdInvoices.length, invoices: createdInvoices };
-  }
-
-  async updateRecurringInvoice(id: string, data: any): Promise<any | null> {
-    const [updated] = await db.update(recurringInvoices)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
-      .where(eq(recurringInvoices.id, id))
-      .returning();
-    return updated || null;
-  }
-
-  async deleteRecurringInvoice(id: string): Promise<void> {
-    await db.delete(recurringInvoices)
-      .where(eq(recurringInvoices.id, id));
-  }
+  async getRecurringInvoices()                                           { return recurringRepo.getRecurringInvoices(db); }
+  async getRecurringInvoice(id: string)                                  { return recurringRepo.getRecurringInvoice(db, id); }
+  async createRecurringInvoice(data: any)                                { return recurringRepo.createRecurringInvoice(db, data); }
+  async getDueRecurringInvoices(upToDate?: Date)                         { return recurringRepo.getDueRecurringInvoices(db, upToDate); }
+  async getActiveRecurringInvoicesForCashFlow()                          { return recurringRepo.getActiveRecurringInvoicesForCashFlow(db); }
+  async generateInvoiceNumber()                                          { return invoiceRepo.generateInvoiceNumber(db); }
+  async createDraftFromRecurring(recurringId: string, invoiceDate?: string) { return recurringRepo.createDraftFromRecurring(db, recurringId, invoiceDate); }
+  async processAllDueRecurringInvoices()                                 { return recurringRepo.processAllDueRecurringInvoices(db); }
+  async generateBackdatedInvoices(recurringId: string, fromDate: string) { return recurringRepo.generateBackdatedInvoices(db, recurringId, fromDate); }
+  async updateRecurringInvoice(id: string, data: any)                    { return recurringRepo.updateRecurringInvoice(db, id, data); }
+  async deleteRecurringInvoice(id: string)                               { return recurringRepo.deleteRecurringInvoice(db, id); }
 
   async getPartnerClientStats(partnerId: string, year: number): Promise<PartnerClientStatsData[]> {
     const monthNames = [
@@ -3877,21 +3057,21 @@ export class DatabaseStorage implements IStorage {
       const month = paymentDate.getMonth();
       const key = `${row.invoice.clientId}-${month}`;
       
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
       const scheme = row.invoice.scheme;
       
       let commission = 0;
       let clientRemaining = 0;
       
       if (scheme === 'agency_30' || scheme === 'agency_40') {
-        commission = parseFloat(row.calculations.partnerShareFromMargin || "0");
+        commission = parseNum(row.calculations.partnerShareFromMargin);
         const clientPercent = scheme === 'agency_40' ? 0.60 : 0.70;
         const clientBase = clientBill * clientPercent;
-        const expenses = parseFloat(row.calculations.executorExpensesTotal || "0");
+        const expenses = parseNum(row.calculations.executorExpensesTotal);
         clientRemaining = Math.max(0, clientBase - expenses);
       } else {
-        commission = parseFloat(row.calculations.commissionAmount || "0");
-        clientRemaining = parseFloat(row.calculations.clientRemaining || "0");
+        commission = parseNum(row.calculations.commissionAmount);
+        clientRemaining = parseNum(row.calculations.clientRemaining);
       }
       
       if (!statsMap.has(key)) {
@@ -3986,13 +3166,13 @@ export class DatabaseStorage implements IStorage {
 
       const clientId = row.invoice.clientId;
       const clientName = row.clientName || 'Unknown';
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
-      const executorExpenses = parseFloat(row.calculations.executorExpensesTotal || "0");
+      const clientBill = parseNum(row.calculations.clientBill);
+      const executorExpenses = parseNum(row.calculations.executorExpensesTotal);
       
       // Client money that partner must not spend (70% for agency_30, 60% for agency_40)
       const scheme = row.invoice.scheme;
       const clientBaseRate = scheme === 'agency_40' ? 0.6 : 0.7;
-      const clientBase = parseFloat(row.calculations.clientBaseAfterMargin || "0") || (clientBill * clientBaseRate);
+      const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || (clientBill * clientBaseRate);
       
       if (!clientMap.has(clientId)) {
         clientMap.set(clientId, {
@@ -4060,9 +3240,9 @@ export class DatabaseStorage implements IStorage {
     for (const row of allPartnerInvoices) {
       if (!row.calculations) continue;
       
-      const partnerTransferDue = parseFloat(row.calculations.partnerTransferDue || "0");
-      const plannedExpenses = parseFloat(row.calculations.plannedExpenses || "0");
-      const expensesPaidByPartner = parseFloat(row.calculations.expensesPaidByPartner || "0");
+      const partnerTransferDue = parseNum(row.calculations.partnerTransferDue);
+      const plannedExpenses = parseNum(row.calculations.plannedExpenses);
+      const expensesPaidByPartner = parseNum(row.calculations.expensesPaidByPartner);
       
       // Add to debt if partnerTransferDue > 0
       if (partnerTransferDue > 0) {
@@ -4085,7 +3265,7 @@ export class DatabaseStorage implements IStorage {
     // Calculate yearly commission from current year invoices
     for (const row of partnerInvoices) {
       if (!row.calculations) continue;
-      const commission = parseFloat(row.calculations.partnerCommission || "0");
+      const commission = parseNum(row.calculations.partnerCommission);
       yearlyCommission += commission;
     }
     
@@ -4093,7 +3273,7 @@ export class DatabaseStorage implements IStorage {
     const payments = await db.select().from(partnerPayments)
       .where(eq(partnerPayments.partnerId, partnerId));
     
-    const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount || "0"), 0);
+    const totalPaid = payments.reduce((sum, p) => sum + parseNum(p.amount), 0);
     debtToAdmin = Math.max(0, debtToAdmin - totalPaid);
     
     // Count signed acts for this partner's invoices
@@ -4180,7 +3360,7 @@ export class DatabaseStorage implements IStorage {
 
       const clientId = row.invoice.clientId;
       const clientName = row.clientName || 'Неизвестный клиент';
-      const adminProfit = parseFloat(row.calculations?.netProfitAdmin || "0");
+      const adminProfit = parseNum(row.calculations?.netProfitAdmin);
       const isPaid = row.invoice.status === 'paid';
       const isSent = row.invoice.status === 'sent';
 
@@ -4252,8 +3432,8 @@ export class DatabaseStorage implements IStorage {
       if (!row.calculations) continue;
       
       const status = row.invoice.status;
-      const netProfitAdmin = parseFloat(row.calculations.netProfitAdmin || "0");
-      const clientBill = parseFloat(row.calculations.clientBill || "0");
+      const netProfitAdmin = parseNum(row.calculations.netProfitAdmin);
+      const clientBill = parseNum(row.calculations.clientBill);
       
       if (category === 'received') {
         // Paid invoices in selected month - MUST match getAdminDashboardStats logic
@@ -4316,249 +3496,8 @@ export class DatabaseStorage implements IStorage {
     return result.sort((a, b) => b.netProfitAdmin - a.netProfitAdmin);
   }
 
-  async logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog> {
-    // For update_invoice actions, try to coalesce with recent logs from the same user on the same invoice
-    // Only coalesce if entityId is non-null to avoid merging unrelated updates
-    if (log.actionType === 'update_invoice' && log.entityId && log.accessTokenId) {
-      // Find recent log for same entity and action (within 10 seconds)
-      const recentLogs = await db.select()
-        .from(assistantActionLogs)
-        .where(
-          and(
-            eq(assistantActionLogs.accessTokenId, log.accessTokenId),
-            eq(assistantActionLogs.entityId, log.entityId),
-            eq(assistantActionLogs.actionType, 'update_invoice'),
-            sql`${assistantActionLogs.createdAt} > NOW() - INTERVAL '10 seconds'`
-          )
-        )
-        .orderBy(desc(assistantActionLogs.createdAt))
-        .limit(1);
-      
-      if (recentLogs.length > 0) {
-        const existingLog = recentLogs[0];
-        
-        // Merge details - new fields override old ones
-        let mergedDetails: any = {};
-        if (existingLog.details) {
-          try {
-            mergedDetails = JSON.parse(existingLog.details);
-          } catch {}
-        }
-        if (log.details) {
-          try {
-            const newDetails = JSON.parse(log.details);
-            mergedDetails = { ...mergedDetails, ...newDetails };
-          } catch {}
-        }
-        
-        // Use the new description if it contains more info (e.g., invoice number)
-        // Prefer description with invoice number over one with just client name
-        const newDescription = log.description || existingLog.description;
-        
-        // Update existing log with merged details, keep original createdAt
-        const [updated] = await db.update(assistantActionLogs)
-          .set({
-            details: JSON.stringify(mergedDetails),
-            description: newDescription,
-            // Keep original createdAt, don't update timestamp
-          })
-          .where(eq(assistantActionLogs.id, existingLog.id))
-          .returning();
-        
-        return updated;
-      }
-    }
-    
-    // No coalescing - create new log entry
-    const [created] = await db.insert(assistantActionLogs).values(log).returning();
-    return created;
-  }
-
-  async getAssistantActionLogs(filters: AssistantActionLogFilters): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }> {
-    const { limit = 100, offset = 0, role, dateFrom, dateTo } = filters;
-    
-    // Build where conditions
-    const conditions: SQL<unknown>[] = [];
-    if (role) {
-      conditions.push(eq(accessTokens.role, role));
-    }
-    if (dateFrom) {
-      conditions.push(sql`${assistantActionLogs.createdAt} >= ${dateFrom}::timestamp`);
-    }
-    if (dateTo) {
-      conditions.push(sql`${assistantActionLogs.createdAt} <= ${dateTo}::timestamp + interval '1 day'`);
-    }
-    
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-    
-    // Count query
-    const countQuery = db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(assistantActionLogs)
-      .leftJoin(accessTokens, eq(assistantActionLogs.accessTokenId, accessTokens.id));
-    
-    if (whereClause) {
-      countQuery.where(whereClause);
-    }
-    
-    const [countResult] = await countQuery;
-    
-    // Data query
-    const dataQuery = db
-      .select({
-        log: assistantActionLogs,
-        tokenCode: accessTokens.code,
-        tokenRole: accessTokens.role,
-      })
-      .from(assistantActionLogs)
-      .leftJoin(accessTokens, eq(assistantActionLogs.accessTokenId, accessTokens.id));
-    
-    if (whereClause) {
-      dataQuery.where(whereClause);
-    }
-    
-    const logsData = await dataQuery
-      .orderBy(desc(assistantActionLogs.createdAt))
-      .limit(limit)
-      .offset(offset);
-
-    // Collect all client, partner, and invoice IDs from log details
-    const clientIds = new Set<string>();
-    const partnerIds = new Set<string>();
-    const invoiceIds = new Set<string>();
-    
-    for (const row of logsData) {
-      if (row.log.details) {
-        try {
-          const parsed = JSON.parse(row.log.details);
-          if (parsed.clientId) clientIds.add(parsed.clientId);
-          if (parsed.partnerId) partnerIds.add(parsed.partnerId);
-          if (parsed.invoiceId) invoiceIds.add(parsed.invoiceId);
-        } catch {}
-      }
-      // Also check entityId for invoice actions
-      if (row.log.entityId && row.log.actionType.includes('invoice')) {
-        invoiceIds.add(row.log.entityId);
-      }
-    }
-    
-    // Fetch client, partner, and invoice data
-    const clientMap = new Map<string, string>();
-    const partnerMap = new Map<string, string>();
-    const invoiceMap = new Map<string, { number: string; status: string }>();
-    
-    if (clientIds.size > 0) {
-      const clientsData = await db.select({ id: clients.id, name: clients.name })
-        .from(clients)
-        .where(inArray(clients.id, Array.from(clientIds)));
-      for (const c of clientsData) {
-        clientMap.set(c.id, c.name);
-      }
-    }
-    
-    if (partnerIds.size > 0) {
-      const partnersData = await db.select({ id: partners.id, name: partners.name })
-        .from(partners)
-        .where(inArray(partners.id, Array.from(partnerIds)));
-      for (const p of partnersData) {
-        partnerMap.set(p.id, p.name);
-      }
-    }
-    
-    if (invoiceIds.size > 0) {
-      // Fetch invoices with client info via join
-      const invoicesData = await db.select({ 
-        id: invoices.id, 
-        invoiceNumber: invoices.invoiceNumber, 
-        status: invoices.status,
-        clientId: invoices.clientId,
-        description: invoices.description,
-        clientName: clients.name
-      })
-        .from(invoices)
-        .leftJoin(clients, eq(invoices.clientId, clients.id))
-        .where(inArray(invoices.id, Array.from(invoiceIds)));
-      for (const inv of invoicesData) {
-        // Use invoice number, or client name, or description as fallback
-        const displayName = inv.invoiceNumber || inv.clientName || inv.description || inv.id;
-        invoiceMap.set(inv.id, { number: displayName, status: inv.status });
-      }
-    }
-    
-    // Enrich logs with names and invoice numbers
-    const logs: AssistantActionLogWithDetails[] = logsData.map(row => {
-      let enrichedDetails = row.log.details;
-      let enrichedDescription = row.log.description;
-      let parsedDetails: any = null;
-      
-      // Parse details first to get stored names
-      if (row.log.details) {
-        try {
-          parsedDetails = JSON.parse(row.log.details);
-        } catch {}
-      }
-      
-      // FIRST: Enrich parsedDetails with names from database (for old logs that only have IDs)
-      if (parsedDetails) {
-        if (parsedDetails.clientId && clientMap.has(parsedDetails.clientId) && !parsedDetails.clientName) {
-          parsedDetails.clientName = clientMap.get(parsedDetails.clientId);
-        }
-        if (parsedDetails.partnerId && partnerMap.has(parsedDetails.partnerId) && !parsedDetails.partnerName) {
-          parsedDetails.partnerName = partnerMap.get(parsedDetails.partnerId);
-        }
-        if (parsedDetails.invoiceId && invoiceMap.has(parsedDetails.invoiceId)) {
-          const invData = invoiceMap.get(parsedDetails.invoiceId)!;
-          if (!parsedDetails.invoiceNumber) parsedDetails.invoiceNumber = invData.number;
-          parsedDetails.invoiceStatus = invData.status;
-        }
-        // Add status from entityId invoice if action is about invoice
-        if (row.log.entityId && invoiceMap.has(row.log.entityId) && !parsedDetails.status) {
-          parsedDetails.invoiceStatus = invoiceMap.get(row.log.entityId)!.status;
-        }
-        enrichedDetails = JSON.stringify(parsedDetails);
-      }
-      
-      // THEN: Replace invoice UUID in description with readable name
-      if (row.log.entityId && row.log.entityType === "invoice") {
-        // Helper to check if string looks like UUID
-        const isUUID = (str: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-        
-        let displayName: string | null = null;
-        
-        // Try stored/enriched details (now includes names from DB for old logs)
-        if (parsedDetails) {
-          displayName = parsedDetails.invoiceNumber || parsedDetails.clientName || parsedDetails.partnerName || parsedDetails.description || null;
-        }
-        
-        // Fall back to database data if no stored name
-        if (!displayName && invoiceMap.has(row.log.entityId)) {
-          const invData = invoiceMap.get(row.log.entityId)!;
-          // Only use if it's not a UUID
-          if (!isUUID(invData.number)) {
-            displayName = invData.number;
-          }
-        }
-        
-        // Replace UUID in description with readable name
-        if (displayName && enrichedDescription.includes(row.log.entityId)) {
-          enrichedDescription = enrichedDescription.replace(row.log.entityId, displayName);
-        }
-      }
-      
-      return {
-        ...row.log,
-        description: enrichedDescription,
-        details: enrichedDetails,
-        tokenCode: row.tokenCode || undefined,
-        tokenRole: row.tokenRole || undefined,
-      };
-    });
-
-    return {
-      logs,
-      total: countResult?.count || 0,
-    };
-  }
+  async logAssistantAction(log: InsertAssistantActionLog) { return actionLogRepo.logAssistantAction(db, log); }
+  async getAssistantActionLogs(filters: AssistantActionLogFilters) { return actionLogRepo.getAssistantActionLogs(db, filters); }
 }
 
 export const storage = new DatabaseStorage();

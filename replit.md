@@ -45,12 +45,24 @@ Security is implemented through XSS protection via input sanitization and React'
 
 ## Backend Repository Architecture
 
-`server/storage.ts` is gradually being split into domain repositories under `server/repositories/`:
+`server/storage.ts` has been decomposed into domain repositories under `server/repositories/`:
 - **`userRepo.ts`**: auth/session/access-token methods
 - **`partnerRepo.ts`**: partners, partner-payments
 - **`clientRepo.ts`**: clients, client-partner relations
+- **`invoiceRepo.ts`**: invoice/expense/document CRUD, `calculateInvoiceServer`, `generateInvoiceNumber`, IDOR-safe `getInvoice(db, id, role?, partnerId?, clientId?)`
+- **`recurringRepo.ts`**: recurring invoice templates, draft generation, backdating
+- **`actsRepo.ts`**: signed acts, assistant bonus payments and statistics
+- **`actionLogRepo.ts`**: assistant audit log writes + enriched reads
 
-`DatabaseStorage` in `server/storage.ts` delegates all moved methods to these repos (thin one-liner delegates). Cross-repo calls use structural duck typing — all repos accept the same `db` instance.
+`DatabaseStorage` in `server/storage.ts` delegates all methods to these repos as thin one-liner delegates. Cross-repo calls pass the same `db` instance directly.
+
+**Middleware & Permissions** are fully extracted:
+- **`server/middleware.ts`**: `AuthenticatedRequest`, `SESSION_COOKIE`, `authMiddleware`, `requireRole`
+- **`server/permissions.ts`**: all `ROLE_*_PERMISSIONS` constants and projection helpers
+
+**IDOR Protection**: `getInvoice(db, id, role, partnerId, clientId)` adds ownership WHERE clauses for partner/client roles so no cross-tenant data leaks via direct ID lookup. `IStorage.getInvoiceForRole()` is the typed interface used by routes.
+
+**Type Safety**: All numeric conversions use `parseNum()` from `shared/financialEngine.ts` — no raw `parseFloat` calls anywhere in the server.
 
 **DB Indexes** (applied to production DB): `idx_invoices_status`, `idx_invoices_payment_date`, `idx_invoices_created_at`, `idx_invoices_partner_id`, `idx_invoices_client_id`, `idx_invoices_recurring_id`, `idx_invoices_status_payment` (composite), `idx_invoice_calc_invoice_id`.
 

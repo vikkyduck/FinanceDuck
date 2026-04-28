@@ -133,7 +133,7 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
 
 exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { invoiceId, clientId } = req.body;
+    const { invoiceId, clientId, dateFrom, dateTo } = req.body;
 
     if (!invoiceId && !clientId) {
       return res.status(400).json({ error: "invoiceId или clientId обязателен" });
@@ -164,6 +164,15 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
       if (invoices.length === 0) {
         return res.status(403).json({ error: "Нет доступа к этому счёту или клиенту" });
       }
+    }
+
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      invoices = invoices.filter(inv => inv.paymentDate && new Date(inv.paymentDate) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      invoices = invoices.filter(inv => inv.paymentDate && new Date(inv.paymentDate) <= to);
     }
 
     invoices = invoices.filter(inv => inv.status !== "cancelled");

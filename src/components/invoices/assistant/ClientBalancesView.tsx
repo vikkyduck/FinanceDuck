@@ -186,7 +186,7 @@ function InvoiceRow({ inv }: { inv: RawInvoice }) {
   );
 }
 
-async function downloadClientReport(clientId: string, clientName: string) {
+async function downloadClientReport(clientId: string, clientName: string, dateFrom?: string, dateTo?: string) {
   const csrfToken = localStorage.getItem("csrf_token");
   const response = await fetch('/api/admin/export/client-report', {
     method: 'POST',
@@ -195,7 +195,7 @@ async function downloadClientReport(clientId: string, clientName: string) {
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
     },
     credentials: 'include',
-    body: JSON.stringify({ clientId }),
+    body: JSON.stringify({ clientId, ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) }),
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({ error: 'Ошибка сервера' }));
@@ -216,12 +216,14 @@ async function downloadClientReport(clientId: string, clientName: string) {
 function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setDownloading(true);
     try {
-      await downloadClientReport(group.clientId, group.clientName);
+      await downloadClientReport(group.clientId, group.clientName, dateFrom || undefined, dateTo || undefined);
       toast.success("Отчёт скачан");
     } catch (err: any) {
       toast.error("Ошибка при скачивании", { description: err.message });
@@ -305,7 +307,26 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
         </button>
 
         {isAdmin && (
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-7 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded bg-transparent text-slate-600 dark:text-slate-300"
+              data-testid={`input-date-from-${group.clientId}`}
+              title="Начало периода"
+            />
+            <span className="text-xs text-slate-400">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-7 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded bg-transparent text-slate-600 dark:text-slate-300"
+              data-testid={`input-date-to-${group.clientId}`}
+              title="Конец периода"
+            />
             <Button
               variant="ghost"
               size="sm"

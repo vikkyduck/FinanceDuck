@@ -51,3 +51,7 @@ defaultBucketID = "replit-objstore-d0c6102a-e3a6-4b70-b8b9-ef6a6dc6f5ad"
 
 [userenv.shared]
 BACKUP_BUCKET_NAME = "replit-objstore-d0c6102a-e3a6-4b70-b8b9-ef6a6dc6f5ad"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000

@@ -125,7 +125,7 @@ recurringRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ass
       }
     }
     const buffer = await workbook.xlsx.writeBuffer();
-    const roleLabel = role === "accountant" ? "бухгалтерия" : "ассистент";
+    const roleLabel = role === "accountant" ? "accountant" : "assistant";
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", `attachment; filename=export_${roleLabel}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     res.send(Buffer.from(buffer as ArrayBuffer));

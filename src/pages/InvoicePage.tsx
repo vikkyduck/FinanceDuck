@@ -12,7 +12,7 @@ import { SignedActsSection } from "@/components/invoices/SignedActsSection";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useDownloadReport } from "@/hooks/useDownloadReport";
 
 interface Invoice {
   id: string;
@@ -70,7 +70,8 @@ export default function InvoicePage() {
   const isPartner = role === "partner";
   const isClient = role === "client";
 
-  const [downloading, setDownloading] = useState(false);
+  const { download: downloadReport, isDownloadingKey } = useDownloadReport();
+  const downloading = isDownloadingKey();
 
   const { data: invoice, isLoading: invoiceLoading } = useQuery<Invoice>({
     queryKey: ['/api/invoices', id],
@@ -78,40 +79,15 @@ export default function InvoicePage() {
     enabled: !!id,
   });
 
-  const handleDownloadClientReport = async () => {
+  const handleDownloadClientReport = () => {
     if (!id) return;
-    setDownloading(true);
-    try {
-      const csrfToken = localStorage.getItem("csrf_token");
-      const response = await fetch('/api/admin/export/client-report', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ invoiceId: id }),
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Ошибка сервера' }));
-        throw new Error(err.error || `HTTP ${response.status}`);
-      }
-      const buffer = await response.arrayBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const num = invoice?.invoiceNumber ? `_${invoice.invoiceNumber}` : '';
-      a.download = `отчёт_для_клиента${num}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
-      toast({ title: "Отчёт скачан" });
-    } catch (error: any) {
-      toast({ title: "Ошибка", description: error.message || "Не удалось сформировать отчёт", variant: "destructive" });
-    } finally {
-      setDownloading(false);
-    }
+    const num = invoice?.invoiceNumber ? `_${invoice.invoiceNumber}` : '';
+    const filename = `отчёт_для_клиента${num}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    downloadReport({
+      url: '/api/admin/export/client-report',
+      body: { invoiceId: id },
+      filename,
+    });
   };
 
   const { data: expenses = [] } = useQuery<Expense[]>({

@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { Card } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { useDownloadReport } from "@/hooks/useDownloadReport";
 import {
   Table,
   TableBody,
@@ -78,52 +78,29 @@ export const DoNotSpendDashboard = ({
   showTitle = true,
   className,
 }: DoNotSpendDashboardProps) => {
-  const { isAuthenticated, role, csrfToken } = useAuth();
+  const { isAuthenticated, role } = useAuth();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { download: downloadReport, isDownloadingKey } = useDownloadReport();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [downloadingClientId, setDownloadingClientId] = useState<string | null>(null);
 
   const openInvoice = (invoiceId: string) => {
     setSelectedInvoiceId(invoiceId);
     setDetailsDialogOpen(true);
   };
 
-  const handleDownloadClientReport = async (clientId: string, clientName: string, e: React.MouseEvent) => {
+  const handleDownloadClientReport = (clientId: string, clientName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setDownloadingClientId(clientId);
-    try {
-      const response = await fetch('/api/admin/export/client-report', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ clientId }),
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: 'Ошибка сервера' }));
-        throw new Error(err.error || `HTTP ${response.status}`);
-      }
-      const buffer = await response.arrayBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `отчёт_для_клиента_${clientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
-      toast({ title: "Отчёт скачан" });
-    } catch (error: any) {
-      toast({ title: "Ошибка", description: error.message || "Не удалось сформировать отчёт", variant: "destructive" });
-    } finally {
-      setDownloadingClientId(null);
-    }
+    const safeName = clientName.replace(/\s+/g, '_');
+    const filename = `отчёт_для_клиента_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    downloadReport({
+      url: '/api/admin/export/client-report',
+      body: { clientId },
+      filename,
+      key: clientId,
+    });
   };
 
   const { data: summaries = [], isLoading: loadingAgency } = useQuery<DoNotSpendSummary[]>({
@@ -278,12 +255,12 @@ export const DoNotSpendDashboard = ({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 shrink-0"
-                        disabled={downloadingClientId === summary.clientId}
+                        disabled={isDownloadingKey(summary.clientId)}
                         onClick={(e) => handleDownloadClientReport(summary.clientId, summary.clientName, e)}
                         data-testid={`mobile-button-download-client-report-${summary.clientId}`}
                         title="Скачать отчёт для клиента"
                       >
-                        {downloadingClientId === summary.clientId
+                        {isDownloadingKey(summary.clientId)
                           ? <Loader2 className="h-4 w-4 animate-spin" />
                           : <Download className="h-4 w-4" />}
                       </Button>
@@ -381,12 +358,12 @@ export const DoNotSpendDashboard = ({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              disabled={downloadingClientId === summary.clientId}
+                              disabled={isDownloadingKey(summary.clientId)}
                               onClick={(e) => handleDownloadClientReport(summary.clientId, summary.clientName, e)}
                               data-testid={`button-download-client-report-${summary.clientId}`}
                               title="Скачать отчёт для клиента"
                             >
-                              {downloadingClientId === summary.clientId
+                              {isDownloadingKey(summary.clientId)
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 : <Download className="h-3.5 w-3.5" />}
                             </Button>

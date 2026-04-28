@@ -7,8 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, Search, Users, TrendingUp, Wallet, CircleDollarSign, Download, Loader2 } from "lucide-react";
 import { apiGet } from "@/lib/api";
-import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { useDownloadReport } from "@/hooks/useDownloadReport";
 
 // Raw shape coming from /api/invoices (array of invoices, snake_case from DB)
 interface RawInvoice {
@@ -186,50 +186,26 @@ function InvoiceRow({ inv }: { inv: RawInvoice }) {
   );
 }
 
-async function downloadClientReport(clientId: string, clientName: string, dateFrom?: string, dateTo?: string) {
-  const csrfToken = localStorage.getItem("csrf_token");
-  const response = await fetch('/api/admin/export/client-report', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
-    },
-    credentials: 'include',
-    body: JSON.stringify({ clientId, ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Ошибка сервера' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
-  }
-  const buffer = await response.arrayBuffer();
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const safeName = clientName.replace(/[^a-zA-Zа-яА-Я0-9_\- ]/g, "").trim().replace(/\s+/g, "_");
-  a.download = `отчёт_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
-}
-
 function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const { download: downloadReport, isDownloadingKey } = useDownloadReport();
+  const downloading = isDownloadingKey();
 
-  const handleDownload = async (e: React.MouseEvent) => {
+  const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setDownloading(true);
-    try {
-      await downloadClientReport(group.clientId, group.clientName, dateFrom || undefined, dateTo || undefined);
-      toast.success("Отчёт скачан");
-    } catch (err: any) {
-      toast.error("Ошибка при скачивании", { description: err.message });
-    } finally {
-      setDownloading(false);
-    }
+    const safeName = group.clientName.replace(/[^a-zA-Zа-яА-Я0-9_\- ]/g, "").trim().replace(/\s+/g, "_");
+    const filename = `отчёт_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    downloadReport({
+      url: '/api/admin/export/client-report',
+      body: {
+        clientId: group.clientId,
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
+      },
+      filename,
+    });
   };
   const usedPct =
     group.totalBudget > 0

@@ -64,10 +64,11 @@ export default function InvoicePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { role, partnerId: authPartnerId } = useAuth();
+  const { role, partnerId: authPartnerId, clientId: authClientId } = useAuth();
   const { toast } = useToast();
   const isAdmin = role === "admin";
   const isPartner = role === "partner";
+  const isClient = role === "client";
 
   const [downloading, setDownloading] = useState(false);
 
@@ -183,7 +184,7 @@ export default function InvoicePage() {
             Детальная информация по счету
           </p>
         </div>
-        {(isAdmin || (isPartner && invoice.partnerId === authPartnerId)) && (
+        {(isAdmin || (isPartner && invoice.partnerId === authPartnerId) || (isClient && invoice.clientId === authClientId)) && (
           <Button
             variant="outline"
             size="sm"
@@ -192,7 +193,7 @@ export default function InvoicePage() {
             data-testid="button-download-client-report"
           >
             {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-            Отчёт для клиента
+            {isClient ? "Скачать отчёт" : "Отчёт для клиента"}
           </Button>
         )}
       </div>

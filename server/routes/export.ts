@@ -131,11 +131,12 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
   }
 });
 
-exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
+exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin", "partner", "client"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { invoiceId, clientId, dateFrom, dateTo } = req.body;
 
-    if (!invoiceId && !clientId) {
+    // Clients always download their own data — no body params needed from them
+    if (req.user?.role !== "client" && !invoiceId && !clientId) {
       return res.status(400).json({ error: "invoiceId или clientId обязателен" });
     }
 
@@ -163,6 +164,19 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
       invoices = invoices.filter(inv => inv.partnerId === partnerOwnId);
       if (invoices.length === 0) {
         return res.status(403).json({ error: "Нет доступа к этому счёту или клиенту" });
+      }
+    }
+
+    // Clients may only download their own data
+    if (req.user?.role === "client") {
+      const ownClientId = req.user.clientId;
+      if (!ownClientId) {
+        return res.status(403).json({ error: "Клиент не идентифицирован" });
+      }
+      invoices = invoices.filter(inv => inv.clientId === ownClientId);
+      // If a specific invoiceId was supplied, ensure it belongs to this client
+      if (invoiceId && invoices.length === 0) {
+        return res.status(403).json({ error: "Нет доступа к этому счёту" });
       }
     }
 

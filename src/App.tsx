@@ -24,6 +24,7 @@ import AccessCodesPage from "./pages/AccessCodesPage";
 import StatsPage from "./pages/StatsPage";
 import AssistantLogsPage from "./pages/AssistantLogsPage";
 import AccountingPage from "./pages/AccountingPage";
+import ClientBalancesPage from "./pages/ClientBalancesPage";
 import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
 
 // Component that routes "/" based on role
@@ -123,6 +124,14 @@ const AnimatedRoutes = () => {
           element={
             <ProtectedRoute>
               <AccountingPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/client-balances" 
+          element={
+            <ProtectedRoute>
+              <ClientBalancesPage />
             </ProtectedRoute>
           } 
         />

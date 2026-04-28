@@ -128,6 +128,11 @@ export function AppSidebar() {
           badge: alertCounts.pendingInvoices > 0 ? alertCounts.pendingInvoices : undefined,
           badgeVariant: "secondary" as const
         },
+        ...(role === "assistant" ? [{
+          title: "По клиентам",
+          url: "/client-balances",
+          icon: UserCheck,
+        }] : []),
         ...(role === "admin" ? [{
           title: "Аналитика",
           url: "/stats",

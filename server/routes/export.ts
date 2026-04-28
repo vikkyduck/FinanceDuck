@@ -278,9 +278,16 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
 
     const buffer = await workbook.xlsx.writeBuffer();
     const safeClientName = clientName.replace(/[^a-zA-Zа-яА-Я0-9_\- ]/g, "").trim().replace(/\s+/g, "_");
-    const dateStr = new Date().toISOString().split("T")[0];
+    const safeDate = (d: string) => d.replace(/[^0-9\-]/g, "").slice(0, 10);
+    const dateSuffix = dateFrom && dateTo
+      ? `_${safeDate(dateFrom)}_${safeDate(dateTo)}`
+      : dateFrom
+      ? `_${safeDate(dateFrom)}`
+      : dateTo
+      ? `_${safeDate(dateTo)}`
+      : `_${new Date().toISOString().split("T")[0]}`;
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename=client_report_${safeClientName}_${dateStr}.xlsx`);
+    res.setHeader("Content-Disposition", `attachment; filename=client_report_${safeClientName}${dateSuffix}.xlsx`);
     res.send(Buffer.from(buffer));
   } catch (error: any) {
     console.error("Client report export error:", error);

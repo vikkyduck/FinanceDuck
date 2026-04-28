@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/hooks/useAuth";
 import { useAlertCounts } from "@/hooks/useAlertCounts";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback } from "react";
@@ -38,6 +39,7 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const { role } = useUserRole();
+  const { logout } = useAuth();
   const { toast } = useToast();
   const alertCounts = useAlertCounts();
   const [isNavigating, setIsNavigating] = useState(false);
@@ -53,16 +55,16 @@ export function AppSidebar() {
     setTimeout(() => setIsNavigating(false), 300);
   }, [isNavigating, location.pathname, location.search, navigate]);
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
     if (isNavigating) return;
     
-    sessionStorage.removeItem('access_session');
+    await logout();
     toast({
       title: "Выход выполнен",
       description: "Вы успешно вышли из системы",
     });
     navigate("/auth");
-  }, [isNavigating, navigate, toast]);
+  }, [isNavigating, logout, navigate, toast]);
 
   const getMenuGroups = () => {
     const groups: Array<{

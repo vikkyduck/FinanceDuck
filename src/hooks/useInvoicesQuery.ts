@@ -35,6 +35,7 @@ export interface Invoice {
     netProfitAdmin?: number;
     executorExpensesTotal?: number;
     clientRemaining?: number;
+    clientBaseAfterMargin?: number;
     partnerTransferDue?: number;
   };
 }

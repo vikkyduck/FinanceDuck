@@ -1,13 +1,28 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronDown, ChevronRight, Search, Users, TrendingUp, Wallet, CircleDollarSign } from "lucide-react";
-import { useInvoicesQuery, Invoice } from "@/hooks/useInvoicesQuery";
-import { useAuth } from "@/hooks/useAuth";
+import { apiGet } from "@/lib/api";
+
+// Raw shape coming from /api/invoices (array of invoices, snake_case from DB)
+interface RawInvoice {
+  id: string;
+  invoiceNumber?: string;
+  status: string;
+  scheme: string;
+  clientBill?: string | number;
+  clientId?: string | null;
+  // joined client object
+  client?: { id: string; name: string } | null;
+  calculations?: {
+    clientRemaining?: string | number | null;
+    clientBaseAfterMargin?: string | number | null;
+    executorExpensesTotal?: string | number | null;
+  } | null;
+}
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Черновик",
@@ -31,6 +46,12 @@ const SCHEME_LABELS: Record<string, string> = {
   commission_based: "Соглашение",
 };
 
+function n(v: string | number | null | undefined): number {
+  if (v === null || v === undefined) return 0;
+  const parsed = typeof v === "string" ? parseFloat(v) : v;
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 function formatRub(amount: number) {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -43,40 +64,41 @@ function isAgency(scheme: string) {
   return scheme === "agency_30" || scheme === "agency_40";
 }
 
-function getWorkingBudget(inv: Invoice): number {
+function getWorkingBudget(inv: RawInvoice): number {
   if (isAgency(inv.scheme)) {
-    return inv.calculations?.clientBaseAfterMargin ?? inv.clientBill ?? 0;
+    const base = n(inv.calculations?.clientBaseAfterMargin);
+    return base > 0 ? base : n(inv.clientBill);
   }
-  return inv.clientBill ?? 0;
+  return n(inv.clientBill);
 }
 
-function getSpent(inv: Invoice): number {
-  return inv.calculations?.executorExpensesTotal ?? 0;
+function getSpent(inv: RawInvoice): number {
+  return n(inv.calculations?.executorExpensesTotal);
 }
 
-function getRemaining(inv: Invoice): number {
-  const rem = inv.calculations?.clientRemaining;
-  if (rem !== undefined && rem !== null) return rem;
+function getRemaining(inv: RawInvoice): number {
+  const rem = n(inv.calculations?.clientRemaining);
+  if (rem !== 0) return rem;
   return getWorkingBudget(inv) - getSpent(inv);
 }
 
 interface ClientGroup {
   clientId: string;
   clientName: string;
-  invoices: Invoice[];
+  invoices: RawInvoice[];
   totalBudget: number;
   totalSpent: number;
   totalRemaining: number;
   activeCount: number;
 }
 
-function buildClientGroups(invoices: Invoice[]): ClientGroup[] {
+function buildClientGroups(invoices: RawInvoice[]): ClientGroup[] {
   const map = new Map<string, ClientGroup>();
 
   for (const inv of invoices) {
     if (inv.status === "cancelled") continue;
     const key = inv.clientId ?? "__no_client__";
-    const name = inv.clientName ?? "Без клиента";
+    const name = inv.client?.name ?? "Без клиента";
 
     if (!map.has(key)) {
       map.set(key, {
@@ -103,7 +125,7 @@ function buildClientGroups(invoices: Invoice[]): ClientGroup[] {
   );
 }
 
-function InvoiceRow({ inv }: { inv: Invoice }) {
+function InvoiceRow({ inv }: { inv: RawInvoice }) {
   const budget = getWorkingBudget(inv);
   const spent = getSpent(inv);
   const remaining = getRemaining(inv);
@@ -292,14 +314,15 @@ function SummaryBar({ groups }: { groups: ClientGroup[] }) {
 }
 
 export function ClientBalancesView() {
-  const { role } = useAuth();
-  const { data, isLoading } = useInvoicesQuery(
-    (role as "assistant" | "admin") ?? "assistant",
-    {}
-  );
+  const { data, isLoading } = useQuery<RawInvoice[]>({
+    queryKey: ['/api/invoices'],
+    queryFn: () => apiGet<RawInvoice[]>('/invoices'),
+    staleTime: 30000,
+  });
+
   const [search, setSearch] = useState("");
 
-  const invoices = data?.invoices ?? [];
+  const invoices = Array.isArray(data) ? data : [];
 
   const groups = useMemo(() => buildClientGroups(invoices), [invoices]);
 

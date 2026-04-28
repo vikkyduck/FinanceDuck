@@ -64,9 +64,10 @@ export default function InvoicePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { role } = useAuth();
+  const { role, partnerId: authPartnerId } = useAuth();
   const { toast } = useToast();
   const isAdmin = role === "admin";
+  const isPartner = role === "partner";
 
   const [downloading, setDownloading] = useState(false);
 
@@ -182,7 +183,7 @@ export default function InvoicePage() {
             Детальная информация по счету
           </p>
         </div>
-        {isAdmin && (
+        {(isAdmin || (isPartner && invoice.partnerId === authPartnerId)) && (
           <Button
             variant="outline"
             size="sm"

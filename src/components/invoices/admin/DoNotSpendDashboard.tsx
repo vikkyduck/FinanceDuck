@@ -1,14 +1,16 @@
 import { useState, Fragment, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
-import { AlertTriangle, Building2, ChevronDown, ChevronRight, FileText, MessageSquare, Users } from "lucide-react";
+import { AlertTriangle, Building2, ChevronDown, ChevronRight, Download, FileText, Loader2, MessageSquare, Users } from "lucide-react";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { Card } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -76,16 +78,52 @@ export const DoNotSpendDashboard = ({
   showTitle = true,
   className,
 }: DoNotSpendDashboardProps) => {
-  const { isAuthenticated, role } = useAuth();
+  const { isAuthenticated, role, csrfToken } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  
+  const [downloadingClientId, setDownloadingClientId] = useState<string | null>(null);
+
   const openInvoice = (invoiceId: string) => {
     setSelectedInvoiceId(invoiceId);
     setDetailsDialogOpen(true);
+  };
+
+  const handleDownloadClientReport = async (clientId: string, clientName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDownloadingClientId(clientId);
+    try {
+      const response = await fetch('/api/admin/export/client-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ clientId }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Ошибка сервера' }));
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+      const buffer = await response.arrayBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `отчёт_для_клиента_${clientName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
+      toast({ title: "Отчёт скачан" });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось сформировать отчёт", variant: "destructive" });
+    } finally {
+      setDownloadingClientId(null);
+    }
   };
 
   const { data: summaries = [], isLoading: loadingAgency } = useQuery<DoNotSpendSummary[]>({
@@ -210,30 +248,47 @@ export const DoNotSpendDashboard = ({
                   key={summary.clientId}
                   className="bg-amber-50/30 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-800/30"
                 >
-                  <button
-                    className="w-full p-4 text-left min-h-[56px] active:bg-amber-100/50 dark:active:bg-amber-900/20"
-                    onClick={() => toggleClient(summary.clientId)}
-                    data-testid={`mobile-row-client-${summary.clientId}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                        )}
-                        <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="font-medium text-sm truncate">{summary.clientName}</span>
+                  <div className="flex items-center gap-2 p-4">
+                    <button
+                      className="flex-1 text-left min-h-[40px] active:bg-amber-100/50 dark:active:bg-amber-900/20"
+                      onClick={() => toggleClient(summary.clientId)}
+                      data-testid={`mobile-row-client-${summary.clientId}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                          )}
+                          <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                          <span className="font-medium text-sm truncate">{summary.clientName}</span>
+                        </div>
+                        <span className="font-semibold text-amber-700 dark:text-amber-400 text-sm shrink-0">
+                          {formatCurrency(summary.remaining)}
+                        </span>
                       </div>
-                      <span className="font-semibold text-amber-700 dark:text-amber-400 text-sm shrink-0">
-                        {formatCurrency(summary.remaining)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground pl-10">
-                      <span>{summary.invoiceCount} счетов</span>
-                      <span>Потрачено: {formatCurrency(summary.totalSpent)}</span>
-                    </div>
-                  </button>
+                      <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground pl-10">
+                        <span>{summary.invoiceCount} счетов</span>
+                        <span>Потрачено: {formatCurrency(summary.totalSpent)}</span>
+                      </div>
+                    </button>
+                    {role === 'partner' && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        disabled={downloadingClientId === summary.clientId}
+                        onClick={(e) => handleDownloadClientReport(summary.clientId, summary.clientName, e)}
+                        data-testid={`mobile-button-download-client-report-${summary.clientId}`}
+                        title="Скачать отчёт для клиента"
+                      >
+                        {downloadingClientId === summary.clientId
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <Download className="h-4 w-4" />}
+                      </Button>
+                    )}
+                  </div>
                   {isExpanded && (
                     <div className="border-t border-amber-200/50 dark:border-amber-800/30 px-4 pb-3">
                       {summary.invoices.map((invoice) => (
@@ -280,6 +335,7 @@ export const DoNotSpendDashboard = ({
                   <TableHead className="text-xs text-right">Бюджет</TableHead>
                   <TableHead className="text-xs text-right">Потрачено</TableHead>
                   <TableHead className="text-xs text-right">Остаток</TableHead>
+                  {role === 'partner' && <TableHead className="text-xs w-10"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -319,6 +375,23 @@ export const DoNotSpendDashboard = ({
                             {formatCurrency(summary.remaining)}
                           </span>
                         </TableCell>
+                        {role === 'partner' && (
+                          <TableCell className="py-2 text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              disabled={downloadingClientId === summary.clientId}
+                              onClick={(e) => handleDownloadClientReport(summary.clientId, summary.clientName, e)}
+                              data-testid={`button-download-client-report-${summary.clientId}`}
+                              title="Скачать отчёт для клиента"
+                            >
+                              {downloadingClientId === summary.clientId
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Download className="h-3.5 w-3.5" />}
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                       {isExpanded && summary.invoices.map((invoice) => (
                         <TableRow 
@@ -364,6 +437,7 @@ export const DoNotSpendDashboard = ({
                               {formatCurrency(invoice.remaining)}
                             </span>
                           </TableCell>
+                          {role === 'partner' && <TableCell className="py-2"></TableCell>}
                         </TableRow>
                       ))}
                     </Fragment>

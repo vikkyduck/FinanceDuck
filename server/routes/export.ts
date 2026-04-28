@@ -131,7 +131,7 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
   }
 });
 
-exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { invoiceId, clientId } = req.body;
 
@@ -152,6 +152,18 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
       invoices = allInvoices.filter(inv => inv.id === invoiceId);
     } else if (clientId) {
       invoices = allInvoices.filter(inv => inv.clientId === clientId);
+    }
+
+    // Partners may only download reports for invoices assigned to them
+    if (req.user?.role === "partner") {
+      const partnerOwnId = req.user.partnerId;
+      if (!partnerOwnId) {
+        return res.status(403).json({ error: "Партнёр не идентифицирован" });
+      }
+      invoices = invoices.filter(inv => inv.partnerId === partnerOwnId);
+      if (invoices.length === 0) {
+        return res.status(403).json({ error: "Нет доступа к этому счёту или клиенту" });
+      }
     }
 
     invoices = invoices.filter(inv => inv.status !== "cancelled");

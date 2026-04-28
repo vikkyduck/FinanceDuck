@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,11 +12,13 @@ import { SignedActsSection } from "@/components/invoices/SignedActsSection";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 interface Invoice {
   id: string;
   invoiceNumber: string | null;
   status: string;
+  scheme: string;
   paymentDate: string | null;
   issueDate: string | null;
   notes: string | null;
@@ -66,11 +68,49 @@ export default function InvoicePage() {
   const { toast } = useToast();
   const isAdmin = role === "admin";
 
+  const [downloading, setDownloading] = useState(false);
+
   const { data: invoice, isLoading: invoiceLoading } = useQuery<Invoice>({
     queryKey: ['/api/invoices', id],
     queryFn: () => apiGet<Invoice>(`/invoices/${id}`),
     enabled: !!id,
   });
+
+  const handleDownloadClientReport = async () => {
+    if (!id) return;
+    setDownloading(true);
+    try {
+      const csrfToken = localStorage.getItem("csrf_token");
+      const response = await fetch('/api/admin/export/client-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ invoiceId: id }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Ошибка сервера' }));
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+      const buffer = await response.arrayBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const num = invoice?.invoiceNumber ? `_${invoice.invoiceNumber}` : '';
+      a.download = `отчёт_для_клиента${num}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
+      toast({ title: "Отчёт скачан" });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось сформировать отчёт", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const { data: expenses = [] } = useQuery<Expense[]>({
     queryKey: ['/api/invoices', id, 'expenses'],
@@ -130,11 +170,11 @@ export default function InvoicePage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4 sm:space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <Button variant="ghost" size="icon" onClick={goBack} data-testid="button-back">
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-xl sm:text-2xl font-semibold">
             Счет {invoice.invoiceNumber ? `№ ${invoice.invoiceNumber}` : '(без номера)'}
           </h1>
@@ -142,6 +182,18 @@ export default function InvoicePage() {
             Детальная информация по счету
           </p>
         </div>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadClientReport}
+            disabled={downloading}
+            data-testid="button-download-client-report"
+          >
+            {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            Отчёт для клиента
+          </Button>
+        )}
       </div>
 
       {/* Invoice Info */}

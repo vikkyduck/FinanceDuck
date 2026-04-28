@@ -130,3 +130,125 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
     res.status(500).json({ error: error.message || "Failed to export data" });
   }
 });
+
+exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { invoiceId, clientId } = req.body;
+
+    if (!invoiceId && !clientId) {
+      return res.status(400).json({ error: "invoiceId или clientId обязателен" });
+    }
+
+    const ExcelJS = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Invoice Management System";
+    workbook.created = new Date();
+
+    const allInvoices = await storage.getInvoices("admin");
+    const allClients = await storage.getClients();
+
+    let invoices = allInvoices;
+    if (invoiceId) {
+      invoices = allInvoices.filter(inv => inv.id === invoiceId);
+    } else if (clientId) {
+      invoices = allInvoices.filter(inv => inv.clientId === clientId);
+    }
+
+    invoices = invoices.filter(inv => inv.status !== "cancelled");
+
+    const clientName = (() => {
+      if (invoiceId && invoices.length > 0) {
+        return allClients.find(c => c.id === invoices[0].clientId)?.name || "клиент";
+      }
+      if (clientId) {
+        return allClients.find(c => c.id === clientId)?.name || "клиент";
+      }
+      return "клиент";
+    })();
+
+    const statusMap: Record<string, string> = { draft: "Черновик", sent: "Отправлен", paid: "Оплачен", cancelled: "Отменён" };
+
+    const agencyInvoices = invoices.filter(inv => inv.scheme === "agency_30" || inv.scheme === "agency_40");
+    const closedInvoices = invoices.filter(inv => inv.scheme !== "agency_30" && inv.scheme !== "agency_40");
+
+    if (agencyInvoices.length > 0) {
+      const sheet = workbook.addWorksheet("Открытая комиссия");
+      sheet.columns = [
+        { header: "Номер счёта", key: "number", width: 18 },
+        { header: "Статус", key: "status", width: 14 },
+        { header: "Сумма счёта", key: "clientBill", width: 18, style: { numFmt: "#,##0.00 ₽" } },
+        { header: "Комиссия агентства %", key: "commissionRate", width: 22 },
+        { header: "Сумма комиссии", key: "commissionAmount", width: 20, style: { numFmt: "#,##0.00 ₽" } },
+        { header: "Бюджет после комиссии", key: "budgetAfterMargin", width: 24, style: { numFmt: "#,##0.00 ₽" } },
+        { header: "Расходы", key: "expenses", width: 18, style: { numFmt: "#,##0.00 ₽" } },
+        { header: "Остаток", key: "remaining", width: 18, style: { numFmt: "#,##0.00 ₽" } },
+      ];
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
+
+      for (const inv of agencyInvoices) {
+        const calc = inv.calculations;
+        const clientBill = Number(calc?.clientBill || inv.clientBill || 0);
+        const marginRate = inv.scheme === "agency_30" ? 30 : 40;
+        const commissionAmount = Number(calc?.agencyMargin || clientBill * (marginRate / 100));
+        const budgetAfterMargin = Number(calc?.clientBaseAfterMargin || clientBill * (1 - marginRate / 100));
+        const expenses = Number(calc?.executorExpensesTotal || 0);
+        const remaining = Number(calc?.clientRemaining ?? (budgetAfterMargin - expenses));
+        sheet.addRow({
+          number: inv.invoiceNumber || "—",
+          status: statusMap[inv.status] || inv.status,
+          clientBill,
+          commissionRate: `${marginRate}%`,
+          commissionAmount,
+          budgetAfterMargin,
+          expenses,
+          remaining,
+        });
+      }
+    }
+
+    if (closedInvoices.length > 0) {
+      const sheet = workbook.addWorksheet("Бюджет и расходы");
+      sheet.columns = [
+        { header: "Номер счёта", key: "number", width: 18 },
+        { header: "Статус", key: "status", width: 14 },
+        { header: "Бюджет клиента", key: "clientBill", width: 20, style: { numFmt: "#,##0.00 ₽" } },
+        { header: "Расходы", key: "expenses", width: 18, style: { numFmt: "#,##0.00 ₽" } },
+        { header: "Остаток", key: "remaining", width: 18, style: { numFmt: "#,##0.00 ₽" } },
+      ];
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true };
+      headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
+
+      for (const inv of closedInvoices) {
+        const calc = inv.calculations;
+        const clientBill = Number(calc?.clientBill || inv.clientBill || 0);
+        const expenses = Number(calc?.executorExpensesTotal || 0);
+        const remaining = Number(calc?.clientRemaining ?? (clientBill - expenses));
+        sheet.addRow({
+          number: inv.invoiceNumber || "—",
+          status: statusMap[inv.status] || inv.status,
+          clientBill,
+          expenses,
+          remaining,
+        });
+      }
+    }
+
+    if (agencyInvoices.length === 0 && closedInvoices.length === 0) {
+      const sheet = workbook.addWorksheet("Отчёт");
+      sheet.addRow(["Нет данных для отображения"]);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const safeClientName = clientName.replace(/[^a-zA-Zа-яА-Я0-9_\- ]/g, "").trim().replace(/\s+/g, "_");
+    const dateStr = new Date().toISOString().split("T")[0];
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=client_report_${safeClientName}_${dateStr}.xlsx`);
+    res.send(Buffer.from(buffer));
+  } catch (error: any) {
+    console.error("Client report export error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate client report" });
+  }
+});

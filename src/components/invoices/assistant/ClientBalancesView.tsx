@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Search, Users, TrendingUp, Wallet, CircleDollarSign, Download, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, Users, TrendingUp, Wallet, CircleDollarSign, Download, Loader2, X } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useDownloadReport } from "@/hooks/useDownloadReport";
@@ -18,6 +18,7 @@ interface RawInvoice {
   scheme: string;
   clientBill?: string | number;
   clientId?: string | null;
+  paymentDate?: string | null;
   // joined client object
   client?: { id: string; name: string } | null;
   calculations?: {
@@ -389,16 +390,32 @@ export function ClientBalancesView() {
   });
 
   const [search, setSearch] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
 
   const invoices = Array.isArray(data) ? data : [];
 
-  const groups = useMemo(() => buildClientGroups(invoices), [invoices]);
+  const dateFilteredInvoices = useMemo(() => {
+    if (!filterFrom && !filterTo) return invoices;
+    return invoices.filter((inv) => {
+      if (!inv.paymentDate) return false;
+      const d = inv.paymentDate.slice(0, 10);
+      if (filterFrom && d < filterFrom) return false;
+      if (filterTo && d > filterTo) return false;
+      return true;
+    });
+  }, [invoices, filterFrom, filterTo]);
+
+  const groups = useMemo(() => buildClientGroups(dateFilteredInvoices), [dateFilteredInvoices]);
+  const allGroups = useMemo(() => buildClientGroups(invoices), [invoices]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return groups;
     const q = search.toLowerCase();
     return groups.filter((g) => g.clientName.toLowerCase().includes(q));
   }, [groups, search]);
+
+  const hasDateFilter = !!(filterFrom || filterTo);
 
   if (isLoading) {
     return (
@@ -410,7 +427,7 @@ export function ClientBalancesView() {
     );
   }
 
-  if (groups.length === 0) {
+  if (allGroups.length === 0) {
     return (
       <div className="text-center py-12 text-slate-400">
         <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
@@ -423,19 +440,65 @@ export function ClientBalancesView() {
     <div className="space-y-4">
       <SummaryBar groups={groups} />
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        <Input
-          placeholder="Поиск клиента…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-clients"
-        />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Input
+            placeholder="Поиск клиента…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+            data-testid="input-search-clients"
+          />
+        </div>
+
+        {isAdmin && (
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              type="date"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+              className="h-9 px-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              data-testid="input-filter-date-from"
+              title="Начало периода"
+            />
+            <span className="text-xs text-slate-400">—</span>
+            <input
+              type="date"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+              className="h-9 px-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              data-testid="input-filter-date-to"
+              title="Конец периода"
+            />
+            {hasDateFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setFilterFrom(""); setFilterTo(""); }}
+                className="h-9 w-9 p-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                data-testid="button-clear-date-filter"
+                title="Сбросить фильтр"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
+      {hasDateFilter && (
+        <p className="text-xs text-blue-600 dark:text-blue-400" data-testid="text-date-filter-active">
+          Показаны счета с датой оплаты
+          {filterFrom && ` с ${filterFrom}`}
+          {filterTo && ` по ${filterTo}`}
+        </p>
+      )}
+
       {filtered.length === 0 && (
-        <p className="text-center py-6 text-slate-400 text-sm">Ничего не найдено</p>
+        <p className="text-center py-6 text-slate-400 text-sm">
+          {hasDateFilter ? "Нет счетов в выбранном периоде" : "Ничего не найдено"}
+        </p>
       )}
 
       <div className="space-y-3">

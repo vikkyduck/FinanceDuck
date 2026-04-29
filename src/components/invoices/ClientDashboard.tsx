@@ -92,39 +92,51 @@ export const ClientDashboard = () => {
     }
   };
 
-  const applyPreset = (preset: string) => {
+  const getPresetRange = (preset: string): { from: Date; to: Date } | null => {
     const now = new Date();
     switch (preset) {
       case "this-month":
-        setDateFrom(startOfMonth(now));
-        setDateTo(endOfMonth(now));
-        break;
+        return { from: startOfMonth(now), to: endOfMonth(now) };
       case "last-month": {
         const last = subMonths(now, 1);
-        setDateFrom(startOfMonth(last));
-        setDateTo(endOfMonth(last));
-        break;
+        return { from: startOfMonth(last), to: endOfMonth(last) };
       }
       case "this-quarter":
-        setDateFrom(startOfQuarter(now));
-        setDateTo(endOfQuarter(now));
-        break;
+        return { from: startOfQuarter(now), to: endOfQuarter(now) };
       case "last-quarter": {
         const lastQ = subQuarters(now, 1);
-        setDateFrom(startOfQuarter(lastQ));
-        setDateTo(endOfQuarter(lastQ));
-        break;
+        return { from: startOfQuarter(lastQ), to: endOfQuarter(lastQ) };
       }
       case "this-year":
-        setDateFrom(startOfYear(now));
-        setDateTo(endOfYear(now));
-        break;
+        return { from: startOfYear(now), to: endOfYear(now) };
       case "last-year": {
         const lastY = subYears(now, 1);
-        setDateFrom(startOfYear(lastY));
-        setDateTo(endOfYear(lastY));
-        break;
+        return { from: startOfYear(lastY), to: endOfYear(lastY) };
       }
+      default:
+        return null;
+    }
+  };
+
+  const activePreset = (() => {
+    if (!dateFrom || !dateTo) return null;
+    const fromStr = format(dateFrom, "yyyy-MM-dd");
+    const toStr = format(dateTo, "yyyy-MM-dd");
+    const keys = ["this-month", "last-month", "this-quarter", "last-quarter", "this-year", "last-year"];
+    for (const key of keys) {
+      const range = getPresetRange(key);
+      if (range && format(range.from, "yyyy-MM-dd") === fromStr && format(range.to, "yyyy-MM-dd") === toStr) {
+        return key;
+      }
+    }
+    return null;
+  })();
+
+  const applyPreset = (preset: string) => {
+    const range = getPresetRange(preset);
+    if (range) {
+      setDateFrom(range.from);
+      setDateTo(range.to);
     }
   };
 
@@ -235,11 +247,12 @@ export const ClientDashboard = () => {
             ].map(({ key, label }) => (
               <Button
                 key={key}
-                variant="ghost"
+                variant={activePreset === key ? "secondary" : "ghost"}
                 size="sm"
                 className="h-7 text-xs px-2.5"
                 onClick={() => applyPreset(key)}
                 data-testid={`button-preset-${key}`}
+                aria-pressed={activePreset === key}
               >
                 {label}
               </Button>

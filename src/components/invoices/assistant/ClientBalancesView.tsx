@@ -144,7 +144,9 @@ function InvoiceRow({ inv }: { inv: RawInvoice }) {
   const budget = getWorkingBudget(inv);
   const spent = getSpent(inv);
   const remaining = getRemaining(inv);
-  const pct = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
+  // Use (budget - remaining)/budget so closed-commission invoices (remaining=0) show 100%
+  const consumed = budget - remaining;
+  const pct = budget > 0 ? Math.min(100, Math.round((consumed / budget) * 100)) : 0;
 
   return (
     <div
@@ -283,9 +285,11 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
       });
     });
   };
+  // Use (totalBudget - totalRemaining)/totalBudget so closed-commission invoices
+  // (where remaining=0) count as fully consumed in the group progress bar
   const usedPct =
     group.totalBudget > 0
-      ? Math.min(100, Math.round((group.totalSpent / group.totalBudget) * 100))
+      ? Math.min(100, Math.round(((group.totalBudget - group.totalRemaining) / group.totalBudget) * 100))
       : 0;
 
   const remainingColor =

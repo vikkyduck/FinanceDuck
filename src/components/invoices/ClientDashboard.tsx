@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { format } from "date-fns";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfQuarter,
+  endOfQuarter,
+  startOfYear,
+  endOfYear,
+  subMonths,
+  subQuarters,
+  subYears,
+} from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -46,6 +57,42 @@ export const ClientDashboard = () => {
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+
+  const applyPreset = (preset: string) => {
+    const now = new Date();
+    switch (preset) {
+      case "this-month":
+        setDateFrom(startOfMonth(now));
+        setDateTo(endOfMonth(now));
+        break;
+      case "last-month": {
+        const last = subMonths(now, 1);
+        setDateFrom(startOfMonth(last));
+        setDateTo(endOfMonth(last));
+        break;
+      }
+      case "this-quarter":
+        setDateFrom(startOfQuarter(now));
+        setDateTo(endOfQuarter(now));
+        break;
+      case "last-quarter": {
+        const lastQ = subQuarters(now, 1);
+        setDateFrom(startOfQuarter(lastQ));
+        setDateTo(endOfQuarter(lastQ));
+        break;
+      }
+      case "this-year":
+        setDateFrom(startOfYear(now));
+        setDateTo(endOfYear(now));
+        break;
+      case "last-year": {
+        const lastY = subYears(now, 1);
+        setDateFrom(startOfYear(lastY));
+        setDateTo(endOfYear(lastY));
+        break;
+      }
+    }
+  };
 
   const handleSignOut = async () => {
     await logout();
@@ -142,39 +189,62 @@ export const ClientDashboard = () => {
       />
 
       <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:justify-end">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex flex-col gap-1" data-testid="input-date-from">
-              <Label className="text-xs text-muted-foreground">С</Label>
-              <DatePicker
-                date={dateFrom}
-                onDateChange={setDateFrom}
-                placeholder="Начало периода"
-              />
-            </div>
-            <div className="flex flex-col gap-1" data-testid="input-date-to">
-              <Label className="text-xs text-muted-foreground">По</Label>
-              <DatePicker
-                date={dateTo}
-                onDateChange={setDateTo}
-                placeholder="Конец периода"
-              />
-            </div>
+        <div className="flex flex-col gap-3 sm:items-end">
+          <div className="flex flex-wrap gap-1.5 sm:justify-end">
+            {[
+              { key: "this-month", label: "Этот месяц" },
+              { key: "last-month", label: "Прошлый месяц" },
+              { key: "this-quarter", label: "Этот квартал" },
+              { key: "last-quarter", label: "Прошлый квартал" },
+              { key: "this-year", label: "Этот год" },
+              { key: "last-year", label: "Прошлый год" },
+            ].map(({ key, label }) => (
+              <Button
+                key={key}
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs px-2.5"
+                onClick={() => applyPreset(key)}
+                data-testid={`button-preset-${key}`}
+              >
+                {label}
+              </Button>
+            ))}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePreviewReport}
-            disabled={previewing || downloading}
-            data-testid="button-download-budget-report"
-          >
-            {previewing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Скачать бюджетный отчёт
-          </Button>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex flex-col gap-1" data-testid="input-date-from">
+                <Label className="text-xs text-muted-foreground">С</Label>
+                <DatePicker
+                  date={dateFrom}
+                  onDateChange={setDateFrom}
+                  placeholder="Начало периода"
+                />
+              </div>
+              <div className="flex flex-col gap-1" data-testid="input-date-to">
+                <Label className="text-xs text-muted-foreground">По</Label>
+                <DatePicker
+                  date={dateTo}
+                  onDateChange={setDateTo}
+                  placeholder="Конец периода"
+                />
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviewReport}
+              disabled={previewing || downloading}
+              data-testid="button-download-budget-report"
+            >
+              {previewing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Скачать бюджетный отчёт
+            </Button>
+          </div>
         </div>
 
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>

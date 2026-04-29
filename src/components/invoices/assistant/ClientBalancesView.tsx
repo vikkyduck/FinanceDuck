@@ -412,7 +412,9 @@ export function ClientBalancesView() {
     staleTime: 30000,
   });
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState<string>(
+    () => (isAdmin ? localStorage.getItem("adminBalancesSearch") ?? "" : "")
+  );
   const [filterFrom, setFilterFrom] = useState<string>(
     () => (isAdmin ? localStorage.getItem("adminBalancesFilterFrom") ?? "" : "")
   );
@@ -420,6 +422,16 @@ export function ClientBalancesView() {
     () => (isAdmin ? localStorage.getItem("adminBalancesFilterTo") ?? "" : "")
   );
   const [includeUndated, setIncludeUndated] = useState<boolean>(false);
+
+  const handleSetSearch = (value: string) => {
+    setSearch(value);
+    if (!isAdmin) return;
+    if (value) {
+      localStorage.setItem("adminBalancesSearch", value);
+    } else {
+      localStorage.removeItem("adminBalancesSearch");
+    }
+  };
 
   const handleSetFilterFrom = (value: string) => {
     setFilterFrom(value);
@@ -494,7 +506,7 @@ export function ClientBalancesView() {
           <Input
             placeholder="Поиск клиента…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSetSearch(e.target.value)}
             className="pl-9"
             data-testid="input-search-clients"
           />

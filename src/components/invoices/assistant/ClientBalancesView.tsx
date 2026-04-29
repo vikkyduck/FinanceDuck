@@ -569,6 +569,20 @@ export function ClientBalancesView() {
   }, [groups, search]);
 
   const hasDateFilter = !!(filterFrom || filterTo);
+  const hasAnyFilter = !!(search || filterFrom || filterTo || includeUndated);
+
+  const handleClearAllFilters = () => {
+    setSearch("");
+    setFilterFrom("");
+    setFilterTo("");
+    setIncludeUndated(false);
+    if (isAdmin) {
+      localStorage.removeItem("adminBalancesSearch");
+      localStorage.removeItem("adminBalancesFilterFrom");
+      localStorage.removeItem("adminBalancesFilterTo");
+      localStorage.removeItem("adminBalancesIncludeUndated");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -670,6 +684,17 @@ export function ClientBalancesView() {
             />
             Без даты оплаты
           </label>
+        )}
+        {hasAnyFilter && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearAllFilters}
+            className="h-9 shrink-0 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            data-testid="button-clear-all-filters"
+          >
+            Очистить фильтры
+          </Button>
         )}
       </div>
 

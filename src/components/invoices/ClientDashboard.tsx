@@ -109,6 +109,9 @@ export const ClientDashboard = () => {
         const err = await response.json().catch(() => ({ error: "Ошибка сервера" }));
         throw new Error(err.error || `HTTP ${response.status}`);
       }
+      const contentDisposition = response.headers.get("Content-Disposition") || "";
+      const filenameMatch = contentDisposition.match(/filename=([^;]+)/);
+      const filename = filenameMatch ? filenameMatch[1].trim() : `бюджетный_отчёт_${new Date().toISOString().split("T")[0]}.xlsx`;
       const buffer = await response.arrayBuffer();
       const blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -116,7 +119,7 @@ export const ClientDashboard = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `бюджетный_отчёт_${new Date().toISOString().split("T")[0]}.xlsx`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {

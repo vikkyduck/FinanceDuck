@@ -55,8 +55,42 @@ export const ClientDashboard = () => {
   const [previewing, setPreviewing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [preview, setPreview] = useState<ReportPreview | null>(null);
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
-  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+
+  const parseDateFromStorage = (key: string): Date | undefined => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return undefined;
+      const d = new Date(raw);
+      return isNaN(d.getTime()) ? undefined : d;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const [dateFrom, setDateFromState] = useState<Date | undefined>(() =>
+    parseDateFromStorage("clientReport_dateFrom")
+  );
+  const [dateTo, setDateToState] = useState<Date | undefined>(() =>
+    parseDateFromStorage("clientReport_dateTo")
+  );
+
+  const setDateFrom = (date: Date | undefined) => {
+    setDateFromState(date);
+    if (date) {
+      localStorage.setItem("clientReport_dateFrom", date.toISOString());
+    } else {
+      localStorage.removeItem("clientReport_dateFrom");
+    }
+  };
+
+  const setDateTo = (date: Date | undefined) => {
+    setDateToState(date);
+    if (date) {
+      localStorage.setItem("clientReport_dateTo", date.toISOString());
+    } else {
+      localStorage.removeItem("clientReport_dateTo");
+    }
+  };
 
   const applyPreset = (preset: string) => {
     const now = new Date();

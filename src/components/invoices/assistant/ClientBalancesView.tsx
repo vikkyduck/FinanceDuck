@@ -421,7 +421,19 @@ export function ClientBalancesView() {
   const [filterTo, setFilterTo] = useState<string>(
     () => (isAdmin ? localStorage.getItem("adminBalancesFilterTo") ?? "" : "")
   );
-  const [includeUndated, setIncludeUndated] = useState<boolean>(false);
+  const [includeUndated, setIncludeUndated] = useState<boolean>(
+    () => (isAdmin ? localStorage.getItem("adminBalancesIncludeUndated") === "true" : false)
+  );
+
+  const handleSetIncludeUndated = (value: boolean) => {
+    setIncludeUndated(value);
+    if (!isAdmin) return;
+    if (value) {
+      localStorage.setItem("adminBalancesIncludeUndated", "true");
+    } else {
+      localStorage.removeItem("adminBalancesIncludeUndated");
+    }
+  };
 
   const handleSetSearch = (value: string) => {
     setSearch(value);
@@ -535,7 +547,7 @@ export function ClientBalancesView() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { handleSetFilterFrom(""); handleSetFilterTo(""); setIncludeUndated(false); }}
+                onClick={() => { handleSetFilterFrom(""); handleSetFilterTo(""); handleSetIncludeUndated(false); }}
                 className="h-9 w-9 p-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                 data-testid="button-clear-date-filter"
                 title="Сбросить фильтр"
@@ -550,7 +562,7 @@ export function ClientBalancesView() {
             <input
               type="checkbox"
               checked={includeUndated}
-              onChange={(e) => setIncludeUndated(e.target.checked)}
+              onChange={(e) => handleSetIncludeUndated(e.target.checked)}
               className="h-4 w-4 accent-blue-600 cursor-pointer"
               data-testid="checkbox-include-undated"
             />

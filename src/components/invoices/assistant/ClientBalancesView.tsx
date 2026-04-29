@@ -22,6 +22,7 @@ interface RawInvoice {
   // joined client object
   client?: { id: string; name: string } | null;
   calculations?: {
+    clientBill?: string | number | null;
     clientRemaining?: string | number | null;
     clientBaseAfterMargin?: string | number | null;
     executorExpensesTotal?: string | number | null;
@@ -71,9 +72,10 @@ function isAgency(scheme: string) {
 function getWorkingBudget(inv: RawInvoice): number {
   if (isAgency(inv.scheme)) {
     const base = n(inv.calculations?.clientBaseAfterMargin);
-    return base > 0 ? base : n(inv.clientBill);
+    return base > 0 ? base : n(inv.calculations?.clientBill ?? inv.clientBill);
   }
-  return n(inv.clientBill);
+  // For closed commission: client pays clientBill (from calculations, since invoices.clientBill is null in DB)
+  return n(inv.calculations?.clientBill ?? inv.clientBill);
 }
 
 function getSpent(inv: RawInvoice): number {
@@ -81,8 +83,13 @@ function getSpent(inv: RawInvoice): number {
 }
 
 function getRemaining(inv: RawInvoice): number {
-  const rem = n(inv.calculations?.clientRemaining);
-  if (rem !== 0) return rem;
+  // For agency schemes: clientRemaining = clientBaseAfterMargin - expenses (correct client remaining)
+  // For closed commission: clientRemaining = admin profit (NOT client remaining) — use clientBill - expenses instead
+  if (isAgency(inv.scheme)) {
+    const rem = n(inv.calculations?.clientRemaining);
+    if (rem !== 0) return rem;
+    return getWorkingBudget(inv) - getSpent(inv);
+  }
   return getWorkingBudget(inv) - getSpent(inv);
 }
 

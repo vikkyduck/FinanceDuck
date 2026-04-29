@@ -308,7 +308,8 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
         const calc = inv.calculations;
         const clientBill = Number(calc?.clientBill || inv.clientBill || 0);
         const expenses = Number(calc?.executorExpensesTotal || 0);
-        const remaining = Number(calc?.clientRemaining ?? (clientBill - expenses));
+        // For closed commission: остаток = сумма счёта - расходы (not internal profit)
+        const remaining = clientBill - expenses;
         sheet.addRow({
           number: inv.invoiceNumber || "—",
           status: statusMap[inv.status] || inv.status,

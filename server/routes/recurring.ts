@@ -99,11 +99,11 @@ recurringRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ass
       const actualExpenses = parseNum(inv.calculations?.executorExpensesTotal || "0");
       const plannedExpenses = parseNum(inv.plannedExpenses || "0");
       let remaining: number;
-      if (inv.calculations?.clientRemaining != null) {
-        remaining = parseNum(inv.calculations.clientRemaining);
-      } else if (inv.scheme === "agency_30" || inv.scheme === "agency_40") {
+      if (inv.scheme === "agency_30" || inv.scheme === "agency_40") {
+        // Open commission: остаток = бюджет после комиссии - расходы
         remaining = parseNum(inv.calculations?.clientBaseAfterMargin || "0") - actualExpenses;
       } else {
+        // Closed commission: остаток = сумма счёта - расходы (clientRemaining хранит прибыль, не остаток клиента)
         remaining = clientBill - actualExpenses;
       }
       sheet.addRow({ number: inv.invoiceNumber || "—", client: clientMap.get(inv.clientId || "") || "—", status: statusMap[inv.status || ""] || inv.status, scheme: schemeMap[inv.scheme || ""] || inv.scheme || "—", clientBill, plannedExpenses: plannedExpenses || 0, actualExpenses, remaining, paymentDate: inv.paymentDate ? new Date(inv.paymentDate).toLocaleDateString("ru-RU") : "—", notes: inv.notes || "", closingDoc: (inv as any).closingDocumentUrl || "" });

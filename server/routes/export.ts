@@ -170,7 +170,11 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
     const count = invoices.length;
     const totalBudget = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.clientBill || inv.clientBill || 0), 0);
     const totalExpenses = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.executorExpensesTotal || 0), 0);
-    const totalRemaining = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.clientRemaining ?? (Number(inv.calculations?.clientBill || inv.clientBill || 0) - Number(inv.calculations?.executorExpensesTotal || 0))), 0);
+    const totalRemaining = invoices.reduce((sum, inv) => {
+      const isAgency = inv.scheme === "agency_30" || inv.scheme === "agency_40";
+      if (!isAgency) return sum; // closed commission: remaining = 0 (diff = agency profit, not client funds)
+      return sum + Number(inv.calculations?.clientRemaining ?? (Number(inv.calculations?.clientBill || inv.clientBill || 0) - Number(inv.calculations?.executorExpensesTotal || 0)));
+    }, 0);
 
     res.json({ count, totalBudget, totalExpenses, totalRemaining });
   } catch (error: any) {
@@ -308,8 +312,9 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
         const calc = inv.calculations;
         const clientBill = Number(calc?.clientBill || inv.clientBill || 0);
         const expenses = Number(calc?.executorExpensesTotal || 0);
-        // For closed commission: остаток = сумма счёта - расходы (not internal profit)
-        const remaining = clientBill - expenses;
+        // For closed commission: остаток = 0 (the full clientBill is the service price;
+        // the difference vs executor expenses is the agency's hidden margin, not client funds)
+        const remaining = 0;
         sheet.addRow({
           number: inv.invoiceNumber || "—",
           status: statusMap[inv.status] || inv.status,

@@ -87,13 +87,14 @@ function getSpent(inv: RawInvoice): number {
 
 function getRemaining(inv: RawInvoice): number {
   // For agency schemes: clientRemaining = clientBaseAfterMargin - expenses (correct client remaining)
-  // For closed commission: clientRemaining = admin profit (NOT client remaining) — use clientBill - expenses instead
+  // For closed commission: the full clientBill is the service price; the difference vs executor expenses
+  // is the agency's hidden margin (profit), NOT the client's remaining budget. Always 0 for the client.
   if (isAgency(inv.scheme)) {
     const rem = n(inv.calculations?.clientRemaining);
     if (rem !== 0) return rem;
     return getWorkingBudget(inv) - getSpent(inv);
   }
-  return getWorkingBudget(inv) - getSpent(inv);
+  return 0;
 }
 
 interface ClientGroup {

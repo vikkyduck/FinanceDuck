@@ -131,6 +131,54 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
   }
 });
 
+exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, requireRole("admin", "partner", "client"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { invoiceId, clientId, dateFrom, dateTo } = req.body;
+
+    const allInvoices = await storage.getInvoices("admin");
+
+    let invoices = allInvoices;
+    if (invoiceId) {
+      invoices = allInvoices.filter(inv => inv.id === invoiceId);
+    } else if (clientId) {
+      invoices = allInvoices.filter(inv => inv.clientId === clientId);
+    }
+
+    if (req.user?.role === "partner") {
+      const partnerOwnId = req.user.partnerId;
+      if (!partnerOwnId) return res.status(403).json({ error: "Партнёр не идентифицирован" });
+      invoices = invoices.filter(inv => inv.partnerId === partnerOwnId);
+    }
+
+    if (req.user?.role === "client") {
+      const ownClientId = req.user.clientId;
+      if (!ownClientId) return res.status(403).json({ error: "Клиент не идентифицирован" });
+      invoices = invoices.filter(inv => inv.clientId === ownClientId);
+    }
+
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      invoices = invoices.filter(inv => inv.paymentDate && new Date(inv.paymentDate) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      invoices = invoices.filter(inv => inv.paymentDate && new Date(inv.paymentDate) <= to);
+    }
+
+    invoices = invoices.filter(inv => inv.status !== "cancelled");
+
+    const count = invoices.length;
+    const totalBudget = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.clientBill || inv.clientBill || 0), 0);
+    const totalExpenses = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.executorExpensesTotal || 0), 0);
+    const totalRemaining = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.clientRemaining ?? (Number(inv.calculations?.clientBill || inv.clientBill || 0) - Number(inv.calculations?.executorExpensesTotal || 0))), 0);
+
+    res.json({ count, totalBudget, totalExpenses, totalRemaining });
+  } catch (error: any) {
+    console.error("Client report preview error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate preview" });
+  }
+});
+
 exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole("admin", "partner", "client"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { invoiceId, clientId, dateFrom, dateTo } = req.body;

@@ -396,6 +396,7 @@ export function ClientBalancesView() {
   const [filterTo, setFilterTo] = useState<string>(
     () => (isAdmin ? localStorage.getItem("adminBalancesFilterTo") ?? "" : "")
   );
+  const [includeUndated, setIncludeUndated] = useState<boolean>(false);
 
   const handleSetFilterFrom = (value: string) => {
     setFilterFrom(value);
@@ -422,13 +423,13 @@ export function ClientBalancesView() {
   const dateFilteredInvoices = useMemo(() => {
     if (!filterFrom && !filterTo) return invoices;
     return invoices.filter((inv) => {
-      if (!inv.paymentDate) return false;
+      if (!inv.paymentDate) return includeUndated;
       const d = inv.paymentDate.slice(0, 10);
       if (filterFrom && d < filterFrom) return false;
       if (filterTo && d > filterTo) return false;
       return true;
     });
-  }, [invoices, filterFrom, filterTo]);
+  }, [invoices, filterFrom, filterTo, includeUndated]);
 
   const groups = useMemo(() => buildClientGroups(dateFilteredInvoices), [dateFilteredInvoices]);
   const allGroups = useMemo(() => buildClientGroups(invoices), [invoices]);
@@ -499,7 +500,7 @@ export function ClientBalancesView() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { handleSetFilterFrom(""); handleSetFilterTo(""); }}
+                onClick={() => { handleSetFilterFrom(""); handleSetFilterTo(""); setIncludeUndated(false); }}
                 className="h-9 w-9 p-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                 data-testid="button-clear-date-filter"
                 title="Сбросить фильтр"
@@ -509,6 +510,18 @@ export function ClientBalancesView() {
             )}
           </div>
         )}
+        {isAdmin && hasDateFilter && (
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer shrink-0" data-testid="label-include-undated">
+            <input
+              type="checkbox"
+              checked={includeUndated}
+              onChange={(e) => setIncludeUndated(e.target.checked)}
+              className="h-4 w-4 accent-blue-600 cursor-pointer"
+              data-testid="checkbox-include-undated"
+            />
+            Без даты оплаты
+          </label>
+        )}
       </div>
 
       {hasDateFilter && (
@@ -516,6 +529,7 @@ export function ClientBalancesView() {
           Показаны счета с датой оплаты
           {filterFrom && ` с ${filterFrom}`}
           {filterTo && ` по ${filterTo}`}
+          {includeUndated && " · включая счета без даты оплаты"}
         </p>
       )}
 

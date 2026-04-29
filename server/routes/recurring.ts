@@ -95,11 +95,13 @@ recurringRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ass
     headerRow.font = { bold: true };
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
     for (const inv of invoices) {
-      const clientBill = parseNum(inv.clientBill || "0");
+      const clientBill = parseNum(inv.calculations?.clientBill || inv.clientBill || "0");
       const actualExpenses = parseNum(inv.calculations?.executorExpensesTotal || "0");
       const plannedExpenses = parseNum(inv.plannedExpenses || "0");
       let remaining: number;
-      if (inv.scheme === "agency_30" || inv.scheme === "agency_40") {
+      if (inv.calculations?.clientRemaining != null) {
+        remaining = parseNum(inv.calculations.clientRemaining);
+      } else if (inv.scheme === "agency_30" || inv.scheme === "agency_40") {
         remaining = parseNum(inv.calculations?.clientBaseAfterMargin || "0") - actualExpenses;
       } else {
         remaining = clientBill - actualExpenses;

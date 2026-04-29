@@ -7,7 +7,7 @@ const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 interface DownloadOptions {
   url: string;
   body: Record<string, unknown>;
-  filename: string;
+  filename?: string;
   key?: string;
   successMessage?: string;
 }
@@ -34,12 +34,18 @@ export function useDownloadReport() {
         throw new Error(err.error || `HTTP ${response.status}`);
       }
 
+      const contentDisposition = response.headers.get("Content-Disposition") || "";
+      const filenameMatch = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+      const resolvedFilename = filenameMatch
+        ? decodeURIComponent(filenameMatch[1].trim())
+        : (filename || `отчёт_${new Date().toISOString().split("T")[0]}.xlsx`);
+
       const buffer = await response.arrayBuffer();
       const blob = new Blob([buffer], { type: XLSX_MIME });
       const objectUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
-      a.download = filename;
+      a.download = resolvedFilename;
       document.body.appendChild(a);
       a.click();
       setTimeout(() => {

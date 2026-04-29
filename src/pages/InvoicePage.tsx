@@ -84,13 +84,10 @@ export default function InvoicePage() {
 
   const handleDownloadClientReport = () => {
     if (!id) return;
-    const num = invoice?.invoiceNumber ? `_${invoice.invoiceNumber}` : '';
-    const filename = `отчёт_для_клиента${num}_${new Date().toISOString().split('T')[0]}.xlsx`;
     fetchPreview({ invoiceId: id }, () => {
       downloadReport({
         url: '/api/admin/export/client-report',
         body: { invoiceId: id },
-        filename,
       });
     });
   };

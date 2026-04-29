@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Download, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -22,6 +25,8 @@ export const ClientDashboard = () => {
   const { viewMode, setViewMode } = useViewMode();
   const { toast } = useToast();
   const [downloading, setDownloading] = useState(false);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
 
   const handleSignOut = async () => {
     await logout();
@@ -30,9 +35,16 @@ export const ClientDashboard = () => {
   };
 
   const handleDownloadReport = async () => {
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+      toast({ title: "Ошибка", description: "Дата начала не может быть позже даты окончания", variant: "destructive" });
+      return;
+    }
     setDownloading(true);
     try {
       const csrfToken = localStorage.getItem("csrf_token");
+      const body: Record<string, string> = {};
+      if (dateFrom) body.dateFrom = format(dateFrom, "yyyy-MM-dd");
+      if (dateTo) body.dateTo = format(dateTo, "yyyy-MM-dd");
       const response = await fetch("/api/admin/export/client-report", {
         method: "POST",
         headers: {
@@ -40,7 +52,7 @@ export const ClientDashboard = () => {
           ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
         },
         credentials: "include",
-        body: JSON.stringify({}),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: "Ошибка сервера" }));
@@ -76,7 +88,25 @@ export const ClientDashboard = () => {
       />
 
       <div className="space-y-8">
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:justify-end">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-1" data-testid="input-date-from">
+              <Label className="text-xs text-muted-foreground">С</Label>
+              <DatePicker
+                date={dateFrom}
+                onDateChange={setDateFrom}
+                placeholder="Начало периода"
+              />
+            </div>
+            <div className="flex flex-col gap-1" data-testid="input-date-to">
+              <Label className="text-xs text-muted-foreground">По</Label>
+              <DatePicker
+                date={dateTo}
+                onDateChange={setDateTo}
+                placeholder="Конец периода"
+              />
+            </div>
+          </div>
           <Button
             variant="outline"
             size="sm"

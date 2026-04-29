@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, subYears } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -196,6 +197,56 @@ function InvoiceRow({ inv }: { inv: RawInvoice }) {
   );
 }
 
+const DATE_PRESETS = [
+  { key: "this-month", label: "Этот месяц" },
+  { key: "last-month", label: "Прошлый месяц" },
+  { key: "this-quarter", label: "Этот квартал" },
+  { key: "last-quarter", label: "Прошлый квартал" },
+  { key: "this-year", label: "Этот год" },
+  { key: "last-year", label: "Прошлый год" },
+];
+
+function computePresetRange(preset: string): { from: string; to: string } | null {
+  const now = new Date();
+  let from: Date;
+  let to: Date;
+  switch (preset) {
+    case "this-month":
+      from = startOfMonth(now);
+      to = endOfMonth(now);
+      break;
+    case "last-month": {
+      const last = subMonths(now, 1);
+      from = startOfMonth(last);
+      to = endOfMonth(last);
+      break;
+    }
+    case "this-quarter":
+      from = startOfQuarter(now);
+      to = endOfQuarter(now);
+      break;
+    case "last-quarter": {
+      const lastQ = subQuarters(now, 1);
+      from = startOfQuarter(lastQ);
+      to = endOfQuarter(lastQ);
+      break;
+    }
+    case "this-year":
+      from = startOfYear(now);
+      to = endOfYear(now);
+      break;
+    case "last-year": {
+      const lastY = subYears(now, 1);
+      from = startOfYear(lastY);
+      to = endOfYear(lastY);
+      break;
+    }
+    default:
+      return null;
+  }
+  return { from: format(from, "yyyy-MM-dd"), to: format(to, "yyyy-MM-dd") };
+}
+
 function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
@@ -307,37 +358,58 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
         </button>
 
         {isAdmin && (
-          <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="h-7 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded bg-transparent text-slate-600 dark:text-slate-300"
-              data-testid={`input-date-from-${group.clientId}`}
-              title="Начало периода"
-            />
-            <span className="text-xs text-slate-400">—</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              className="h-7 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded bg-transparent text-slate-600 dark:text-slate-300"
-              data-testid={`input-date-to-${group.clientId}`}
-              title="Конец периода"
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDownload}
-              disabled={downloading || previewing}
-              className="h-7 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              data-testid={`button-download-client-report-${group.clientId}`}
-            >
-              {downloading || previewing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
-              Отчёт для клиента
-            </Button>
+          <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-wrap gap-1 justify-end">
+              {DATE_PRESETS.map(({ key, label }) => (
+                <Button
+                  key={key}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[11px] px-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const range = computePresetRange(key);
+                    if (range) { setDateFrom(range.from); setDateTo(range.to); }
+                  }}
+                  data-testid={`button-report-preset-${key}-${group.clientId}`}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="h-7 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded bg-transparent text-slate-600 dark:text-slate-300"
+                data-testid={`input-date-from-${group.clientId}`}
+                title="Начало периода"
+              />
+              <span className="text-xs text-slate-400">—</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="h-7 px-2 text-xs border border-slate-200 dark:border-slate-700 rounded bg-transparent text-slate-600 dark:text-slate-300"
+                data-testid={`input-date-to-${group.clientId}`}
+                title="Конец периода"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownload}
+                disabled={downloading || previewing}
+                className="h-7 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                data-testid={`button-download-client-report-${group.clientId}`}
+              >
+                {downloading || previewing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
+                Отчёт для клиента
+              </Button>
+            </div>
           </div>
         )}
 
@@ -511,6 +583,27 @@ export function ClientBalancesView() {
   return (
     <div className="space-y-4">
       <SummaryBar groups={groups} />
+
+      {isAdmin && (
+        <div className="flex flex-wrap gap-1">
+          {DATE_PRESETS.map(({ key, label }) => (
+            <Button
+              key={key}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs px-2.5"
+              onClick={() => {
+                const range = computePresetRange(key);
+                if (range) { handleSetFilterFrom(range.from); handleSetFilterTo(range.to); }
+              }}
+              data-testid={`button-filter-preset-${key}`}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">

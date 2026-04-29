@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Download, X, FileSpreadsheet, Users, Building2, Receipt } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, subYears } from "date-fns";
 import { apiGet } from "@/lib/api";
 
 interface ExportFiltersDialogProps {
@@ -103,6 +103,60 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
       setFilters(prev => ({ ...prev, export_types: [] }));
     } else {
       setFilters(prev => ({ ...prev, export_types: exportTypeOptions.map(t => t.value) }));
+    }
+  };
+
+  const presets = [
+    { key: "this-month", label: "Этот месяц" },
+    { key: "last-month", label: "Прошлый месяц" },
+    { key: "this-quarter", label: "Этот квартал" },
+    { key: "last-quarter", label: "Прошлый квартал" },
+    { key: "this-year", label: "Этот год" },
+    { key: "last-year", label: "Прошлый год" },
+  ];
+
+  const applyPreset = (group: 'scheduled' | 'actual', preset: string) => {
+    const now = new Date();
+    let from: Date;
+    let to: Date;
+    switch (preset) {
+      case "this-month":
+        from = startOfMonth(now);
+        to = endOfMonth(now);
+        break;
+      case "last-month": {
+        const last = subMonths(now, 1);
+        from = startOfMonth(last);
+        to = endOfMonth(last);
+        break;
+      }
+      case "this-quarter":
+        from = startOfQuarter(now);
+        to = endOfQuarter(now);
+        break;
+      case "last-quarter": {
+        const lastQ = subQuarters(now, 1);
+        from = startOfQuarter(lastQ);
+        to = endOfQuarter(lastQ);
+        break;
+      }
+      case "this-year":
+        from = startOfYear(now);
+        to = endOfYear(now);
+        break;
+      case "last-year": {
+        const lastY = subYears(now, 1);
+        from = startOfYear(lastY);
+        to = endOfYear(lastY);
+        break;
+      }
+      default:
+        return;
+    }
+    if (group === 'scheduled') {
+      setFilters(prev => ({ ...prev, date_from: from, date_to: to }));
+    } else {
+      setFilters(prev => ({ ...prev, actual_date_from: from, actual_date_to: to }));
     }
   };
 
@@ -277,9 +331,24 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
             {filters.export_types.includes('invoices') && (
               <div className="space-y-4">
                 <div>
-                  <h3 className="text-sm font-semibold mb-3 text-foreground/90">
+                  <h3 className="text-sm font-semibold mb-2 text-foreground/90">
                     Фильтр по запланированной дате оплаты
                   </h3>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {presets.map(({ key, label }) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2.5"
+                        onClick={() => applyPreset('scheduled', key)}
+                        data-testid={`button-scheduled-preset-${key}`}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">От</Label>
@@ -301,9 +370,24 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-semibold mb-3 text-foreground/90">
+                  <h3 className="text-sm font-semibold mb-2 text-foreground/90">
                     Фильтр по фактической дате оплаты
                   </h3>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {presets.map(({ key, label }) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2.5"
+                        onClick={() => applyPreset('actual', key)}
+                        data-testid={`button-actual-preset-${key}`}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label className="text-xs">От</Label>

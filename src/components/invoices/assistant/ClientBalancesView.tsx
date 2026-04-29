@@ -22,6 +22,7 @@ interface RawInvoice {
   clientBill?: string | number;
   clientId?: string | null;
   paymentDate?: string | null;
+  plannedExpenses?: string | number | null;
   // joined client object
   client?: { id: string; name: string } | null;
   calculations?: {
@@ -86,13 +87,26 @@ function getSpent(inv: RawInvoice): number {
 }
 
 function getRemaining(inv: RawInvoice): number {
-  // For agency schemes: clientRemaining = clientBaseAfterMargin - expenses (correct client remaining)
-  // For closed commission: the full clientBill is the service price; the difference vs executor expenses
-  // is the agency's hidden margin (profit), NOT the client's remaining budget. Always 0 for the client.
   if (isAgency(inv.scheme)) {
+    // Agency schemes: clientRemaining = clientBaseAfterMargin - expenses (stored correctly in DB)
     const rem = n(inv.calculations?.clientRemaining);
     if (rem !== 0) return rem;
     return getWorkingBudget(inv) - getSpent(inv);
+  }
+  // Closed commission (partner_10/15, commission_based):
+  // clientRemaining is now stored in DB via financialEngine (0 for single-delivery,
+  // or proportional for ongoing services when plannedExpenses > 0).
+  // Use stored value; fall back to client-side formula for old records (clientRemaining = NULL).
+  const stored = inv.calculations?.clientRemaining;
+  if (stored !== null && stored !== undefined) {
+    return n(stored);
+  }
+  // Fallback for pre-migration records: compute the same formula locally
+  const plannedExpenses = n(inv.plannedExpenses);
+  const executorExpenses = n(inv.calculations?.executorExpensesTotal);
+  const clientBill = n(inv.calculations?.clientBill ?? inv.clientBill);
+  if (plannedExpenses > 0) {
+    return Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses));
   }
   return 0;
 }

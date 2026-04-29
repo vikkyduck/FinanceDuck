@@ -121,12 +121,20 @@ export function calculateFinancials(
         ? Math.max(0, amountToAdmin - plannedExpenses)
         : Math.max(0, amountToAdmin - expensesByPartner);
       const netProfitAdmin = partnerTransferDue - expensesByAdmin;
+      // Client remaining: proportional to service delivery progress.
+      // plannedExpenses = total planned executor cost for the engagement.
+      // If set: remaining = clientBill × (1 − executorExpenses / plannedExpenses).
+      // If not set (single-delivery): 0 — full price is the service cost, nothing owed back.
+      const clientRemaining = plannedExpenses > 0
+        ? Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses))
+        : 0;
 
       return {
         ...base,
         commissionRate,
         commissionAmount,
         amountToAdmin,
+        clientRemaining,
         partnerTransferDue,
         netProfitAdmin,
         adminShare50: netProfitAdmin / 2,
@@ -142,12 +150,16 @@ export function calculateFinancials(
         ? Math.max(0, amountToAdmin - plannedExpenses)
         : Math.max(0, amountToAdmin - expensesByPartner);
       const netProfitAdmin = partnerTransferDue - expensesByAdmin;
+      const clientRemaining = plannedExpenses > 0
+        ? Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses))
+        : 0;
 
       return {
         ...base,
         commissionRate,
         commissionAmount,
         amountToAdmin,
+        clientRemaining,
         partnerTransferDue,
         netProfitAdmin,
         adminShare50: netProfitAdmin / 2,
@@ -165,12 +177,16 @@ export function calculateFinancials(
         ? Math.max(0, amountToAdmin - plannedExpenses)
         : Math.max(0, amountToAdmin - expensesByPartner);
       const netProfitAdmin = partnerTransferDue - expensesByAdmin;
+      const clientRemaining = plannedExpenses > 0
+        ? Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses))
+        : 0;
 
       return {
         ...base,
         commissionRate,
         commissionAmount,
         amountToAdmin,
+        clientRemaining,
         partnerTransferDue,
         netProfitAdmin,
         adminShare50: netProfitAdmin / 2,

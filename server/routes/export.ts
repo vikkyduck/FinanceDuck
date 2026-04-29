@@ -172,8 +172,13 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
     const totalExpenses = invoices.reduce((sum, inv) => sum + Number(inv.calculations?.executorExpensesTotal || 0), 0);
     const totalRemaining = invoices.reduce((sum, inv) => {
       const isAgency = inv.scheme === "agency_30" || inv.scheme === "agency_40";
-      if (!isAgency) return sum; // closed commission: remaining = 0 (diff = agency profit, not client funds)
-      return sum + Number(inv.calculations?.clientRemaining ?? (Number(inv.calculations?.clientBill || inv.clientBill || 0) - Number(inv.calculations?.executorExpensesTotal || 0)));
+      if (isAgency) {
+        // Agency: clientRemaining = clientBaseAfterMargin - expenses (stored correctly in DB)
+        return sum + Number(inv.calculations?.clientRemaining ?? (Number(inv.calculations?.clientBill || inv.clientBill || 0) - Number(inv.calculations?.executorExpensesTotal || 0)));
+      }
+      // Closed commission: clientRemaining is now stored by financialEngine
+      // (0 for single-delivery, proportional for ongoing services when plannedExpenses > 0)
+      return sum + Number(inv.calculations?.clientRemaining ?? 0);
     }, 0);
 
     res.json({ count, totalBudget, totalExpenses, totalRemaining });
@@ -312,9 +317,10 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
         const calc = inv.calculations;
         const clientBill = Number(calc?.clientBill || inv.clientBill || 0);
         const expenses = Number(calc?.executorExpensesTotal || 0);
-        // For closed commission: остаток = 0 (the full clientBill is the service price;
-        // the difference vs executor expenses is the agency's hidden margin, not client funds)
-        const remaining = 0;
+        // For closed commission: use stored clientRemaining from financialEngine.
+        // Single-delivery (plannedExpenses = 0) → 0.
+        // Ongoing service (plannedExpenses > 0) → clientBill × (1 − executorExpenses / plannedExpenses).
+        const remaining = Number(calc?.clientRemaining ?? 0);
         sheet.addRow({
           number: inv.invoiceNumber || "—",
           status: statusMap[inv.status] || inv.status,

@@ -390,8 +390,32 @@ export function ClientBalancesView() {
   });
 
   const [search, setSearch] = useState("");
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [filterFrom, setFilterFrom] = useState<string>(
+    () => (isAdmin ? localStorage.getItem("adminBalancesFilterFrom") ?? "" : "")
+  );
+  const [filterTo, setFilterTo] = useState<string>(
+    () => (isAdmin ? localStorage.getItem("adminBalancesFilterTo") ?? "" : "")
+  );
+
+  const handleSetFilterFrom = (value: string) => {
+    setFilterFrom(value);
+    if (!isAdmin) return;
+    if (value) {
+      localStorage.setItem("adminBalancesFilterFrom", value);
+    } else {
+      localStorage.removeItem("adminBalancesFilterFrom");
+    }
+  };
+
+  const handleSetFilterTo = (value: string) => {
+    setFilterTo(value);
+    if (!isAdmin) return;
+    if (value) {
+      localStorage.setItem("adminBalancesFilterTo", value);
+    } else {
+      localStorage.removeItem("adminBalancesFilterTo");
+    }
+  };
 
   const invoices = Array.isArray(data) ? data : [];
 
@@ -457,7 +481,7 @@ export function ClientBalancesView() {
             <input
               type="date"
               value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
+              onChange={(e) => handleSetFilterFrom(e.target.value)}
               className="h-9 px-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400"
               data-testid="input-filter-date-from"
               title="Начало периода"
@@ -466,7 +490,7 @@ export function ClientBalancesView() {
             <input
               type="date"
               value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
+              onChange={(e) => handleSetFilterTo(e.target.value)}
               className="h-9 px-2 text-sm border border-slate-200 dark:border-slate-700 rounded-md bg-transparent text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400"
               data-testid="input-filter-date-to"
               title="Конец периода"
@@ -475,7 +499,7 @@ export function ClientBalancesView() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setFilterFrom(""); setFilterTo(""); }}
+                onClick={() => { handleSetFilterFrom(""); handleSetFilterTo(""); }}
                 className="h-9 w-9 p-0 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                 data-testid="button-clear-date-filter"
                 title="Сбросить фильтр"

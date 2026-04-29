@@ -8,6 +8,7 @@ export function useExportMyInvoices() {
       url: "/api/my-invoices/export",
       body: {},
       filename: `export_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      successMessage: "Файл Excel успешно скачан",
     });
 
   return { handleExport, isExporting: isDownloadingKey() };

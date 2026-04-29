@@ -9,13 +9,14 @@ interface DownloadOptions {
   body: Record<string, unknown>;
   filename: string;
   key?: string;
+  successMessage?: string;
 }
 
 export function useDownloadReport() {
   const { csrfToken } = useAuth();
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
 
-  const download = async ({ url, body, filename, key = "__default__" }: DownloadOptions) => {
+  const download = async ({ url, body, filename, key = "__default__", successMessage = "Отчёт скачан" }: DownloadOptions) => {
     setDownloadingKey(key);
     try {
       const response = await fetch(url, {
@@ -46,7 +47,7 @@ export function useDownloadReport() {
         document.body.removeChild(a);
       }, 100);
 
-      toast.success("Отчёт скачан");
+      toast.success(successMessage);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Не удалось сформировать отчёт";
       toast.error("Ошибка", { description: message });

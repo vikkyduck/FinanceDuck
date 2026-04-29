@@ -89,7 +89,13 @@ export const UnifiedInvoicesList = ({
     partners,
     filteredInvoices,
     statusCounts,
-  } = useInvoiceFilters(invoices, initialStatusFilter);
+  } = useInvoiceFilters(
+    invoices,
+    initialStatusFilter,
+    role === 'client'
+      ? { prefix: 'clientInvoices', fields: ['searchQuery', 'statusFilter', 'sortBy'] }
+      : undefined
+  );
   
   const { setRef } = useStaggerAnimation(filteredInvoices.length, viewMode === 'table' ? 60 : 80);
 

@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     allowedHosts: true,
     watch: {
-      ignored: ["**/.local/**"],
+      ignored: ["**/.local/**", "**/node_modules/**"],
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

@@ -257,7 +257,7 @@ export const DoNotSpendDashboard = ({
                         <span>Потрачено: {formatCurrency(summary.totalSpent)}</span>
                       </div>
                     </button>
-                    {role === 'partner' && (
+                    {(role === 'partner' || role === 'admin') && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -319,7 +319,7 @@ export const DoNotSpendDashboard = ({
                   <TableHead className="text-xs text-right">Бюджет</TableHead>
                   <TableHead className="text-xs text-right">Потрачено</TableHead>
                   <TableHead className="text-xs text-right">Остаток</TableHead>
-                  {role === 'partner' && <TableHead className="text-xs w-10"></TableHead>}
+                  {(role === 'partner' || role === 'admin') && <TableHead className="text-xs w-10"></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -359,7 +359,7 @@ export const DoNotSpendDashboard = ({
                             {formatCurrency(summary.remaining)}
                           </span>
                         </TableCell>
-                        {role === 'partner' && (
+                        {(role === 'partner' || role === 'admin') && (
                           <TableCell className="py-2 text-right">
                             <Button
                               variant="ghost"
@@ -421,7 +421,7 @@ export const DoNotSpendDashboard = ({
                               {formatCurrency(invoice.remaining)}
                             </span>
                           </TableCell>
-                          {role === 'partner' && <TableCell className="py-2"></TableCell>}
+                          {(role === 'partner' || role === 'admin') && <TableCell className="py-2"></TableCell>}
                         </TableRow>
                       ))}
                     </Fragment>

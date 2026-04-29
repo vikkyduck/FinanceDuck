@@ -95,16 +95,13 @@ export const DoNotSpendDashboard = ({
     setDetailsDialogOpen(true);
   };
 
-  const handleDownloadClientReport = (clientId: string, clientName: string, e: React.MouseEvent) => {
+  const handleDownloadClientReport = (clientId: string, _clientName: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const safeName = clientName.replace(/\s+/g, '_');
-    const filename = `отчёт_для_клиента_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
     setPreviewClientId(clientId);
     fetchPreview({ clientId }, () => {
       downloadReport({
         url: '/api/admin/export/client-report',
         body: { clientId },
-        filename,
         key: clientId,
       });
     });

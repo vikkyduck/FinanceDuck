@@ -274,16 +274,6 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const safeName = group.clientName.replace(/[^a-zA-Zа-яА-Я0-9_\- ]/g, "").trim().replace(/\s+/g, "_");
-    const safeDate = (d: string) => d.replace(/[^0-9\-]/g, "").slice(0, 10);
-    const dateSuffix = dateFrom && dateTo
-      ? `_${safeDate(dateFrom)}_${safeDate(dateTo)}`
-      : dateFrom
-      ? `_${safeDate(dateFrom)}`
-      : dateTo
-      ? `_${safeDate(dateTo)}`
-      : `_${new Date().toISOString().split('T')[0]}`;
-    const filename = `client_report_${safeName}${dateSuffix}.xlsx`;
     const body: Record<string, string> = { clientId: group.clientId };
     if (dateFrom) body.dateFrom = dateFrom;
     if (dateTo) body.dateTo = dateTo;
@@ -295,7 +285,6 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
           ...(dateFrom ? { dateFrom } : {}),
           ...(dateTo ? { dateTo } : {}),
         },
-        filename,
       });
     });
   };

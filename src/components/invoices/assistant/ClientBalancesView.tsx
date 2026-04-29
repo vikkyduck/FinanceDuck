@@ -573,7 +573,8 @@ export function ClientBalancesView() {
 
       {hasDateFilter && (
         <p className="text-xs text-blue-600 dark:text-blue-400" data-testid="text-date-filter-active">
-          Показаны счета с датой оплаты
+          Показано {dateFilteredInvoices.length} из {invoices.length} счетов
+          {" · "}счета с датой оплаты
           {filterFrom && ` с ${filterFrom}`}
           {filterTo && ` по ${filterTo}`}
           {includeUndated && " · включая счета без даты оплаты"}

@@ -424,6 +424,7 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
           onConfirm={confirmDownload}
           preview={preview}
           downloading={downloading}
+          contextLabel={group.clientName}
         />
 
         {expanded && (

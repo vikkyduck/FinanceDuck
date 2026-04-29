@@ -677,6 +677,7 @@ export const DoNotSpendDashboard = ({
         onConfirm={confirmDownload}
         preview={preview}
         downloading={previewClientId ? isDownloadingKey(previewClientId) : false}
+        contextLabel={previewClientId ? summaries.find((s) => s.clientId === previewClientId)?.clientName : undefined}
       />
 
       {/* Invoice Details Dialog */}

@@ -23,6 +23,7 @@ interface ReportPreviewDialogProps {
   onConfirm: () => void;
   preview: ReportPreviewData | null;
   downloading: boolean;
+  contextLabel?: string;
 }
 
 export function ReportPreviewDialog({
@@ -31,6 +32,7 @@ export function ReportPreviewDialog({
   onConfirm,
   preview,
   downloading,
+  contextLabel,
 }: ReportPreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -40,6 +42,11 @@ export function ReportPreviewDialog({
             <FileText className="h-5 w-5" />
             Содержимое отчёта
           </DialogTitle>
+          {contextLabel && (
+            <p className="text-sm font-medium text-foreground mt-0.5" data-testid="text-preview-context-label">
+              {contextLabel}
+            </p>
+          )}
           <DialogDescription>
             Отчёт будет содержать следующие данные. Нажмите «Скачать», чтобы сохранить файл.
           </DialogDescription>

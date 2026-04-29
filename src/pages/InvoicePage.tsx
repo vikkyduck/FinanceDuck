@@ -180,6 +180,7 @@ export default function InvoicePage() {
           onConfirm={confirmDownload}
           preview={preview}
           downloading={downloading}
+          contextLabel={invoice.invoiceNumber ? `Счет № ${invoice.invoiceNumber}` : undefined}
         />
       </div>
 

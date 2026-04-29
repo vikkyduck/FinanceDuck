@@ -9,6 +9,7 @@ export function useExportMyInvoices() {
       body: {},
       filename: `export_${new Date().toISOString().slice(0, 10)}.xlsx`,
       successMessage: "Файл Excel успешно скачан",
+      errorMessage: "Не удалось скачать файл счетов",
     });
 
   return { handleExport, isExporting: isDownloadingKey() };

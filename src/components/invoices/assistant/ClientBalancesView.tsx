@@ -503,16 +503,17 @@ export function ClientBalancesView() {
     () => (isAdmin ? localStorage.getItem("adminBalancesFilterTo") ?? "" : "")
   );
   const [includeUndated, setIncludeUndated] = useState<boolean>(
-    () => (isAdmin ? localStorage.getItem("adminBalancesIncludeUndated") === "true" : false)
+    () =>
+      localStorage.getItem("balancesIncludeUndated") === "true" ||
+      localStorage.getItem("adminBalancesIncludeUndated") === "true"
   );
 
   const handleSetIncludeUndated = (value: boolean) => {
     setIncludeUndated(value);
-    if (!isAdmin) return;
     if (value) {
-      localStorage.setItem("adminBalancesIncludeUndated", "true");
+      localStorage.setItem("balancesIncludeUndated", "true");
     } else {
-      localStorage.removeItem("adminBalancesIncludeUndated");
+      localStorage.removeItem("balancesIncludeUndated");
     }
   };
 
@@ -576,11 +577,12 @@ export function ClientBalancesView() {
     setFilterFrom("");
     setFilterTo("");
     setIncludeUndated(false);
+    localStorage.removeItem("balancesIncludeUndated");
+    localStorage.removeItem("adminBalancesIncludeUndated");
     if (isAdmin) {
       localStorage.removeItem("adminBalancesSearch");
       localStorage.removeItem("adminBalancesFilterFrom");
       localStorage.removeItem("adminBalancesFilterTo");
-      localStorage.removeItem("adminBalancesIncludeUndated");
     }
   };
 

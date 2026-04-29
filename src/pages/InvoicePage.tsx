@@ -13,6 +13,8 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useDownloadReport } from "@/hooks/useDownloadReport";
+import { useReportPreview } from "@/hooks/useReportPreview";
+import { ReportPreviewDialog } from "@/components/shared/ReportPreviewDialog";
 
 interface Invoice {
   id: string;
@@ -72,6 +74,7 @@ export default function InvoicePage() {
 
   const { download: downloadReport, isDownloadingKey } = useDownloadReport();
   const downloading = isDownloadingKey();
+  const { previewing, previewOpen, preview, fetchPreview, closePreview, confirmDownload } = useReportPreview();
 
   const { data: invoice, isLoading: invoiceLoading } = useQuery<Invoice>({
     queryKey: ['/api/invoices', id],
@@ -83,10 +86,12 @@ export default function InvoicePage() {
     if (!id) return;
     const num = invoice?.invoiceNumber ? `_${invoice.invoiceNumber}` : '';
     const filename = `отчёт_для_клиента${num}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    downloadReport({
-      url: '/api/admin/export/client-report',
-      body: { invoiceId: id },
-      filename,
+    fetchPreview({ invoiceId: id }, () => {
+      downloadReport({
+        url: '/api/admin/export/client-report',
+        body: { invoiceId: id },
+        filename,
+      });
     });
   };
 
@@ -165,13 +170,20 @@ export default function InvoicePage() {
             variant="outline"
             size="sm"
             onClick={handleDownloadClientReport}
-            disabled={downloading}
+            disabled={downloading || previewing}
             data-testid="button-download-client-report"
           >
-            {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            {previewing || downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             {isClient ? "Скачать отчёт" : "Отчёт для клиента"}
           </Button>
         )}
+        <ReportPreviewDialog
+          open={previewOpen}
+          onClose={closePreview}
+          onConfirm={confirmDownload}
+          preview={preview}
+          downloading={downloading}
+        />
       </div>
 
       {/* Invoice Info */}

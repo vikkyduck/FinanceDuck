@@ -11,6 +11,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { useDownloadReport } from "@/hooks/useDownloadReport";
+import { useReportPreview } from "@/hooks/useReportPreview";
+import { ReportPreviewDialog } from "@/components/shared/ReportPreviewDialog";
 import {
   Table,
   TableBody,
@@ -81,6 +83,8 @@ export const DoNotSpendDashboard = ({
   const { isAuthenticated, role } = useAuth();
   const queryClient = useQueryClient();
   const { download: downloadReport, isDownloadingKey } = useDownloadReport();
+  const { previewing, previewOpen, preview, fetchPreview, closePreview, confirmDownload } = useReportPreview();
+  const [previewClientId, setPreviewClientId] = useState<string | null>(null);
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
@@ -95,11 +99,14 @@ export const DoNotSpendDashboard = ({
     e.stopPropagation();
     const safeName = clientName.replace(/\s+/g, '_');
     const filename = `отчёт_для_клиента_${safeName}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    downloadReport({
-      url: '/api/admin/export/client-report',
-      body: { clientId },
-      filename,
-      key: clientId,
+    setPreviewClientId(clientId);
+    fetchPreview({ clientId }, () => {
+      downloadReport({
+        url: '/api/admin/export/client-report',
+        body: { clientId },
+        filename,
+        key: clientId,
+      });
     });
   };
 
@@ -255,12 +262,12 @@ export const DoNotSpendDashboard = ({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 shrink-0"
-                        disabled={isDownloadingKey(summary.clientId)}
+                        disabled={isDownloadingKey(summary.clientId) || previewing}
                         onClick={(e) => handleDownloadClientReport(summary.clientId, summary.clientName, e)}
                         data-testid={`mobile-button-download-client-report-${summary.clientId}`}
                         title="Скачать отчёт для клиента"
                       >
-                        {isDownloadingKey(summary.clientId)
+                        {isDownloadingKey(summary.clientId) || previewing
                           ? <Loader2 className="h-4 w-4 animate-spin" />
                           : <Download className="h-4 w-4" />}
                       </Button>
@@ -358,12 +365,12 @@ export const DoNotSpendDashboard = ({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              disabled={isDownloadingKey(summary.clientId)}
+                              disabled={isDownloadingKey(summary.clientId) || previewing}
                               onClick={(e) => handleDownloadClientReport(summary.clientId, summary.clientName, e)}
                               data-testid={`button-download-client-report-${summary.clientId}`}
                               title="Скачать отчёт для клиента"
                             >
-                              {isDownloadingKey(summary.clientId)
+                              {isDownloadingKey(summary.clientId) || previewing
                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 : <Download className="h-3.5 w-3.5" />}
                             </Button>
@@ -662,6 +669,15 @@ export const DoNotSpendDashboard = ({
           </span>
         </div>
       )}
+
+      {/* Report Preview Dialog */}
+      <ReportPreviewDialog
+        open={previewOpen}
+        onClose={closePreview}
+        onConfirm={confirmDownload}
+        preview={preview}
+        downloading={previewClientId ? isDownloadingKey(previewClientId) : false}
+      />
 
       {/* Invoice Details Dialog */}
       {selectedInvoiceId && (

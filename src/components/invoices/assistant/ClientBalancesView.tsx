@@ -9,6 +9,8 @@ import { ChevronDown, ChevronRight, Search, Users, TrendingUp, Wallet, CircleDol
 import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useDownloadReport } from "@/hooks/useDownloadReport";
+import { useReportPreview } from "@/hooks/useReportPreview";
+import { ReportPreviewDialog } from "@/components/shared/ReportPreviewDialog";
 
 // Raw shape coming from /api/invoices (array of invoices, snake_case from DB)
 interface RawInvoice {
@@ -200,6 +202,7 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
   const [dateTo, setDateTo] = useState("");
   const { download: downloadReport, isDownloadingKey } = useDownloadReport();
   const downloading = isDownloadingKey();
+  const { previewing, previewOpen, preview, fetchPreview, closePreview, confirmDownload } = useReportPreview();
 
   const handleDownload = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -213,14 +216,19 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
       ? `_${safeDate(dateTo)}`
       : `_${new Date().toISOString().split('T')[0]}`;
     const filename = `client_report_${safeName}${dateSuffix}.xlsx`;
-    downloadReport({
-      url: '/api/admin/export/client-report',
-      body: {
-        clientId: group.clientId,
-        ...(dateFrom ? { dateFrom } : {}),
-        ...(dateTo ? { dateTo } : {}),
-      },
-      filename,
+    const body: Record<string, string> = { clientId: group.clientId };
+    if (dateFrom) body.dateFrom = dateFrom;
+    if (dateTo) body.dateTo = dateTo;
+    fetchPreview(body, () => {
+      downloadReport({
+        url: '/api/admin/export/client-report',
+        body: {
+          clientId: group.clientId,
+          ...(dateFrom ? { dateFrom } : {}),
+          ...(dateTo ? { dateTo } : {}),
+        },
+        filename,
+      });
     });
   };
   const usedPct =
@@ -323,15 +331,23 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
               variant="ghost"
               size="sm"
               onClick={handleDownload}
-              disabled={downloading}
+              disabled={downloading || previewing}
               className="h-7 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               data-testid={`button-download-client-report-${group.clientId}`}
             >
-              {downloading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
+              {downloading || previewing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
               Отчёт для клиента
             </Button>
           </div>
         )}
+
+        <ReportPreviewDialog
+          open={previewOpen}
+          onClose={closePreview}
+          onConfirm={confirmDownload}
+          preview={preview}
+          downloading={downloading}
+        />
 
         {expanded && (
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">

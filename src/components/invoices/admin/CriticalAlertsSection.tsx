@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiPatch } from "@/lib/api";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LucideIcon } from "lucide-react";
@@ -45,12 +45,15 @@ export const CriticalAlertsSection = () => {
 
   const handleMarkAsPaid = useCallback(async (invoiceId: string) => {
     try {
-      await apiPost(`/invoices/${invoiceId}/mark-paid`, {});
-      toast.success("Счет отмечен как оплаченный");
+      await apiPatch(`/invoices/${invoiceId}`, {
+        status: "paid",
+        actualPaymentDate: new Date().toISOString().split('T')[0],
+      });
+      toast.success("Счёт отмечен как оплаченный");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/critical-alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
     } catch (error) {
-      toast.error("Ошибка при обновлении счета");
+      toast.error("Ошибка при обновлении счёта");
     }
   }, [queryClient]);
 

@@ -11,6 +11,7 @@ import {
   subQuarters,
   subYears,
 } from "date-fns";
+import { ru } from "date-fns/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -258,6 +259,15 @@ export const ClientDashboard = () => {
               </Button>
             ))}
           </div>
+          {(dateFrom || dateTo) && (
+            <p className="text-xs text-muted-foreground sm:text-right" data-testid="text-date-range-summary">
+              {dateFrom && dateTo
+                ? `Показывается: ${format(dateFrom, "d MMM yyyy", { locale: ru })} — ${format(dateTo, "d MMM yyyy", { locale: ru })}`
+                : dateFrom
+                ? `С ${format(dateFrom, "d MMM yyyy", { locale: ru })}`
+                : `По ${format(dateTo!, "d MMM yyyy", { locale: ru })}`}
+            </p>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-end gap-3">
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex flex-col gap-1" data-testid="input-date-from">

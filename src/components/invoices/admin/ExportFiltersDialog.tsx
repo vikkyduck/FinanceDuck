@@ -33,15 +33,43 @@ const exportTypeOptions = [
   { value: 'expenses', label: 'Расходы', icon: FileSpreadsheet, description: 'Все расходы по счетам' },
 ];
 
+const STORAGE_KEYS = {
+  dateFrom: 'exportFilters_dateFrom',
+  dateTo: 'exportFilters_dateTo',
+  actualDateFrom: 'exportFilters_actualDateFrom',
+  actualDateTo: 'exportFilters_actualDateTo',
+  scheduledPreset: 'exportFilters_scheduledPreset',
+  actualPreset: 'exportFilters_actualPreset',
+};
+
+const parseDateFromStorage = (key: string): Date | undefined => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? undefined : d;
+  } catch {
+    return undefined;
+  }
+};
+
 export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogProps) => {
   const [exporting, setExporting] = useState(false);
-  const [activeScheduledPreset, setActiveScheduledPreset] = useState<string | null>(null);
-  const [activeActualPreset, setActiveActualPreset] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ExportFilters>({
+  const [activeScheduledPreset, setActiveScheduledPreset] = useState<string | null>(
+    () => localStorage.getItem(STORAGE_KEYS.scheduledPreset) || null
+  );
+  const [activeActualPreset, setActiveActualPreset] = useState<string | null>(
+    () => localStorage.getItem(STORAGE_KEYS.actualPreset) || null
+  );
+  const [filters, setFilters] = useState<ExportFilters>(() => ({
+    date_from: parseDateFromStorage(STORAGE_KEYS.dateFrom),
+    date_to: parseDateFromStorage(STORAGE_KEYS.dateTo),
+    actual_date_from: parseDateFromStorage(STORAGE_KEYS.actualDateFrom),
+    actual_date_to: parseDateFromStorage(STORAGE_KEYS.actualDateTo),
     statuses: [],
     partner_ids: [],
     export_types: ['invoices'],
-  });
+  }));
 
   const { data: partners, isLoading: loadingPartners, error: partnersError } = useQuery<Array<{id: string, name: string}>>({
     queryKey: ['/api/partners'],
@@ -157,9 +185,15 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
     }
     if (group === 'scheduled') {
       setActiveScheduledPreset(preset);
+      localStorage.setItem(STORAGE_KEYS.scheduledPreset, preset);
+      localStorage.setItem(STORAGE_KEYS.dateFrom, from.toISOString());
+      localStorage.setItem(STORAGE_KEYS.dateTo, to.toISOString());
       setFilters(prev => ({ ...prev, date_from: from, date_to: to }));
     } else {
       setActiveActualPreset(preset);
+      localStorage.setItem(STORAGE_KEYS.actualPreset, preset);
+      localStorage.setItem(STORAGE_KEYS.actualDateFrom, from.toISOString());
+      localStorage.setItem(STORAGE_KEYS.actualDateTo, to.toISOString());
       setFilters(prev => ({ ...prev, actual_date_from: from, actual_date_to: to }));
     }
   };
@@ -167,6 +201,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
   const handleClearFilters = () => {
     setActiveScheduledPreset(null);
     setActiveActualPreset(null);
+    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
     setFilters({
       date_from: undefined,
       date_to: undefined,
@@ -360,7 +395,13 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">От</Label>
                       <DatePicker
                         date={filters.date_from}
-                        onDateChange={(date) => { setActiveScheduledPreset(null); setFilters(prev => ({ ...prev, date_from: date })); }}
+                        onDateChange={(date) => {
+                          setActiveScheduledPreset(null);
+                          localStorage.removeItem(STORAGE_KEYS.scheduledPreset);
+                          if (date) localStorage.setItem(STORAGE_KEYS.dateFrom, date.toISOString());
+                          else localStorage.removeItem(STORAGE_KEYS.dateFrom);
+                          setFilters(prev => ({ ...prev, date_from: date }));
+                        }}
                         placeholder="Выберите дату"
                       />
                     </div>
@@ -368,7 +409,13 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">До</Label>
                       <DatePicker
                         date={filters.date_to}
-                        onDateChange={(date) => { setActiveScheduledPreset(null); setFilters(prev => ({ ...prev, date_to: date })); }}
+                        onDateChange={(date) => {
+                          setActiveScheduledPreset(null);
+                          localStorage.removeItem(STORAGE_KEYS.scheduledPreset);
+                          if (date) localStorage.setItem(STORAGE_KEYS.dateTo, date.toISOString());
+                          else localStorage.removeItem(STORAGE_KEYS.dateTo);
+                          setFilters(prev => ({ ...prev, date_to: date }));
+                        }}
                         placeholder="Выберите дату"
                       />
                     </div>
@@ -399,7 +446,13 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">От</Label>
                       <DatePicker
                         date={filters.actual_date_from}
-                        onDateChange={(date) => { setActiveActualPreset(null); setFilters(prev => ({ ...prev, actual_date_from: date })); }}
+                        onDateChange={(date) => {
+                          setActiveActualPreset(null);
+                          localStorage.removeItem(STORAGE_KEYS.actualPreset);
+                          if (date) localStorage.setItem(STORAGE_KEYS.actualDateFrom, date.toISOString());
+                          else localStorage.removeItem(STORAGE_KEYS.actualDateFrom);
+                          setFilters(prev => ({ ...prev, actual_date_from: date }));
+                        }}
                         placeholder="Выберите дату"
                       />
                     </div>
@@ -407,7 +460,13 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">До</Label>
                       <DatePicker
                         date={filters.actual_date_to}
-                        onDateChange={(date) => { setActiveActualPreset(null); setFilters(prev => ({ ...prev, actual_date_to: date })); }}
+                        onDateChange={(date) => {
+                          setActiveActualPreset(null);
+                          localStorage.removeItem(STORAGE_KEYS.actualPreset);
+                          if (date) localStorage.setItem(STORAGE_KEYS.actualDateTo, date.toISOString());
+                          else localStorage.removeItem(STORAGE_KEYS.actualDateTo);
+                          setFilters(prev => ({ ...prev, actual_date_to: date }));
+                        }}
                         placeholder="Выберите дату"
                       />
                     </div>

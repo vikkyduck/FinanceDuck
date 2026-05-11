@@ -35,6 +35,8 @@ const exportTypeOptions = [
 
 export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogProps) => {
   const [exporting, setExporting] = useState(false);
+  const [activeScheduledPreset, setActiveScheduledPreset] = useState<string | null>(null);
+  const [activeActualPreset, setActiveActualPreset] = useState<string | null>(null);
   const [filters, setFilters] = useState<ExportFilters>({
     statuses: [],
     partner_ids: [],
@@ -154,13 +156,17 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
         return;
     }
     if (group === 'scheduled') {
+      setActiveScheduledPreset(preset);
       setFilters(prev => ({ ...prev, date_from: from, date_to: to }));
     } else {
+      setActiveActualPreset(preset);
       setFilters(prev => ({ ...prev, actual_date_from: from, actual_date_to: to }));
     }
   };
 
   const handleClearFilters = () => {
+    setActiveScheduledPreset(null);
+    setActiveActualPreset(null);
     setFilters({
       date_from: undefined,
       date_to: undefined,
@@ -339,7 +345,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Button
                         key={key}
                         type="button"
-                        variant="ghost"
+                        variant={activeScheduledPreset === key ? "default" : "ghost"}
                         size="sm"
                         className="h-7 text-xs px-2.5"
                         onClick={() => applyPreset('scheduled', key)}
@@ -354,7 +360,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">От</Label>
                       <DatePicker
                         date={filters.date_from}
-                        onDateChange={(date) => setFilters(prev => ({ ...prev, date_from: date }))}
+                        onDateChange={(date) => { setActiveScheduledPreset(null); setFilters(prev => ({ ...prev, date_from: date })); }}
                         placeholder="Выберите дату"
                       />
                     </div>
@@ -362,7 +368,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">До</Label>
                       <DatePicker
                         date={filters.date_to}
-                        onDateChange={(date) => setFilters(prev => ({ ...prev, date_to: date }))}
+                        onDateChange={(date) => { setActiveScheduledPreset(null); setFilters(prev => ({ ...prev, date_to: date })); }}
                         placeholder="Выберите дату"
                       />
                     </div>
@@ -378,7 +384,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Button
                         key={key}
                         type="button"
-                        variant="ghost"
+                        variant={activeActualPreset === key ? "default" : "ghost"}
                         size="sm"
                         className="h-7 text-xs px-2.5"
                         onClick={() => applyPreset('actual', key)}
@@ -393,7 +399,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">От</Label>
                       <DatePicker
                         date={filters.actual_date_from}
-                        onDateChange={(date) => setFilters(prev => ({ ...prev, actual_date_from: date }))}
+                        onDateChange={(date) => { setActiveActualPreset(null); setFilters(prev => ({ ...prev, actual_date_from: date })); }}
                         placeholder="Выберите дату"
                       />
                     </div>
@@ -401,7 +407,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       <Label className="text-xs">До</Label>
                       <DatePicker
                         date={filters.actual_date_to}
-                        onDateChange={(date) => setFilters(prev => ({ ...prev, actual_date_to: date }))}
+                        onDateChange={(date) => { setActiveActualPreset(null); setFilters(prev => ({ ...prev, actual_date_to: date })); }}
                         placeholder="Выберите дату"
                       />
                     </div>

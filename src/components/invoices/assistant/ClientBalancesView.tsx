@@ -264,7 +264,7 @@ function computePresetRange(preset: string): { from: string; to: string } | null
   return { from: format(from, "yyyy-MM-dd"), to: format(to, "yyyy-MM-dd") };
 }
 
-function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }) {
+function ClientCard({ group, isAdmin, totalInvoiceCount }: { group: ClientGroup; isAdmin: boolean; totalInvoiceCount?: number }) {
   const [expanded, setExpanded] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -324,9 +324,25 @@ function ClientCard({ group, isAdmin }: { group: ClientGroup; isAdmin: boolean }
                 <p className="font-semibold text-base leading-tight truncate" data-testid={`text-client-name-${group.clientId}`}>
                   {group.clientName}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {group.invoices.length}{" "}
-                  {group.invoices.length === 1 ? "счёт" : group.invoices.length < 5 ? "счёта" : "счетов"}
+                <p className="text-xs text-slate-400 mt-0.5" data-testid={`text-invoice-count-${group.clientId}`}>
+                  {totalInvoiceCount !== undefined && totalInvoiceCount > group.invoices.length ? (
+                    <>
+                      <span className="text-blue-500 font-medium">{group.invoices.length} из {totalInvoiceCount}</span>
+                      {" "}
+                      {totalInvoiceCount % 100 >= 11 && totalInvoiceCount % 100 <= 14
+                        ? "счетов"
+                        : totalInvoiceCount % 10 === 1
+                        ? "счёта"
+                        : totalInvoiceCount % 10 >= 2 && totalInvoiceCount % 10 <= 4
+                        ? "счёта"
+                        : "счетов"}
+                    </>
+                  ) : (
+                    <>
+                      {group.invoices.length}{" "}
+                      {group.invoices.length === 1 ? "счёт" : group.invoices.length < 5 ? "счёта" : "счетов"}
+                    </>
+                  )}
                   {group.activeCount > 0 && (
                     <span className="ml-1 text-blue-500">· {group.activeCount} активных</span>
                   )}
@@ -717,9 +733,19 @@ export function ClientBalancesView() {
       )}
 
       <div className="space-y-3">
-        {filtered.map((group) => (
-          <ClientCard key={group.clientId} group={group} isAdmin={isAdmin} />
-        ))}
+        {filtered.map((group) => {
+          const allGroup = hasDateFilter
+            ? allGroups.find((g) => g.clientId === group.clientId)
+            : undefined;
+          return (
+            <ClientCard
+              key={group.clientId}
+              group={group}
+              isAdmin={isAdmin}
+              totalInvoiceCount={allGroup?.invoices.length}
+            />
+          );
+        })}
       </div>
 
       <p className="text-[11px] text-slate-400 text-center pt-1">

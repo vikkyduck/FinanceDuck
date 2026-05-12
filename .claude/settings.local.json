@@ -9,7 +9,12 @@
       "Bash(git add *)",
       "Bash(git -c commit.gpgsign=false commit -m 'Migrate frontend from Supabase to Express API *)",
       "Bash(chmod +x deploy/install.sh deploy/deploy.sh)",
-      "Bash(git -c commit.gpgsign=false commit -m 'Remove Replit object storage, switch backups to local FS, prep deploy *)"
+      "Bash(git -c commit.gpgsign=false commit -m 'Remove Replit object storage, switch backups to local FS, prep deploy *)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(git -c commit.gpgsign=false commit -m 'Fix vite.config: drop lovable-tagger dependency *)",
+      "Bash(grep -E \"\\\\.pub$|id_\")"
     ]
   }
 }

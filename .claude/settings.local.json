@@ -7,7 +7,9 @@
       "Bash(grep -rEoh \"['\\\\\"\\\\\\\\\\\\`]/api/[a-zA-Z0-9/_:-]+\" server/routes/)",
       "Bash(grep -rA 80 \"FUNCTION.*get_assistant_stats_invoices\" supabase/migrations/)",
       "Bash(git add *)",
-      "Bash(git -c commit.gpgsign=false commit -m 'Migrate frontend from Supabase to Express API *)"
+      "Bash(git -c commit.gpgsign=false commit -m 'Migrate frontend from Supabase to Express API *)",
+      "Bash(chmod +x deploy/install.sh deploy/deploy.sh)",
+      "Bash(git -c commit.gpgsign=false commit -m 'Remove Replit object storage, switch backups to local FS, prep deploy *)"
     ]
   }
 }

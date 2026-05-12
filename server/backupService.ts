@@ -1,4 +1,5 @@
-import { objectStorageClient } from "./objectStorage";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { db } from "./db";
 import {
   invoices,
@@ -11,9 +12,8 @@ import {
   recurringInvoices,
 } from "../shared/schema";
 
-const BACKUP_BUCKET_NAME = process.env.BACKUP_BUCKET_NAME || "";
-const BACKUP_PREFIX = "backups/";
-const MAX_BACKUPS = 7;
+const BACKUP_DIR = process.env.BACKUP_DIR || "/var/finance-duck/backups";
+const MAX_AUTO_BACKUPS = 7;
 
 export interface BackupInfo {
   id: string;
@@ -39,33 +39,42 @@ export interface BackupData {
   };
 }
 
-export class BackupService {
-  private getBucketName(): string {
-    if (!BACKUP_BUCKET_NAME) {
-      throw new Error(
-        "BACKUP_BUCKET_NAME not set. Create a bucket in 'Object Storage' tool and set BACKUP_BUCKET_NAME env var."
-      );
-    }
-    return BACKUP_BUCKET_NAME;
-  }
+async function ensureBackupDir(): Promise<void> {
+  await fs.mkdir(BACKUP_DIR, { recursive: true });
+}
 
+function parseBackupType(filename: string): "auto" | "manual" {
+  return filename.startsWith("backup-auto-") ? "auto" : "manual";
+}
+
+export class BackupService {
   async createBackup(type: "auto" | "manual" = "manual"): Promise<BackupInfo> {
-    const bucketName = this.getBucketName();
-    const bucket = objectStorageClient.bucket(bucketName);
-    
+    await ensureBackupDir();
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `backup-${type}-${timestamp}.json`;
-    const objectName = `${BACKUP_PREFIX}${filename}`;
-    
-    const allInvoices = await db.select().from(invoices);
-    const allClients = await db.select().from(clients);
-    const allPartners = await db.select().from(partners);
-    const allPayments = await db.select().from(partnerPayments);
-    const allExpenses = await db.select().from(invoiceExpenses);
-    const allCalculations = await db.select().from(invoiceCalculations);
-    const allTokens = await db.select().from(accessTokens);
-    const allRecurring = await db.select().from(recurringInvoices);
-    
+    const filePath = path.join(BACKUP_DIR, filename);
+
+    const [
+      allInvoices,
+      allClients,
+      allPartners,
+      allPayments,
+      allExpenses,
+      allCalculations,
+      allTokens,
+      allRecurring,
+    ] = await Promise.all([
+      db.select().from(invoices),
+      db.select().from(clients),
+      db.select().from(partners),
+      db.select().from(partnerPayments),
+      db.select().from(invoiceExpenses),
+      db.select().from(invoiceCalculations),
+      db.select().from(accessTokens),
+      db.select().from(recurringInvoices),
+    ]);
+
     const backupData: BackupData = {
       version: "1.0",
       createdAt: new Date().toISOString(),
@@ -81,26 +90,18 @@ export class BackupService {
         recurringInvoices: allRecurring,
       },
     };
-    
+
     const jsonContent = JSON.stringify(backupData, null, 2);
-    const file = bucket.file(objectName);
-    
-    await file.save(jsonContent, {
-      contentType: "application/json",
-      metadata: {
-        backupType: type,
-        createdAt: backupData.createdAt,
-      },
-    });
-    
+    await fs.writeFile(filePath, jsonContent, "utf8");
+
     console.log(`[Backup] Created backup: ${filename}`);
-    
+
     if (type === "auto") {
       await this.cleanupOldBackups();
     }
-    
+
     return {
-      id: objectName,
+      id: filename,
       filename,
       createdAt: backupData.createdAt,
       sizeBytes: Buffer.byteLength(jsonContent, "utf8"),
@@ -110,35 +111,37 @@ export class BackupService {
 
   async listBackups(): Promise<BackupInfo[]> {
     try {
-      const bucketName = this.getBucketName();
-      const bucket = objectStorageClient.bucket(bucketName);
-      
-      const [files] = await bucket.getFiles({
-        prefix: BACKUP_PREFIX,
-      });
-      
+      await ensureBackupDir();
+      const entries = await fs.readdir(BACKUP_DIR);
       const backups: BackupInfo[] = [];
-      
-      for (const file of files) {
-        const [metadata] = await file.getMetadata();
-        const filename = file.name.replace(BACKUP_PREFIX, "");
-        
-        const typeMatch = filename.match(/backup-(auto|manual)-/);
-        const type = (typeMatch?.[1] as "auto" | "manual") || "manual";
-        
+
+      for (const filename of entries) {
+        if (!filename.startsWith("backup-") || !filename.endsWith(".json")) continue;
+        const filePath = path.join(BACKUP_DIR, filename);
+        const stat = await fs.stat(filePath);
+
+        let createdAt = stat.mtime.toISOString();
+        try {
+          const head = await fs.readFile(filePath, "utf8");
+          const parsed = JSON.parse(head) as Partial<BackupData>;
+          if (parsed?.createdAt) createdAt = parsed.createdAt;
+        } catch {
+          // If file is corrupt, fall back to mtime.
+        }
+
         backups.push({
-          id: file.name,
+          id: filename,
           filename,
-          createdAt: String(metadata.metadata?.createdAt || metadata.timeCreated || ""),
-          sizeBytes: parseInt(String(metadata.size) || "0", 10),
-          type,
+          createdAt,
+          sizeBytes: stat.size,
+          type: parseBackupType(filename),
         });
       }
-      
-      backups.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+
+      backups.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      
+
       return backups;
     } catch (error) {
       console.error("[Backup] Error listing backups:", error);
@@ -148,55 +151,29 @@ export class BackupService {
 
   async downloadBackup(backupId: string): Promise<BackupData | null> {
     try {
-      const bucketName = this.getBucketName();
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(backupId);
-      
-      const [exists] = await file.exists();
-      if (!exists) {
-        return null;
-      }
-      
-      const [content] = await file.download();
-      return JSON.parse(content.toString("utf8"));
+      const filePath = path.join(BACKUP_DIR, path.basename(backupId));
+      const content = await fs.readFile(filePath, "utf8");
+      return JSON.parse(content) as BackupData;
     } catch (error) {
-      console.error("[Backup] Error downloading backup:", error);
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code !== "ENOENT") {
+        console.error("[Backup] Error downloading backup:", error);
+      }
       return null;
     }
   }
 
-  async getBackupDownloadUrl(backupId: string): Promise<string | null> {
-    try {
-      const bucketName = this.getBucketName();
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(backupId);
-      
-      const [exists] = await file.exists();
-      if (!exists) {
-        return null;
-      }
-      
-      const [signedUrl] = await file.getSignedUrl({
-        action: "read",
-        expires: Date.now() + 15 * 60 * 1000,
-      });
-      
-      return signedUrl;
-    } catch (error) {
-      console.error("[Backup] Error getting download URL:", error);
-      return null;
-    }
-  }
-
-  async restoreBackup(backupId: string): Promise<{ success: boolean; message: string }> {
+  async restoreBackup(
+    backupId: string
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const backupData = await this.downloadBackup(backupId);
       if (!backupData) {
         return { success: false, message: "Бэкап не найден" };
       }
-      
+
       console.log(`[Backup] Starting restore from: ${backupId}`);
-      
+
       await db.transaction(async (tx) => {
         await tx.delete(invoiceCalculations);
         await tx.delete(invoiceExpenses);
@@ -206,33 +183,37 @@ export class BackupService {
         await tx.delete(clients);
         await tx.delete(partners);
         await tx.delete(accessTokens);
-        
-        if (backupData.data.partners?.length > 0) {
+
+        if (backupData.data.partners?.length) {
           await tx.insert(partners).values(backupData.data.partners);
         }
-        if (backupData.data.clients?.length > 0) {
+        if (backupData.data.clients?.length) {
           await tx.insert(clients).values(backupData.data.clients);
         }
-        if (backupData.data.accessTokens?.length > 0) {
+        if (backupData.data.accessTokens?.length) {
           await tx.insert(accessTokens).values(backupData.data.accessTokens);
         }
-        if (backupData.data.invoices?.length > 0) {
+        if (backupData.data.invoices?.length) {
           await tx.insert(invoices).values(backupData.data.invoices);
         }
-        if (backupData.data.invoiceExpenses?.length > 0) {
+        if (backupData.data.invoiceExpenses?.length) {
           await tx.insert(invoiceExpenses).values(backupData.data.invoiceExpenses);
         }
-        if (backupData.data.invoiceCalculations?.length > 0) {
-          await tx.insert(invoiceCalculations).values(backupData.data.invoiceCalculations);
+        if (backupData.data.invoiceCalculations?.length) {
+          await tx
+            .insert(invoiceCalculations)
+            .values(backupData.data.invoiceCalculations);
         }
-        if (backupData.data.partnerPayments?.length > 0) {
+        if (backupData.data.partnerPayments?.length) {
           await tx.insert(partnerPayments).values(backupData.data.partnerPayments);
         }
-        if (backupData.data.recurringInvoices?.length > 0) {
-          await tx.insert(recurringInvoices).values(backupData.data.recurringInvoices);
+        if (backupData.data.recurringInvoices?.length) {
+          await tx
+            .insert(recurringInvoices)
+            .values(backupData.data.recurringInvoices);
         }
       });
-      
+
       console.log(`[Backup] Restore completed successfully`);
       return { success: true, message: "Данные успешно восстановлены" };
     } catch (error) {
@@ -243,19 +224,13 @@ export class BackupService {
 
   async deleteBackup(backupId: string): Promise<boolean> {
     try {
-      const bucketName = this.getBucketName();
-      const bucket = objectStorageClient.bucket(bucketName);
-      const file = bucket.file(backupId);
-      
-      const [exists] = await file.exists();
-      if (!exists) {
-        return false;
-      }
-      
-      await file.delete();
+      const filePath = path.join(BACKUP_DIR, path.basename(backupId));
+      await fs.unlink(filePath);
       console.log(`[Backup] Deleted backup: ${backupId}`);
       return true;
     } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === "ENOENT") return false;
       console.error("[Backup] Error deleting backup:", error);
       return false;
     }
@@ -265,9 +240,9 @@ export class BackupService {
     try {
       const backups = await this.listBackups();
       const autoBackups = backups.filter((b) => b.type === "auto");
-      
-      if (autoBackups.length > MAX_BACKUPS) {
-        const toDelete = autoBackups.slice(MAX_BACKUPS);
+
+      if (autoBackups.length > MAX_AUTO_BACKUPS) {
+        const toDelete = autoBackups.slice(MAX_AUTO_BACKUPS);
         for (const backup of toDelete) {
           await this.deleteBackup(backup.id);
           console.log(`[Backup] Cleaned up old backup: ${backup.filename}`);

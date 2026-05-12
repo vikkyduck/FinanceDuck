@@ -42,3 +42,4 @@ dist-ssr
 # Local uploaded files & backups (lifecycle data, not code)
 storage/
 backups/
+dist-server

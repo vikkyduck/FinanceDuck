@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, integer, bigint } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client', 'accountant']);
 export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based']);
@@ -248,6 +248,15 @@ export const assistantActionLogs = pgTable("assistant_action_logs", {
   index("idx_assistant_action_logs_type").on(table.actionType),
   index("idx_assistant_action_logs_created").on(table.createdAt),
 ]);
+
+// Persistent login rate limiter (used by server/rateLimiter.ts).
+// Survives restarts; locks code after 5 failed attempts for 15 minutes.
+export const loginRateLimits = pgTable("login_rate_limits", {
+  code: text("code").primaryKey(),
+  attemptCount: integer("attempt_count").default(0).notNull(),
+  lastAttempt: bigint("last_attempt", { mode: "number" }).notNull(),
+  lockedUntil: bigint("locked_until", { mode: "number" }),
+});
 
 export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = typeof partners.$inferInsert;

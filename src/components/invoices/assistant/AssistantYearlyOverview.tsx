@@ -3,8 +3,6 @@ import { TrendingUp, Receipt, DollarSign, Calendar, Wallet } from "lucide-react"
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { callRPC } from "@/lib/supabaseHelpers";
-import { useSessionToken } from "@/hooks/useSessionToken";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface Props {
@@ -12,21 +10,17 @@ interface Props {
 }
 
 export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
-  const { getTokenId } = useSessionToken();
-  
   const { data: stats, isLoading, refetch } = useQuery({
     queryKey: ['assistant-yearly-stats', selectedYear],
     queryFn: async () => {
-      const tokenId = getTokenId();
-      if (!tokenId) {
-        console.error('[AssistantYearlyOverview] No token ID');
+      const response = await fetch(
+        `/api/assistant/stats-invoices?year=${selectedYear}`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) {
         return { total: 0, totalExpenses: 0, count: 0, average: 0, bestMonth: null };
       }
-
-      const invoices = await callRPC<any>('get_assistant_stats_invoices', {
-        _token_id: tokenId,
-        _year: selectedYear
-      });
+      const invoices: any[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return { total: 0, totalExpenses: 0, count: 0, average: 0, bestMonth: null };

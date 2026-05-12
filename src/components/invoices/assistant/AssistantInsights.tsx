@@ -3,8 +3,6 @@ import { Trophy, TrendingUp, Lightbulb, Target } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { callRPC } from "@/lib/supabaseHelpers";
-import { useSessionToken } from "@/hooks/useSessionToken";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface Props {
@@ -12,21 +10,15 @@ interface Props {
 }
 
 export const AssistantInsights = ({ selectedYear }: Props) => {
-  const { getTokenId } = useSessionToken();
-  
   const { data: insights, isLoading, refetch } = useQuery({
     queryKey: ['assistant-insights', selectedYear],
     queryFn: async () => {
-      const tokenId = getTokenId();
-      if (!tokenId) {
-        console.error('[AssistantInsights] No token ID');
-        return [];
-      }
-
-      const invoices = await callRPC<any>('get_assistant_stats_invoices', {
-        _token_id: tokenId,
-        _year: selectedYear
-      });
+      const response = await fetch(
+        `/api/assistant/stats-invoices?year=${selectedYear}`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) return [];
+      const invoices: any[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return [];

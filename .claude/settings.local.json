@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /Users/vikkyutkina -maxdepth 3 -type d \\\\\\( -iname \"*finance*\" -o -iname \"*duck*\" -o -iname \"*replit*\" \\\\\\) 2>/dev/null | head -20; echo \"---\"; ls -la /Users/vikkyutkina/Downloads/ 2>/dev/null | grep -iE \"finance|duck|zip|tar\" | head -10)",
+      "Bash(rsync -a --exclude 'node_modules' --exclude '.DS_Store' \"/Users/vikkyutkina/Downloads/FinanceDuck 4/\" /Users/vikkyutkina/finance-duck/)",
+      "Bash(git checkout *)",
+      "Bash(grep -rEoh \"['\\\\\"\\\\\\\\\\\\`]/api/[a-zA-Z0-9/_:-]+\" server/routes/)",
+      "Bash(grep -rA 80 \"FUNCTION.*get_assistant_stats_invoices\" supabase/migrations/)",
+      "Bash(git add *)",
+      "Bash(git -c commit.gpgsign=false commit -m 'Migrate frontend from Supabase to Express API *)"
+    ]
+  }
+}

@@ -4,8 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { TrendingUp } from "lucide-react";
-import { callRPC } from "@/lib/supabaseHelpers";
-import { useSessionToken } from "@/hooks/useSessionToken";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 
 interface Props {
@@ -13,21 +11,15 @@ interface Props {
 }
 
 export const AssistantMonthlyChart = ({ selectedYear }: Props) => {
-  const { getTokenId } = useSessionToken();
-  
   const { data: chartData, isLoading, refetch } = useQuery({
     queryKey: ['assistant-monthly-chart', selectedYear],
     queryFn: async () => {
-      const tokenId = getTokenId();
-      if (!tokenId) {
-        console.error('[AssistantMonthlyChart] No token ID');
-        return { data: [], average: 0, bestMonth: null };
-      }
-
-      const invoices = await callRPC<any>('get_assistant_stats_invoices', {
-        _token_id: tokenId,
-        _year: selectedYear
-      });
+      const response = await fetch(
+        `/api/assistant/stats-invoices?year=${selectedYear}`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) return { data: [], average: 0, bestMonth: null };
+      const invoices: any[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return { data: [], average: 0, bestMonth: null };

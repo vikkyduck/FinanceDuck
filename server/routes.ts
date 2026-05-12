@@ -9,6 +9,7 @@ import { recurringRouter } from "./routes/recurring";
 import { exportRouter } from "./routes/export";
 import { backupRouter } from "./routes/backup";
 import { actionLogRouter } from "./routes/actionLog";
+import { assistantRouter } from "./routes/assistant";
 
 export function registerHealthCheck(app: Express) {
   app.get("/", (req: Request, res: Response, next: NextFunction) => {
@@ -40,4 +41,5 @@ export function registerRoutes(app: Express): void {
   app.use(exportRouter);
   app.use(backupRouter);
   app.use(actionLogRouter);
+  app.use(assistantRouter);
 }

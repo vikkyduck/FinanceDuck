@@ -1,5 +1,4 @@
 import { toast } from "sonner";
-import { PostgrestError } from "@supabase/supabase-js";
 
 /**
  * Централизованная обработка ошибок API
@@ -10,11 +9,15 @@ interface ErrorContext {
   details?: Record<string, any>;
 }
 
+type ApiErrorLike = { code?: string; message?: string } | Error | null;
+
 /**
- * Обработать ошибку Supabase и показать пользователю понятное сообщение
+ * Обработать ошибку API и показать пользователю понятное сообщение.
+ * Поддерживает Postgres SQLSTATE-коды (на случай прямых SQL ошибок),
+ * а также обычные Error-объекты.
  */
 export function handleSupabaseError(
-  error: PostgrestError | Error | null,
+  error: ApiErrorLike,
   context: ErrorContext
 ): void {
   if (!error) return;
@@ -24,12 +27,10 @@ export function handleSupabaseError(
     context: context.details,
   });
 
-  // Определяем тип ошибки и показываем соответствующее сообщение
   let title = "Ошибка";
   let description = "Произошла ошибка при выполнении операции";
 
-  if ("code" in error) {
-    // PostgrestError
+  if (typeof error === "object" && error !== null && "code" in error && error.code) {
     switch (error.code) {
       case "PGRST116":
         title = "Нет данных";
@@ -52,10 +53,9 @@ export function handleSupabaseError(
         description = "Не заполнены обязательные поля";
         break;
       default:
-        description = error.message || description;
+        description = (error as { message?: string }).message || description;
     }
-  } else {
-    // Generic Error
+  } else if (error instanceof Error) {
     description = error.message || description;
   }
 
@@ -83,10 +83,7 @@ export function handleNetworkError(error: Error, context: ErrorContext): void {
 /**
  * Обработать ошибку валидации формы
  */
-export function handleValidationError(
-  field: string,
-  message: string
-): void {
+export function handleValidationError(field: string, message: string): void {
   toast.error("Ошибка валидации", {
     description: `${field}: ${message}`,
     duration: 4000,
@@ -125,20 +122,20 @@ export async function withErrorHandling<T>(
 }
 
 /**
- * Безопасное выполнение Supabase запроса с обработкой ошибок
+ * Безопасное выполнение запроса с обработкой ошибок
  */
 export async function safeQuery<T>(
-  queryFn: () => Promise<{ data: T | null; error: PostgrestError | null }>,
+  queryFn: () => Promise<{ data: T | null; error: ApiErrorLike }>,
   context: ErrorContext
 ): Promise<T | null> {
   try {
     const { data, error } = await queryFn();
-    
+
     if (error) {
       handleSupabaseError(error, context);
       return null;
     }
-    
+
     return data;
   } catch (error) {
     if (error instanceof Error) {

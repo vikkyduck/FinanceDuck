@@ -4,8 +4,6 @@ import { ChevronDown, ChevronRight, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
-import { callRPC } from "@/lib/supabaseHelpers";
-import { useSessionToken } from "@/hooks/useSessionToken";
 
 interface Props {
   selectedYear: number;
@@ -13,28 +11,18 @@ interface Props {
 
 export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
-  const { getTokenId } = useSessionToken();
 
   const { data: partnerStats, isLoading } = useQuery({
     queryKey: ['assistant-partner-stats', selectedYear],
     queryFn: async () => {
-      const tokenId = getTokenId();
-      if (!tokenId) {
-        console.error('[PartnerPerformanceTable] No token ID available');
-        return [];
-      }
-
-      console.log('[PartnerPerformanceTable] Fetching data for year:', selectedYear);
-      
-      const invoices = await callRPC<any>('get_assistant_stats_invoices', {
-        _token_id: tokenId,
-        _year: selectedYear
-      });
-
-      console.log('[PartnerPerformanceTable] RPC result:', { count: invoices?.length });
+      const response = await fetch(
+        `/api/assistant/stats-invoices?year=${selectedYear}`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) return [];
+      const invoices: any[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
-        console.log('[PartnerPerformanceTable] No invoices found');
         return [];
       }
 
@@ -48,9 +36,9 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
 
       invoices.forEach(inv => {
         const partnerName = inv.partner_name;
-        const partnerId = inv.partner_id_ref;
+        const partnerId = inv.partner_id;
         const clientName = inv.client_name;
-        const clientId = inv.client_id_ref;
+        const clientId = inv.client_id;
         const amount = inv.client_bill || 0;
 
         if (!partnerName || !clientName) return;

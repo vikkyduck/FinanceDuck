@@ -10,6 +10,8 @@
     "build": "npm run build:client && npm run build:server",
     "start": "NODE_ENV=production node dist-server/index.js",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
@@ -102,6 +104,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.38.0"
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^4.1.9"
   }
 }

@@ -2,6 +2,8 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { registerRoutes, registerHealthCheck } from "./routes";
+import { db } from "./db";
+import { migrateAccessCodesAtRest } from "./repositories/userRepo";
 
 const app = express();
 
@@ -18,5 +20,11 @@ app.use(cookieParser());
 registerHealthCheck(app);
 
 registerRoutes(app);
+
+// Разовая идемпотентная миграция кодов доступа «в сейф» (когда задан секрет).
+// Не блокирует старт и не валит сервер при ошибке — вход и так работает.
+migrateAccessCodesAtRest(db)
+  .then(n => { if (n) console.log(`[accessCode] зашифровано кодов при старте: ${n}`); })
+  .catch(e => console.error("[accessCode] миграция при старте не удалась (вход работает):", (e as Error)?.message));
 
 export { app };

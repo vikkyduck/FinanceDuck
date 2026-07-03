@@ -4,6 +4,8 @@ export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin'
 export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based']);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'cancelled']);
 export const actTypeEnum = pgEnum('act_type', ['executor', 'company']);
+export const serviceTypeEnum = pgEnum('service_type', ['one_time', 'periodic']);
+export const periodUnitEnum = pgEnum('period_unit', ['month', 'day', 'hour']);
 
 export const partners = pgTable("partners", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -22,7 +24,16 @@ export const clients = pgTable("clients", {
   email: text("email"),
   phone: text("phone"),
   telegram: text("telegram"),
+  // Имя контактного лица — кто конкретно от клиента на стороне переговоров
+  // (бывает важно, когда «клиент» — это юрлицо или большая команда).
+  contactPerson: text("contact_person"),
   partnerId: uuid("partner_id").references(() => partners.id),
+  // Telegram-интеграция для уведомлений: chat_id обязателен, токен бота —
+  // опциональный (если не задан, берётся общий из переменной окружения
+  // FALLBACK_TG_BOT_TOKEN). Так можно либо «своего бренд-бота» на клиента,
+  // либо одного общего на всех.
+  tgChatId: text("tg_chat_id"),
+  tgBotToken: text("tg_bot_token"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -40,6 +51,9 @@ export const clientPartners = pgTable("client_partners", {
 export const accessTokens = pgTable("access_tokens", {
   id: uuid("id").defaultRandom().primaryKey(),
   code: text("code").notNull().unique(),
+  // Обратимо зашифрованный код для показа админу (AES-256-GCM). NULL пока
+  // крипта выключена или строка ещё не мигрирована. См. server/lib/accessCode.ts.
+  codeEnc: text("code_enc"),
   role: userRoleEnum("role").notNull(),
   partnerId: uuid("partner_id").references(() => partners.id, { onDelete: 'cascade' }),
   clientId: uuid("client_id").references(() => clients.id, { onDelete: 'cascade' }),
@@ -76,6 +90,9 @@ export const invoices = pgTable("invoices", {
   commissionAmount: numeric("commission_amount", { precision: 15, scale: 2 }),
   partnerCommissionRate: numeric("partner_commission_rate", { precision: 5, scale: 2 }),
   description: text("description"),
+  // Название для клиента: то, что видно ему в кабинете. Отдельно от
+  // внутреннего description и от notes (служебных заметок).
+  clientTitle: text("client_title"),
   issueDate: date("issue_date"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -87,6 +104,14 @@ export const invoices = pgTable("invoices", {
   recurringInvoiceId: uuid("recurring_invoice_id"),
   plannedExpenses: numeric("planned_expenses", { precision: 15, scale: 2 }),
   closingDocumentUrl: text("closing_document_url"),
+  // Тип услуги. Для 'periodic' клиент оплачивает pricePerPeriod × totalPeriods
+  // целиком, а «использовано/осталось» считается по закрытым периодам — это
+  // клиентская проекция и существует отдельно от админской денежной математики.
+  serviceType: serviceTypeEnum("service_type").default('one_time').notNull(),
+  periodUnit: periodUnitEnum("period_unit").default('month').notNull(),
+  pricePerPeriod: numeric("price_per_period", { precision: 15, scale: 2 }),
+  totalPeriods: integer("total_periods"),
+  periodsUsed: integer("periods_used").default(0).notNull(),
 }, (table) => [
   index("idx_invoices_status").on(table.status),
   index("idx_invoices_payment_date").on(table.paymentDate),
@@ -139,6 +164,21 @@ export const invoiceExpenses = pgTable("invoice_expenses", {
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
   paidByAdmin: boolean("paid_by_admin").default(false).notNull(),
   date: date("date").defaultNow().notNull(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Внутренний перенос средств между счетами ОДНОГО клиента.
+// НЕ затрагивает client_bill и админскую математику (комиссия, перевод
+// партнёру, чистая прибыль — считаются от реальных денег клиента).
+// Влияет ТОЛЬКО на «доступно к расходованию» в клиентском представлении:
+// со счёта-источника бюджет уменьшается, на счёт-получатель — увеличивается.
+export const invoiceTransfers = pgTable("invoice_transfers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fromInvoiceId: uuid("from_invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  toInvoiceId: uuid("to_invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  notes: text("notes"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -211,6 +251,29 @@ export const recurringInvoices = pgTable("recurring_invoices", {
   index("idx_recurring_invoices_active").on(table.isActive),
 ]);
 
+// Сообщения внутри кабинета. Один тред = (invoice_id, expense_id?) —
+// либо общий по счёту, либо привязанный к конкретному списанию.
+// Клиент пишет в свои треды, admin и assistant видят все входящие.
+export const invoiceMessages = pgTable("invoice_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  expenseId: uuid("expense_id").references(() => invoiceExpenses.id, { onDelete: 'cascade' }),
+  authorRole: userRoleEnum("author_role").notNull(),
+  authorTokenId: uuid("author_token_id").references(() => accessTokens.id, { onDelete: 'set null' }),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  // Когда другая сторона прочитала это сообщение. Симметрично:
+  // staff_read_at заполняется, когда admin/assistant открыл тред;
+  // client_read_at — когда клиент. Свои сообщения помечаются прочитанными
+  // автоматически в момент создания (см. POST /api/messages).
+  clientReadAt: timestamp("client_read_at", { withTimezone: true }),
+  staffReadAt:  timestamp("staff_read_at",  { withTimezone: true }),
+}, (table) => [
+  index("idx_invoice_messages_invoice").on(table.invoiceId),
+  index("idx_invoice_messages_expense").on(table.expenseId),
+  index("idx_invoice_messages_created").on(table.createdAt),
+]);
+
 export const assistantActionTypeEnum = pgEnum('assistant_action_type', [
   'create_invoice',
   'update_invoice', 
@@ -229,6 +292,8 @@ export const assistantActionTypeEnum = pgEnum('assistant_action_type', [
   'create_recurring_invoice',
   'update_recurring_invoice',
   'delete_recurring_invoice',
+  'transfer_funds',
+  'transfer_funds_delete',
   'other'
 ]);
 
@@ -283,9 +348,13 @@ export type RecurringInvoice = typeof recurringInvoices.$inferSelect;
 export type InsertRecurringInvoice = typeof recurringInvoices.$inferInsert;
 export type AssistantActionLog = typeof assistantActionLogs.$inferSelect;
 export type InsertAssistantActionLog = typeof assistantActionLogs.$inferInsert;
+export type InvoiceMessage = typeof invoiceMessages.$inferSelect;
+export type InsertInvoiceMessage = typeof invoiceMessages.$inferInsert;
 export type UserRole = 'admin' | 'assistant' | 'partner' | 'client' | 'accountant';
 export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'agency_40' | 'commission_based';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
 export type ActType = 'executor' | 'company';
+export type ServiceType = 'one_time' | 'periodic';
+export type PeriodUnit = 'month' | 'day' | 'hour';
 export type Frequency = 'monthly' | 'quarterly' | 'yearly';
 export type AssistantActionType = 'create_invoice' | 'update_invoice' | 'delete_invoice' | 'create_expense' | 'update_expense' | 'delete_expense' | 'create_client' | 'update_client' | 'delete_client' | 'create_partner' | 'update_partner' | 'delete_partner' | 'upload_act' | 'delete_act' | 'create_recurring_invoice' | 'update_recurring_invoice' | 'delete_recurring_invoice' | 'other';

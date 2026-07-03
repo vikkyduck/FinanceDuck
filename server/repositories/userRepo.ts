@@ -3,30 +3,82 @@
  * All methods take the Drizzle db instance directly (no this binding).
  */
 import { randomBytes } from "crypto";
-import { eq, and, desc, gte } from "drizzle-orm";
+import { eq, and, or, desc, gte } from "drizzle-orm";
 import {
   accessTokens, userSessions, partners, clients,
   AccessToken, UserRole,
 } from "../../shared/schema";
 import type { db as _db } from "../db";
+import {
+  accessCodeCryptoEnabled, lookupHash, encryptCode, codeForDisplay, isLookupHash,
+} from "../lib/accessCode";
 
 export type Db = typeof _db;
+
+/** Просрочен ли токен (C2 — раньше expiresAt не проверялся вообще). */
+function isExpired(token: { expiresAt?: Date | null }): boolean {
+  return !!token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now();
+}
+
+/**
+ * Разовая идемпотентная миграция всех кодов «в сейф». Вызывается на старте.
+ * Ничего не делает, если крипта выключена; трогает только строки, которые
+ * ещё не отпечаток. Вход работает независимо от её успеха (dual-lookup +
+ * ленивая миграция на логине), поэтому запускаем fire-and-forget.
+ */
+export async function migrateAccessCodesAtRest(db: Db): Promise<number> {
+  if (!accessCodeCryptoEnabled) return 0;
+  const rows = await db.select().from(accessTokens);
+  let migrated = 0;
+  for (const row of rows) {
+    if (isLookupHash(row.code)) continue; // уже в сейфе
+    await db.update(accessTokens)
+      .set({ code: lookupHash(row.code), codeEnc: encryptCode(row.code) })
+      .where(eq(accessTokens.id, row.id));
+    migrated++;
+  }
+  return migrated;
+}
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 
 export async function verifyAccessCode(db: Db, code: string): Promise<AccessToken | null> {
-  const [token] = await db
-    .select()
-    .from(accessTokens)
-    .where(and(eq(accessTokens.code, code), eq(accessTokens.isActive, true)))
-    .limit(1);
+  let token: AccessToken | undefined;
 
-  if (token) {
-    await db.update(accessTokens)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(accessTokens.id, token.id));
+  if (accessCodeCryptoEnabled) {
+    // Ищем и по отпечатку (мигрированные строки), и по открытому тексту
+    // (легаси, ещё не мигрированные) — это и даёт нулевой риск локаута.
+    const lh = lookupHash(code);
+    [token] = await db
+      .select()
+      .from(accessTokens)
+      .where(and(
+        or(eq(accessTokens.code, lh), eq(accessTokens.code, code)),
+        eq(accessTokens.isActive, true),
+      ))
+      .limit(1);
+
+    // Ленивая миграция: нашли по открытому тексту → кладём в «сейф».
+    if (token && token.code === code) {
+      await db.update(accessTokens)
+        .set({ code: lh, codeEnc: encryptCode(code) })
+        .where(eq(accessTokens.id, token.id));
+    }
+  } else {
+    [token] = await db
+      .select()
+      .from(accessTokens)
+      .where(and(eq(accessTokens.code, code), eq(accessTokens.isActive, true)))
+      .limit(1);
   }
-  return token ?? null;
+
+  if (!token) return null;
+  if (isExpired(token)) return null; // C2: истёкший код больше не пускаем
+
+  await db.update(accessTokens)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(accessTokens.id, token.id));
+  return token;
 }
 
 export async function createSession(
@@ -74,6 +126,7 @@ export async function validateSession(
     .limit(1);
 
   if (!token) return { isValid: false };
+  if (isExpired(token)) return { isValid: false }; // C2: истёкший код рвёт сессию
   return { isValid: true, token };
 }
 
@@ -110,6 +163,7 @@ export async function getAccessTokens(
 
   return results.map(r => ({
     ...r.token,
+    code: codeForDisplay(r.token), // расшифрованный код для показа админу
     partnerName: r.partnerName ?? undefined,
     clientName:  r.clientName  ?? undefined,
   }));
@@ -122,11 +176,15 @@ export async function createAccessToken(
   partnerId?: string,
   clientId?: string,
 ): Promise<AccessToken> {
+  const storedCode = accessCodeCryptoEnabled ? lookupHash(code) : code;
+  const codeEnc    = accessCodeCryptoEnabled ? encryptCode(code) : null;
   const [created] = await db
     .insert(accessTokens)
-    .values({ code, role, partnerId, clientId })
+    .values({ code: storedCode, codeEnc, role, partnerId, clientId })
     .returning();
-  return created;
+  // Возвращаем открытый код, чтобы фронт показал его сразу после создания
+  // (в БД он уже в «сейфе»).
+  return { ...created, code };
 }
 
 export async function deleteAccessToken(db: Db, id: string): Promise<void> {

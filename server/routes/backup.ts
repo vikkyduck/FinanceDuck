@@ -20,7 +20,10 @@ backupRouter.get("/api/backups/:id/download", authMiddleware, requireRole("admin
     const backup = await backupService.downloadBackup(backupId);
     if (!backup) return res.status(404).json({ error: "Backup not found" });
     res.setHeader("Content-Type", "application/json");
-    res.setHeader("Content-Disposition", `attachment; filename=${backupId.split("/").pop()}`);
+    // Санитизируем имя файла: только безопасные символы — иначе CR/LF/кавычки
+    // в id могли бы инъектировать заголовки (header injection).
+    const safeName = (backupId.split("/").pop() || "backup.json").replace(/[^A-Za-z0-9._-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
     res.json(backup);
   } catch (error: any) { console.error("Download backup error:", error); res.status(500).json({ error: error.message || "Failed to download backup" }); }
 });

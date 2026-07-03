@@ -62,6 +62,26 @@ function parseBackupType(filename: string): "auto" | "manual" {
   return filename.startsWith("backup-auto-") ? "auto" : "manual";
 }
 
+// Таблицы, которые обязаны присутствовать (массивами) в валидном бэкапе.
+const REQUIRED_BACKUP_TABLES = [
+  "invoices", "clients", "partners", "partnerPayments",
+  "invoiceExpenses", "invoiceCalculations", "accessTokens", "recurringInvoices",
+] as const;
+
+/**
+ * Проверка структуры бэкапа ПЕРЕД деструктивным restore. Возвращает текст
+ * ошибки или null. Нужна потому, что restore сначала стирает все таблицы —
+ * битый/обрезанный/подменённый файл иначе оставил бы прод пустым.
+ */
+function validateBackupStructure(backup: any): string | null {
+  if (!backup || typeof backup !== "object") return "файл не является объектом бэкапа";
+  if (!backup.data || typeof backup.data !== "object") return "отсутствует секция data";
+  for (const table of REQUIRED_BACKUP_TABLES) {
+    if (!Array.isArray(backup.data[table])) return `таблица «${table}» отсутствует или не массив`;
+  }
+  return null;
+}
+
 export class BackupService {
   async createBackup(type: "auto" | "manual" = "manual"): Promise<BackupInfo> {
     await ensureBackupDir();
@@ -194,7 +214,14 @@ export class BackupService {
     try {
       const backupData = await this.downloadBackup(backupId);
       if (!backupData) {
-        return { success: false, message: "Бэкап не найден" };
+        // downloadBackup вернул null: файл не найден ИЛИ расшифровка/парсинг не удались.
+        return { success: false, message: "Бэкап не найден или повреждён (не удалось прочитать)" };
+      }
+
+      // ВАЛИДАЦИЯ ДО удаления: не стираем прод из-за битого файла.
+      const structErr = validateBackupStructure(backupData);
+      if (structErr) {
+        return { success: false, message: `Восстановление отменено: ${structErr}` };
       }
 
       console.log(`[Backup] Starting restore from: ${backupId}`);

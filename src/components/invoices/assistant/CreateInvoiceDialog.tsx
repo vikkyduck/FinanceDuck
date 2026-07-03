@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatMoney } from "@/lib/format";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { calculateInvoice, type InvoiceScheme } from "@/lib/invoiceCalculations"
 import { handleValidationError, showSuccess } from "@/lib/errorHandler";
 import { Loader2, EyeOff, ChevronLeft, ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useRateLimit } from "@/hooks/useRateLimit";
 import { format } from "date-fns";
 import { SchemeCard } from "./SchemeCard";
@@ -39,10 +41,22 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
   const [partnerCommissionRate, setPartnerCommissionRate] = useState("0");
   const [clientBill, setClientBill] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [clientTitle, setClientTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [paymentDate, setPaymentDate] = useState<Date | undefined>(undefined);
   const [hideFromAssistant, setHideFromAssistant] = useState(false);
   const [plannedExpenses, setPlannedExpenses] = useState("");
+  // Тип услуги: разовая (как раньше) или периодическая (предоплата за N месяцев/дней)
+  const [serviceType, setServiceType] = useState<'one_time' | 'periodic'>('one_time');
+  const [periodUnit, setPeriodUnit] = useState<'month' | 'day'>('month');
+  const [pricePerPeriod, setPricePerPeriod] = useState("");
+  const [totalPeriods, setTotalPeriods] = useState("");
+  const isPeriodic = serviceType === 'periodic';
+  const periodicAutoBill =
+    isPeriodic && parseFloat(pricePerPeriod) > 0 && parseInt(totalPeriods, 10) > 0
+      ? Math.round(parseFloat(pricePerPeriod) * parseInt(totalPeriods, 10) * 100) / 100
+      : 0;
+  const effectiveClientBill = isPeriodic ? periodicAutoBill.toString() : clientBill;
 
   const wizardSteps = [
     { number: 1, label: "Клиент и партнер" },
@@ -55,7 +69,13 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
       return !!(selectedClient && selectedPartner);
     }
     if (step === 2) {
-      return !!(scheme && clientBill && parseFloat(clientBill) > 0);
+      if (!scheme) return false;
+      if (isPeriodic) {
+        const price = parseFloat(pricePerPeriod);
+        const total = parseInt(totalPeriods, 10);
+        return Number.isFinite(price) && price > 0 && Number.isInteger(total) && total >= 1;
+      }
+      return !!(clientBill && parseFloat(clientBill) > 0);
     }
     if (step === 3) {
       return !!invoiceNumber.trim();
@@ -124,12 +144,22 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         throw new Error("Укажите номер счета");
       }
       
-      const validated = invoiceSchema.parse({ 
+      // Для periodic подставляем авто-сумму = цена × периодов;
+      // для one_time — введённую вручную.
+      const billForValidation = isPeriodic ? effectiveClientBill : clientBill;
+      if (isPeriodic) {
+        const price = parseFloat(pricePerPeriod);
+        const total = parseInt(totalPeriods, 10);
+        if (!Number.isFinite(price) || price < 0) throw new Error("Цена за период должна быть ≥ 0");
+        if (!Number.isInteger(total) || total < 1) throw new Error("Количество периодов должно быть ≥ 1");
+      }
+
+      const validated = invoiceSchema.parse({
         invoiceNumber: trimmedInvoiceNumber,
-        partnerId: selectedPartner, 
-        clientId: selectedClient, 
+        partnerId: selectedPartner,
+        clientId: selectedClient,
         scheme: dbScheme,
-        clientBill,
+        clientBill: billForValidation,
         partnerCommissionRate: commissionRate?.toString() || '',
         notes,
         paymentDate
@@ -140,7 +170,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
 
       const isPartnerScheme = ['partner_10', 'partner_15', 'custom', 'commission_based'].includes(scheme);
       const plannedExpensesValue = isPartnerScheme && plannedExpenses ? parseFloat(plannedExpenses) : undefined;
-      
+
       await invoiceService.createInvoice({
         invoiceNumber: trimmedInvoiceNumber,
         clientId: validated.clientId,
@@ -149,11 +179,16 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         partnerCommissionRate: commissionRate,
         status: 'draft',
         notes: validated.notes || undefined,
+        clientTitle: clientTitle.trim() || undefined,
         paymentDate: formattedPaymentDate,
         hideFromAssistant: effectiveRole === 'admin' ? hideFromAssistant : effectiveRole === 'accountant' ? true : false,
         clientBill: validated.clientBill,
         calculations: calculations,
         plannedExpenses: plannedExpensesValue,
+        serviceType,
+        periodUnit: isPeriodic ? periodUnit : undefined,
+        pricePerPeriod: isPeriodic ? parseFloat(pricePerPeriod) : undefined,
+        totalPeriods: isPeriodic ? parseInt(totalPeriods, 10) : undefined,
       });
 
       showSuccess("Успешно", "Счет создан");
@@ -183,9 +218,14 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     setClientBill("");
     setInvoiceNumber("");
     setNotes("");
+    setClientTitle("");
     setPaymentDate(undefined);
     setHideFromAssistant(false);
     setPlannedExpenses("");
+    setServiceType('one_time');
+    setPeriodUnit('month');
+    setPricePerPeriod("");
+    setTotalPeriods("");
   };
 
   return (
@@ -319,19 +359,107 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       )}
 
                       <div className="space-y-2">
-                        <Label>Счет клиенту *</Label>
-                        <Input
-                          type="number"
-                          data-testid="input-client-bill"
-                          value={clientBill}
-                          onChange={(e) => setClientBill(e.target.value)}
-                          placeholder="1000000"
-                          required
-                          min="0"
-                          step="0.01"
-                          className="h-11 text-lg font-semibold"
-                        />
+                        <Label>Тип услуги *</Label>
+                        <RadioGroup
+                          value={serviceType}
+                          onValueChange={(v) => setServiceType(v as 'one_time' | 'periodic')}
+                          className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                        >
+                          <label
+                            htmlFor="svc-one_time"
+                            className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-accent has-[input:checked]:border-primary has-[input:checked]:bg-accent/50"
+                          >
+                            <RadioGroupItem id="svc-one_time" value="one_time" className="mt-0.5" />
+                            <div className="leading-tight">
+                              <div className="text-sm font-medium">Разовая</div>
+                              <div className="text-xs text-muted-foreground">Один платёж, сумма вводится вручную.</div>
+                            </div>
+                          </label>
+                          <label
+                            htmlFor="svc-periodic"
+                            className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-accent has-[input:checked]:border-primary has-[input:checked]:bg-accent/50"
+                          >
+                            <RadioGroupItem id="svc-periodic" value="periodic" className="mt-0.5" />
+                            <div className="leading-tight">
+                              <div className="text-sm font-medium">Периодическая</div>
+                              <div className="text-xs text-muted-foreground">Предоплата за N месяцев/дней.</div>
+                            </div>
+                          </label>
+                        </RadioGroup>
                       </div>
+
+                      {isPeriodic ? (
+                        <div className="space-y-3 p-4 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-lg border border-indigo-200/40 dark:border-indigo-800/30">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-2">
+                              <Label>Единица *</Label>
+                              <RadioGroup
+                                value={periodUnit}
+                                onValueChange={(v) => setPeriodUnit(v as 'month' | 'day')}
+                                className="grid grid-cols-2 gap-2"
+                              >
+                                <label htmlFor="pu-month" className="flex items-center gap-2 rounded-md border px-3 h-11 cursor-pointer hover:bg-accent has-[input:checked]:border-primary has-[input:checked]:bg-accent/50">
+                                  <RadioGroupItem id="pu-month" value="month" />
+                                  <span className="text-sm">Месяцы</span>
+                                </label>
+                                <label htmlFor="pu-day" className="flex items-center gap-2 rounded-md border px-3 h-11 cursor-pointer hover:bg-accent has-[input:checked]:border-primary has-[input:checked]:bg-accent/50">
+                                  <RadioGroupItem id="pu-day" value="day" />
+                                  <span className="text-sm">Дни</span>
+                                </label>
+                              </RadioGroup>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Цена за период *</Label>
+                              <Input
+                                type="number"
+                                data-testid="input-price-per-period"
+                                value={pricePerPeriod}
+                                onChange={(e) => setPricePerPeriod(e.target.value)}
+                                placeholder="270000"
+                                required
+                                min="0"
+                                step="0.01"
+                                className="h-11"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Количество периодов *</Label>
+                              <Input
+                                type="number"
+                                data-testid="input-total-periods"
+                                value={totalPeriods}
+                                onChange={(e) => setTotalPeriods(e.target.value)}
+                                placeholder="11"
+                                required
+                                min="1"
+                                step="1"
+                                className="h-11"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+                            <span className="text-sm text-muted-foreground">Сумма счёта (авто):</span>
+                            <span className="text-lg font-semibold tabular-nums">
+                              {formatMoney(periodicAutoBill)}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Label>Счет клиенту *</Label>
+                          <Input
+                            type="number"
+                            data-testid="input-client-bill"
+                            value={clientBill}
+                            onChange={(e) => setClientBill(e.target.value)}
+                            placeholder="1000000"
+                            required
+                            min="0"
+                            step="0.01"
+                            className="h-11 text-lg font-semibold"
+                          />
+                        </div>
+                      )}
 
                       {['partner_10', 'partner_15', 'custom', 'commission_based'].includes(scheme) && (
                         <div className="space-y-2 p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-200/50 dark:border-blue-800/30">
@@ -374,6 +502,18 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       </div>
 
                       <div className="space-y-2">
+                        <Label>Название для клиента</Label>
+                        <Input
+                          data-testid="input-client-title"
+                          value={clientTitle}
+                          onChange={(e) => setClientTitle(e.target.value)}
+                          placeholder="Например: Цимерман А. — продление 6 мес"
+                          className="h-11"
+                        />
+                        <p className="text-xs text-muted-foreground">Это название клиент увидит в своём кабинете вместо «Счёт № …». Необязательно.</p>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label>Дата оплаты</Label>
                         <DatePicker
                           date={paymentDate}
@@ -382,12 +522,12 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       </div>
 
                       <div className="space-y-2">
-                        <Label>Примечания</Label>
+                        <Label>Примечания (внутренние)</Label>
                         <Textarea
                           data-testid="input-invoice-notes"
                           value={notes}
                           onChange={(e) => setNotes(e.target.value)}
-                          placeholder="Дополнительная информация..."
+                          placeholder="Служебные заметки — клиенту не видны"
                           className="min-h-[100px]"
                         />
                       </div>

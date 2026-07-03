@@ -21,6 +21,11 @@ interface ProjectBudget {
     amount: number;
     date: string;
   }>;
+  serviceType?: 'one_time' | 'periodic';
+  periodUnit?: 'month' | 'day';
+  pricePerPeriod?: number;
+  totalPeriods?: number;
+  periodsUsed?: number;
 }
 
 export const ClientBudgetDashboard = () => {
@@ -131,34 +136,66 @@ export const ClientBudgetDashboard = () => {
                 }
               />
 
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 text-xs sm:text-sm">
-                <div className="flex items-center gap-1">
-                  <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground">Потрачено:</span>
-                  <span className="font-medium break-words">{formatCurrency(project.spent)}</span>
+              {project.serviceType === 'periodic' ? (
+                <div className="space-y-1 text-xs sm:text-sm">
+                  {(() => {
+                    const unit = project.periodUnit === 'day' ? 'дн' : 'мес';
+                    const price = project.pricePerPeriod ?? 0;
+                    const total = project.totalPeriods ?? 0;
+                    const used  = project.periodsUsed ?? 0;
+                    const left  = Math.max(0, total - used);
+                    return (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Цена за {unit}</span>
+                          <span className="font-medium">{formatCurrency(price)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Использовано</span>
+                          <span className="font-medium">{used} из {total} {unit}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Осталось</span>
+                          <span className="font-medium text-green-600">
+                            {left} {unit} · {formatCurrency(project.remaining)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
-                <div className={`font-medium break-words ${isOverBudget ? "text-destructive" : "text-green-600"}`}>
-                  Остаток: {formatCurrency(project.remaining)}
-                </div>
-              </div>
-
-              {project.expenses.length > 0 && (
-                <div className="mt-3 pt-3 border-t space-y-1">
-                  <p className="text-xs text-muted-foreground mb-2">Последние расходы:</p>
-                  {project.expenses.slice(0, 3).map((exp, i) => (
-                    <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                      <span className="truncate">{exp.description}</span>
-                      <span className="font-medium text-muted-foreground whitespace-nowrap">
-                        {formatCurrency(exp.amount)}
-                      </span>
+              ) : (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <div className="flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground shrink-0" />
+                      <span className="text-muted-foreground">Потрачено:</span>
+                      <span className="font-medium break-words">{formatCurrency(project.spent)}</span>
                     </div>
-                  ))}
-                  {project.expenses.length > 3 && (
-                    <p className="text-xs text-muted-foreground">
-                      ... и ещё {project.expenses.length - 3} расход(ов)
-                    </p>
+                    <div className={`font-medium break-words ${isOverBudget ? "text-destructive" : "text-green-600"}`}>
+                      Остаток: {formatCurrency(project.remaining)}
+                    </div>
+                  </div>
+
+                  {project.expenses.length > 0 && (
+                    <div className="mt-3 pt-3 border-t space-y-1">
+                      <p className="text-xs text-muted-foreground mb-2">Последние расходы:</p>
+                      {project.expenses.slice(0, 3).map((exp, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="truncate">{exp.description}</span>
+                          <span className="font-medium text-muted-foreground whitespace-nowrap">
+                            {formatCurrency(exp.amount)}
+                          </span>
+                        </div>
+                      ))}
+                      {project.expenses.length > 3 && (
+                        <p className="text-xs text-muted-foreground">
+                          ... и ещё {project.expenses.length - 3} расход(ов)
+                        </p>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </motion.div>
           );

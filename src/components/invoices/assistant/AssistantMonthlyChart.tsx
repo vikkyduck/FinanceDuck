@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMoney } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -109,7 +110,7 @@ export const AssistantMonthlyChart = ({ selectedYear }: Props) => {
                 border: '1px solid hsl(var(--border))',
                 borderRadius: '8px'
               }}
-              formatter={(value: number) => [`${value.toLocaleString('ru-RU')} ₽`, 'Сумма']}
+              formatter={(value: number) => [formatMoney(value), 'Сумма']}
             />
             {chartData.average > 0 && (
               <ReferenceLine

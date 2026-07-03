@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trash2, Plus, Loader2, Key } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { formatDate } from "@/lib/format";
 
 type UserRole = 'admin' | 'assistant' | 'partner' | 'client' | 'accountant';
 
@@ -360,7 +361,7 @@ export const AccessCodesManager = () => {
                         </TableCell>
                         <TableCell>
                           {token.lastUsedAt 
-                            ? new Date(token.lastUsedAt).toLocaleDateString('ru-RU')
+                            ? formatDate(token.lastUsedAt)
                             : 'Не использовался'}
                         </TableCell>
                         <TableCell>

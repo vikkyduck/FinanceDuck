@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
+import { formatMoney } from "@/lib/format";
 
 interface Props {
   selectedYear: number;
@@ -128,7 +129,7 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">
-                    {partner.total.toLocaleString('ru-RU')} ₽
+                    {formatMoney(partner.total)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {partner.percentage.toFixed(1)}% от общего
@@ -160,7 +161,7 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
                           </p>
                         </div>
                         <p className="font-semibold">
-                          {client.total.toLocaleString('ru-RU')} ₽
+                          {formatMoney(client.total)}
                         </p>
                       </div>
                     ))}

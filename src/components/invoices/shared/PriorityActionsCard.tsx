@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
 import { useAuth } from "@/hooks/useAuth";
+import { formatMoney } from "@/lib/format";
 
 interface PriorityAction {
   id: string;
@@ -164,7 +165,7 @@ export const PriorityActionsCard = () => {
                       </p>
                       {action.amount && action.amount > 0 && (
                         <p className="text-sm font-semibold mt-1">
-                          {action.amount.toLocaleString("ru-RU")} rub
+                          {formatMoney(action.amount)}
                         </p>
                       )}
                     </div>

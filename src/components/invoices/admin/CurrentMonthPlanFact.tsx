@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMoney } from "@/lib/format";
 import { Progress } from "@/components/ui/progress";
 import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
@@ -13,14 +14,7 @@ interface PlanFactData {
   actualReceipts: number;
 }
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency: 'RUB',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-};
+const formatCurrency = (value: number) => formatMoney(value);
 
 export const CurrentMonthPlanFact = () => {
   const currentMonth = new Date().getMonth() + 1;

@@ -5,6 +5,9 @@ export interface ClientListItem {
   name: string;
   telegram: string | null;
   phone: string | null;
+  contactPerson: string | null;
+  tgChatId: string | null;
+  tgBotToken: string | null;
   partnerId: string | null;
   createdAt?: string;
 }
@@ -260,11 +263,16 @@ export const invoiceService = {
     partnerCommissionRate?: number;
     status?: string;
     notes?: string;
+    clientTitle?: string;
     paymentDate?: string;
     hideFromAssistant?: boolean;
     clientBill: number;
     calculations: Record<string, any>;
     plannedExpenses?: number;
+    serviceType?: 'one_time' | 'periodic';
+    periodUnit?: 'month' | 'day' | 'hour';
+    pricePerPeriod?: number;
+    totalPeriods?: number;
   }): Promise<any> {
     return apiPost("/invoices", {
       invoiceNumber: invoice.invoiceNumber,
@@ -274,14 +282,27 @@ export const invoiceService = {
       partnerCommissionRate: invoice.partnerCommissionRate,
       status: invoice.status || "draft",
       notes: invoice.notes,
+      clientTitle: invoice.clientTitle,
       paymentDate: invoice.paymentDate,
       hideFromAssistant: invoice.hideFromAssistant,
       plannedExpenses: invoice.plannedExpenses,
+      serviceType: invoice.serviceType,
+      periodUnit: invoice.periodUnit,
+      pricePerPeriod: invoice.pricePerPeriod !== undefined ? invoice.pricePerPeriod.toString() : undefined,
+      totalPeriods: invoice.totalPeriods,
       calculations: {
         clientBill: invoice.clientBill.toString(),
         ...invoice.calculations,
       },
     });
+  },
+
+  async closePeriod(invoiceId: string): Promise<any> {
+    return apiPost(`/invoices/${invoiceId}/close-period`, {});
+  },
+
+  async updatePeriodsUsed(invoiceId: string, periodsUsed: number): Promise<any> {
+    return apiPatch(`/invoices/${invoiceId}`, { periodsUsed });
   },
 
   async fetchClients(): Promise<ClientListItem[]> {
@@ -291,6 +312,9 @@ export const invoiceService = {
       name: client.name,
       telegram: client.telegram || null,
       phone: client.phone || null,
+      contactPerson: client.contactPerson || null,
+      tgChatId: client.tgChatId || null,
+      tgBotToken: client.tgBotToken || null,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
     }));
@@ -315,6 +339,9 @@ export const invoiceService = {
       name: client.name,
       telegram: client.telegram || null,
       phone: client.phone || null,
+      contactPerson: client.contactPerson || null,
+      tgChatId: client.tgChatId || null,
+      tgBotToken: client.tgBotToken || null,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
     }));
@@ -327,6 +354,9 @@ export const invoiceService = {
       name: data.name,
       telegram: data.telegram || null,
       phone: data.phone || null,
+      contactPerson: data.contactPerson || null,
+      tgChatId: data.tgChatId || null,
+      tgBotToken: data.tgBotToken || null,
       partnerId: data.partnerId || null,
       createdAt: data.createdAt,
       partner: data.partner ? {
@@ -345,6 +375,9 @@ export const invoiceService = {
     telegram?: string;
     phone?: string;
     partnerId?: string;
+    tgChatId?: string | null;
+    tgBotToken?: string | null;
+    contactPerson?: string | null;
   }): Promise<ClientListItem> {
     const data = await apiPost<any>("/clients", client);
     return {
@@ -352,6 +385,9 @@ export const invoiceService = {
       name: data.name,
       telegram: data.telegram || null,
       phone: data.phone || null,
+      contactPerson: data.contactPerson || null,
+      tgChatId: data.tgChatId || null,
+      tgBotToken: data.tgBotToken || null,
       partnerId: data.partnerId || null,
       createdAt: data.createdAt,
     };
@@ -362,6 +398,9 @@ export const invoiceService = {
     telegram?: string;
     phone?: string;
     partnerId?: string;
+    tgChatId?: string | null;
+    tgBotToken?: string | null;
+    contactPerson?: string | null;
   }): Promise<ClientListItem> {
     const data = await apiPatch<any>(`/clients/${id}`, updates);
     return {
@@ -369,6 +408,9 @@ export const invoiceService = {
       name: data.name,
       telegram: data.telegram || null,
       phone: data.phone || null,
+      contactPerson: data.contactPerson || null,
+      tgChatId: data.tgChatId || null,
+      tgBotToken: data.tgBotToken || null,
       partnerId: data.partnerId || null,
       createdAt: data.createdAt,
     };
@@ -414,6 +456,9 @@ export const invoiceService = {
       name: client.name,
       telegram: client.telegram || null,
       phone: client.phone || null,
+      contactPerson: client.contactPerson || null,
+      tgChatId: client.tgChatId || null,
+      tgBotToken: client.tgBotToken || null,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
       partners: (client.partners || []).map((p: any) => ({

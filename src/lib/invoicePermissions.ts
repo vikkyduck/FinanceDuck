@@ -111,7 +111,10 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
         showExpensesList: true, // Show all expenses
       };
     } else {
-      // For commission-based schemes, show only bill and status
+      // commission_based / partner_10 / partner_15:
+      //   суммы комиссии, расходов и остатка по этим счетам клиенту не показываем.
+      //   Но СПИСОК СПИСАНИЙ с описаниями отдаём (без сумм — обрезается на бэке
+      //   и в колонке Сумма таблицы), чтобы клиент видел, что именно делалось.
       return {
         showBasicInfo: true,
         showClientBill: true,
@@ -132,7 +135,7 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
         canAddExpenses: false,
         canUploadDocuments: false,
         canDeleteExpenses: false,
-        showExpensesList: false, // Don't show expenses
+        showExpensesList: true, // только описания и даты, без сумм
       };
     }
   }

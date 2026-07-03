@@ -1,7 +1,7 @@
 {
-  "name": "Invoice Management System",
-  "short_name": "Invoices",
-  "description": "Современная система управления счетами",
+  "name": "FinanceDuck",
+  "short_name": "FinanceDuck",
+  "description": "Система проектного финансового учёта",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -9,16 +9,22 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/placeholder.svg",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/placeholder.svg",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["business", "finance"],

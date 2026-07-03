@@ -11,11 +11,13 @@ import { ManageAccessCodesDialog } from "./admin/ManageAccessCodesDialog";
 import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
 import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
+import { TransferFundsDialog } from "./admin/TransferFundsDialog";
 import { AdminDashboardMetrics } from "./admin/AdminDashboardMetrics";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { useAuth } from "@/hooks/useAuth";
 import { getTimeBasedGreeting } from "@/lib/greetingUtils";
 import { useInvalidateAllDashboards, useAdminDashboardRefresh } from "@/hooks/useAdminDashboardRefresh";
+import { useExportMyInvoices } from "@/hooks/useExportMyInvoices";
 
 export const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -27,6 +29,8 @@ export const AdminDashboard = () => {
   const [clientsDialogOpen, setClientsDialogOpen] = useState(false);
   const [accessCodesDialogOpen, setAccessCodesDialogOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const { handleExport, isExporting } = useExportMyInvoices();
 
   const greeting = getTimeBasedGreeting();
 
@@ -44,9 +48,17 @@ export const AdminDashboard = () => {
       <AdminActionBar
         onCreateInvoice={() => setCreateDialogOpen(true)}
         onExport={() => setExportDialogOpen(true)}
+        onExportMyInvoices={handleExport}
+        isExportingMyInvoices={isExporting}
         onManagePartners={() => setPartnersDialogOpen(true)}
         onManageClients={() => setClientsDialogOpen(true)}
         onManageAccessCodes={() => setAccessCodesDialogOpen(true)}
+        onTransferFunds={() => setTransferDialogOpen(true)}
+      />
+      <TransferFundsDialog
+        open={transferDialogOpen}
+        onOpenChange={setTransferDialogOpen}
+        onTransferred={() => invalidateAllDashboards()}
       />
 
       {/* Dashboard Metrics - Cash Flow, Sales, Yearly Summary, Leverage */}

@@ -10,7 +10,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useCookieSession } from "@/hooks/useCookieSession";
 import { useApiHealthCheck } from "@/hooks/useApiHealthCheck";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
-import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { TopSearchBar } from "@/components/TopSearchBar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import InvoicesDashboard from "./pages/InvoicesDashboard";
@@ -25,12 +25,14 @@ import StatsPage from "./pages/StatsPage";
 import AssistantLogsPage from "./pages/AssistantLogsPage";
 import AccountingPage from "./pages/AccountingPage";
 import ClientBalancesPage from "./pages/ClientBalancesPage";
+import MessagesPage from "./pages/MessagesPage";
+import SecurityPage from "./pages/SecurityPage";
 import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
 
 // Component that routes "/" based on role
 const RoleBasedHome = () => {
   const { role, isLoading } = useAuthContext();
-  
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -38,12 +40,13 @@ const RoleBasedHome = () => {
       </div>
     );
   }
-  
-  if (role === 'partner' || role === 'admin' || role === 'assistant' || role === 'accountant') {
+
+  // Клиенту маркетинговая «Финансовая панель» из Index не подходит —
+  // показываем его реальный дашборд (Обзор + Бюджеты + Мои счета).
+  if (role === 'partner' || role === 'admin' || role === 'assistant' || role === 'accountant' || role === 'client') {
     return <InvoicesDashboard />;
   }
-  
-  // Clients see the general Index page
+
   return <Index />;
 };
 
@@ -135,6 +138,22 @@ const AnimatedRoutes = () => {
             </ProtectedRoute>
           } 
         />
+        <Route
+          path="/messages"
+          element={
+            <ProtectedRoute>
+              <MessagesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/security"
+          element={
+            <ProtectedRoute>
+              <SecurityPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/auth" element={<AccessCodeLogin />} />
         <Route path="/admin" element={<Navigate to="/invoices" replace />} />
         <Route path="*" element={<NotFound />} />
@@ -163,13 +182,15 @@ const AppContent = () => {
   return (
     <>
       <ApiStatusBanner {...apiHealth} />
-      <GlobalCommandPalette />
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
           <div className="flex-1 flex flex-col">
-            <header className="h-12 border-b border-border bg-background/80 backdrop-blur-xl flex items-center px-3 sm:px-4 md:px-6 sticky top-0 z-40">
+            <header className="h-12 border-b border-border bg-background/80 backdrop-blur-xl flex items-center gap-2 sm:gap-3 px-2 sm:px-4 md:px-6 sticky top-0 z-40">
               <SidebarTrigger />
+              <div className="flex-1 sm:flex sm:justify-center min-w-0">
+                <TopSearchBar />
+              </div>
             </header>
             <main className="flex-1">
               <ErrorBoundary>

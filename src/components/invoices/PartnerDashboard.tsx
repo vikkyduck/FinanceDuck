@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useViewMode } from "@/hooks/useViewMode";
 import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet } from "@/lib/api";
@@ -530,7 +531,7 @@ export const PartnerDashboard = () => {
                             <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                               <div className="flex items-center gap-3 flex-wrap">
                                 <span className="text-muted-foreground whitespace-nowrap">
-                                  {new Date(payment.paymentDate).toLocaleDateString('ru-RU')}
+                                  {formatDate(payment.paymentDate)}
                                 </span>
                                 <span className="font-medium text-green-600 dark:text-green-400 whitespace-nowrap">
                                   {formatCurrency(parseFloat(payment.amount))}

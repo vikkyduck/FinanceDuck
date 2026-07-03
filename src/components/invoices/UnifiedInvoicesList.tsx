@@ -6,7 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate, getSchemeLabel } from "@/lib/invoiceCalculations";
 import { Progress } from "@/components/ui/progress";
-import { Eye, Trash2, Loader2, FileText, Trash, EyeOff, Clock } from "lucide-react";
+import { Eye, Trash2, Loader2, FileText, Trash, EyeOff, Clock, MessageSquare } from "lucide-react";
+import { SendMessageDialog } from "@/components/messages/SendMessageDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/hooks/use-toast";
 import { InvoiceDetailsDialog } from "./InvoiceDetailsDialog";
@@ -60,6 +61,7 @@ export const UnifiedInvoicesList = ({
   const partnerIdParam = searchParams.get('partnerId');
   const monthParam = searchParams.get('month');
   const yearParam = searchParams.get('year');
+  const statusParam = searchParams.get('statusFilter') as InvoiceStatus | null;
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(openInvoiceParam);
@@ -69,6 +71,8 @@ export const UnifiedInvoicesList = ({
   const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([]);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [msgDialogOpen, setMsgDialogOpen] = useState(false);
+  const [msgTarget, setMsgTarget] = useState<{ invoiceId: string; invoiceNumber?: string } | null>(null);
   const [deletingBulk, setDeletingBulk] = useState(false);
   const isMobile = useIsMobile();
   
@@ -91,7 +95,7 @@ export const UnifiedInvoicesList = ({
     statusCounts,
   } = useInvoiceFilters(
     invoices,
-    initialStatusFilter,
+    statusParam || initialStatusFilter,
     role === 'client'
       ? { prefix: 'clientInvoices', fields: ['searchQuery', 'statusFilter', 'sortBy'] }
       : undefined
@@ -99,9 +103,35 @@ export const UnifiedInvoicesList = ({
   
   const { setRef } = useStaggerAnimation(filteredInvoices.length, viewMode === 'table' ? 60 : 80);
 
+  const filtersActive =
+    searchQuery.trim() !== '' ||
+    statusFilter !== 'all' ||
+    clientFilter !== 'all' ||
+    partnerFilter !== 'all' ||
+    monthFilter !== 'all';
+
+  const hiddenByFilters = invoices.length - filteredInvoices.length;
+
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setClientFilter('all');
+    setPartnerFilter('all');
+    setMonthFilter('all');
+  };
+
   useEffect(() => {
     fetchInvoices();
   }, [partnerId, clientId]);
+
+  // ?statusFilter=... из URL — quick-action из ⌘K-палитры.
+  // Применяется и при заходе на страницу, и если юзер уже на /invoices.
+  useEffect(() => {
+    if (statusParam && statusParam !== statusFilter) {
+      setStatusFilter(statusParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusParam]);
 
   useEffect(() => {
     if (openInvoiceParam) {
@@ -195,8 +225,6 @@ export const UnifiedInvoicesList = ({
     try {
       const data = await apiGet<any[]>('/invoices');
 
-      console.log('[UnifiedInvoicesList] API returned data:', data.length, 'invoices');
-      
       const mappedInvoices = data.map((inv: any) => ({
         id: inv.id,
         invoice_number: inv.invoiceNumber,
@@ -214,12 +242,21 @@ export const UnifiedInvoicesList = ({
         client_bill: inv.calculations?.clientBill || inv.clientBill,
         commission_rate: inv.calculations?.commissionRate,
         commission_amount: inv.calculations?.commissionAmount,
+        agency_margin: inv.calculations?.agencyMargin,
+        client_base_after_margin: inv.calculations?.clientBaseAfterMargin,
+        amount_to_admin: inv.calculations?.amountToAdmin,
         partner_share_from_margin: inv.calculations?.partnerShareFromMargin,
         admin_share_from_margin: inv.calculations?.adminShareFromMargin,
         executor_expenses_total: inv.calculations?.executorExpensesTotal || '0',
         net_profit_admin: inv.calculations?.netProfitAdmin,
         client_remaining: inv.calculations?.clientRemaining,
         partner_transfer_due: inv.calculations?.partnerTransferDue,
+        partner_commission_rate: inv.partnerCommissionRate,
+        service_type: inv.serviceType,
+        period_unit: inv.periodUnit,
+        price_per_period: inv.pricePerPeriod,
+        total_periods: inv.totalPeriods,
+        periods_used: inv.periodsUsed,
         hidden_from_assistant: inv.hiddenFromAssistant,
       }));
 
@@ -373,12 +410,31 @@ export const UnifiedInvoicesList = ({
           showPartnerFilter={(role === 'admin' || role === 'assistant') && !partnerId}
         />
 
+        {filtersActive && hiddenByFilters > 0 && filteredInvoices.length > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-md border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/30 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">
+              Фильтр скрывает <strong className="text-foreground">{hiddenByFilters}</strong> счёт{hiddenByFilters === 1 ? '' : hiddenByFilters < 5 ? 'а' : 'ов'} из {invoices.length}.
+            </span>
+            <Button variant="ghost" size="sm" onClick={resetAllFilters} data-testid="button-reset-filters">
+              Показать все
+            </Button>
+          </div>
+        )}
         {filteredInvoices.length === 0 ? (
-          <EmptyState
-            icon={FileText}
-            title="Счета не найдены"
-            description="Попробуйте изменить параметры фильтрации или поиска"
-          />
+          filtersActive && invoices.length > 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="Счета не найдены"
+              description={`У вас ${invoices.length} счёт${invoices.length === 1 ? '' : invoices.length < 5 ? 'а' : 'ов'}, но все скрыты текущим фильтром.`}
+              action={{ label: 'Показать все счета', onClick: resetAllFilters }}
+            />
+          ) : (
+            <EmptyState
+              icon={FileText}
+              title="Счета не найдены"
+              description="Попробуйте изменить параметры фильтрации или поиска"
+            />
+          )
         ) : (
           <AnimatePresence mode="wait">
             <motion.div
@@ -458,12 +514,31 @@ export const UnifiedInvoicesList = ({
           showPartnerFilter={(role === 'admin' || role === 'assistant') && !partnerId}
         />
 
+        {filtersActive && hiddenByFilters > 0 && filteredInvoices.length > 0 && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-md border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/30 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">
+              Фильтр скрывает <strong className="text-foreground">{hiddenByFilters}</strong> из {invoices.length}.
+            </span>
+            <Button variant="ghost" size="sm" onClick={resetAllFilters} data-testid="button-reset-filters-table">
+              Показать все
+            </Button>
+          </div>
+        )}
         {filteredInvoices.length === 0 ? (
-          <EmptyState
-            icon={FileText}
-            title="Счета не найдены"
-            description="Попробуйте изменить параметры фильтрации или поиска"
-          />
+          filtersActive && invoices.length > 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="Счета не найдены"
+              description={`У вас ${invoices.length} счёт${invoices.length === 1 ? '' : invoices.length < 5 ? 'а' : 'ов'}, но все скрыты текущим фильтром.`}
+              action={{ label: 'Показать все счета', onClick: resetAllFilters }}
+            />
+          ) : (
+            <EmptyState
+              icon={FileText}
+              title="Счета не найдены"
+              description="Попробуйте изменить параметры фильтрации или поиска"
+            />
+          )
         ) : (
           <>
             {enableDelete && selectedInvoices.length > 0 && (
@@ -567,7 +642,14 @@ export const UnifiedInvoicesList = ({
                     {(role === 'admin' || role === 'assistant') && (
                       <TableCell className="text-muted-foreground">{invoice.partner_name || "—"}</TableCell>
                     )}
-                    <TableCell className="text-2xl font-semibold">{formatCurrency(invoice.client_bill || 0)}</TableCell>
+                    <TableCell>
+                      <div className="text-2xl font-semibold">{formatCurrency(invoice.client_bill || 0)}</div>
+                      {invoice.service_type === 'periodic' && Number(invoice.total_periods || 0) > 0 && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          {formatCurrency(Number(invoice.price_per_period || 0))} × {Number(invoice.total_periods || 0)} {invoice.period_unit === 'day' ? 'дн' : 'мес'} · использовано {Number(invoice.periods_used || 0)}/{Number(invoice.total_periods || 0)}
+                        </div>
+                      )}
+                    </TableCell>
                     {role === 'partner' && (
                       <>
                         <TableCell className="text-muted-foreground">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
@@ -755,6 +837,8 @@ export const UnifiedInvoicesList = ({
       ) : (
         <div className="space-y-4">
           {displayInvoices.map((invoice, index) => {
+          // «Открытая комиссия» для клиента — только agency_30/40 (30/40% маржа
+          // в названии). commission_based, partner_10, partner_15 — закрытые.
           const isAgency30 = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
           
           return (
@@ -792,50 +876,84 @@ export const UnifiedInvoicesList = ({
               </CardHeader>
               <CardContent className="space-y-4">
                 {role === 'client' ? (
-                  // Client view - simplified
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-lg font-bold group-hover:text-primary transition-colors">
-                      <span>Счет к оплате:</span>
-                      <span>{formatCurrency(invoice.client_bill || 0)}</span>
-                    </div>
-
-                    {isAgency30 && (
-                      <>
-                        <div className="border-t pt-3 space-y-2">
-                          <div className="flex justify-between text-sm text-muted-foreground">
-                            <span>Маржа агентства:</span>
-                            <span>{formatCurrency((invoice.client_bill || 0) * 0.30)}</span>
-                          </div>
-                          
-                          <div className="bg-primary/5 p-4 rounded-lg space-y-3">
-                            <div className="flex justify-between font-medium">
-                              <span>Доступно на расходы:</span>
-                              <span>{formatCurrency((invoice.client_bill || 0) * 0.70)}</span>
-                            </div>
-                            
-                            <div className="flex justify-between text-sm text-muted-foreground">
-                              <span>Потрачено:</span>
-                              <span>{formatCurrency(invoice.executor_expenses_total || 0)}</span>
-                            </div>
-                            
-                            <div className="flex justify-between text-sm font-semibold text-primary">
-                              <span>Остаток:</span>
-                              <span>{formatCurrency(invoice.client_remaining || 0)}</span>
-                            </div>
-
-                            <div className="pt-2">
-                              <Progress 
-                                value={(invoice.client_bill || 0) > 0
-                                  ? ((invoice.executor_expenses_total || 0) / ((invoice.client_bill || 0) * 0.70)) * 100 
-                                  : 0
-                                } 
-                                className="h-2"
-                              />
-                            </div>
-                          </div>
+                  // Client view:
+                  //   agency_30/40            → открытая раскладка с маржой и расходами
+                  //   periodic (любая схема)  → оплачено / цена / использовано / осталось
+                  //   остальное (commission_based one_time, partner_10/15) → только сумма + статус
+                  (() => {
+                    const isAgencyScheme = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
+                    const isPeriodic = invoice.service_type === 'periodic';
+                    const bill = Number(invoice.client_bill || 0);
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-lg font-bold group-hover:text-primary transition-colors">
+                          <span>{isAgencyScheme ? 'Всего оплачено:' : 'Сумма счёта:'}</span>
+                          <span>{formatCurrency(bill)}</span>
                         </div>
 
-                        <div className="flex justify-end pt-3 border-t mt-2">
+                        {isPeriodic && (() => {
+                          const total = Number(invoice.total_periods || 0);
+                          const used = Number(invoice.periods_used || 0);
+                          const left = Math.max(0, total - used);
+                          const unit = invoice.period_unit === 'day' ? 'дн' : 'мес';
+                          const price = Number(invoice.price_per_period || 0);
+                          return (
+                            <div className="border-t pt-3 space-y-1 text-sm">
+                              <div className="flex justify-between"><span className="text-muted-foreground">Цена за {unit}</span><span className="font-medium">{formatCurrency(price)}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Использовано</span><span className="font-medium">{used} из {total} {unit}</span></div>
+                              <div className="flex justify-between"><span className="text-muted-foreground">Осталось</span><span className="font-medium text-green-600">{left} {unit} · {formatCurrency(price * left)}</span></div>
+                            </div>
+                          );
+                        })()}
+
+                        {isAgencyScheme && !isPeriodic && (() => {
+                          const marginRate = invoice.scheme === 'agency_40' ? 40 : 30;
+                          const commissionAmount = Number(invoice.agency_margin || (bill * marginRate / 100));
+                          const available = Number(invoice.client_base_after_margin || (bill - commissionAmount));
+                          const spent = Number(invoice.executor_expenses_total || 0);
+                          const remaining = Number(invoice.client_remaining || 0);
+                          return (
+                            <div className="border-t pt-3 space-y-2">
+                              <div className="flex justify-between text-sm text-muted-foreground">
+                                <span>Комиссия агентства ({marginRate}%):</span>
+                                <span>{formatCurrency(commissionAmount)}</span>
+                              </div>
+                              <div className="bg-primary/5 p-4 rounded-lg space-y-3">
+                                <div className="flex justify-between font-medium">
+                                  <span>Доступно вам:</span>
+                                  <span>{formatCurrency(available)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm text-muted-foreground">
+                                  <span>Потрачено:</span>
+                                  <span>{formatCurrency(spent)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm font-semibold text-primary">
+                                  <span>Осталось:</span>
+                                  <span>{formatCurrency(remaining)}</span>
+                                </div>
+                                <Progress
+                                  value={available > 0 ? (spent / available) * 100 : 0}
+                                  className="h-2"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        <div className="flex justify-end pt-3 border-t mt-2 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setMsgTarget({ invoiceId: invoice.id, invoiceNumber: invoice.invoice_number });
+                              setMsgDialogOpen(true);
+                            }}
+                            className="gap-2"
+                            data-testid={`button-write-invoice-${invoice.id}`}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            Написать
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -844,12 +962,12 @@ export const UnifiedInvoicesList = ({
                             className="gap-2"
                           >
                             <Eye className="h-4 w-4" />
-                            Детали расходов
+                            Детали
                           </Button>
                         </div>
-                      </>
-                    )}
-                  </div>
+                      </div>
+                    );
+                  })()
                 ) : (
                   // Admin, Assistant, Partner view
                   <>
@@ -1033,6 +1151,15 @@ export const UnifiedInvoicesList = ({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      )}
+      {msgTarget && (
+        <SendMessageDialog
+          open={msgDialogOpen}
+          onOpenChange={(o) => { setMsgDialogOpen(o); if (!o) setMsgTarget(null); }}
+          invoiceId={msgTarget.invoiceId}
+          invoiceNumber={msgTarget.invoiceNumber}
+          currentRole={role as any}
+        />
       )}
     </>
   );

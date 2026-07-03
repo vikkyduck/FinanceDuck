@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPatch } from "@/lib/api";
 import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatDateTime } from "@/lib/format";
 import { toast } from "sonner";
 import { Edit2, Save, X, TrendingUp, TrendingDown, AlertCircle } from "lucide-react";
 
@@ -140,7 +141,7 @@ export const WorkingCapitalManager = () => {
             )}
             {balance.updated_at && (
               <div className="text-xs text-muted-foreground">
-                Обновлено: {new Date(balance.updated_at).toLocaleString('ru-RU')}
+                Обновлено: {formatDateTime(balance.updated_at)}
               </div>
             )}
           </div>

@@ -78,7 +78,9 @@ dashboardRouter.get("/api/search", authMiddleware, async (req: AuthenticatedRequ
   try {
     const query = (req.query.q as string) || "";
     if (!query.trim()) return res.json([]);
-    res.json(await storage.globalSearch(query, req.user?.role || "client"));
+    res.json(await storage.globalSearch(query, req.user?.role || "client", {
+      clientId: req.user?.clientId,
+    }));
   } catch (error) {
     console.error("Global search error:", error);
     res.status(500).json({ error: "Failed to search" });

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useRateLimit } from "@/hooks/useRateLimit";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeText, sanitizeNumber, sanitizeDate, isValidUuid } from "@/lib/sanitize";
@@ -173,16 +173,34 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="isAdminExpense"
-              data-testid="checkbox-admin-expense"
-              checked={isAdminExpense}
-              onCheckedChange={(checked) => setIsAdminExpense(checked as boolean)}
-            />
-            <Label htmlFor="isAdminExpense" className="text-sm font-normal cursor-pointer">
-              Оплачено админом (партнер вернет эту сумму)
-            </Label>
+          <div className="space-y-2">
+            <Label className="text-sm">Кто оплатил расход *</Label>
+            <RadioGroup
+              value={isAdminExpense ? "admin" : "partner"}
+              onValueChange={(v) => setIsAdminExpense(v === "admin")}
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+            >
+              <label
+                htmlFor="paid-by-partner"
+                className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-accent has-[input:checked]:border-primary has-[input:checked]:bg-accent/50"
+              >
+                <RadioGroupItem id="paid-by-partner" value="partner" data-testid="radio-paid-by-partner" className="mt-0.5" />
+                <div className="leading-tight">
+                  <div className="text-sm font-medium">Партнёр</div>
+                  <div className="text-xs text-muted-foreground">Партнёр заплатил сам — сумма уменьшит его долг перед админом.</div>
+                </div>
+              </label>
+              <label
+                htmlFor="paid-by-admin"
+                className="flex items-start gap-3 rounded-md border p-3 cursor-pointer hover:bg-accent has-[input:checked]:border-primary has-[input:checked]:bg-accent/50"
+              >
+                <RadioGroupItem id="paid-by-admin" value="admin" data-testid="radio-paid-by-admin" className="mt-0.5" />
+                <div className="leading-tight">
+                  <div className="text-sm font-medium">Администратор</div>
+                  <div className="text-xs text-muted-foreground">Админ заплатил из своих — партнёр вернёт эту сумму.</div>
+                </div>
+              </label>
+            </RadioGroup>
           </div>
 
           <div className="flex justify-end gap-2">

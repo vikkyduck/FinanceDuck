@@ -16,18 +16,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Download, Loader2, FileText } from "lucide-react";
+import { Download, Loader2, FileText, FileSpreadsheet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { DashboardHeader } from "@/components/layout/DashboardHeader";
-import { ClientInvoicesList } from "./client/ClientInvoicesList";
 import { ClientStats } from "./client/ClientStats";
 import { OverduePaymentsAlert } from "./shared/OverduePaymentsAlert";
-import { ClientAgency30Report } from "./client/ClientAgency30Report";
-import { ClientBudgetDashboard } from "./client/ClientBudgetDashboard";
 import { useAuth } from "@/hooks/useAuth";
-import { useViewMode } from "@/hooks/useViewMode";
-import { ViewModeToggle } from "@/components/shared/ViewModeToggle";
 import { showSuccess } from "@/lib/errorHandler";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -50,7 +45,6 @@ interface ReportPreview {
 export const ClientDashboard = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { viewMode, setViewMode } = useViewMode();
   const { toast } = useToast();
   const [downloading, setDownloading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -185,12 +179,14 @@ export const ClientDashboard = () => {
     }
   };
 
-  const handleDownloadReport = async () => {
+  // Открывает HTML-отчёт в новой вкладке. Из него юзер может «Сохранить PDF».
+  const handleOpenHtmlReport = async () => {
     setPreviewOpen(false);
     setDownloading(true);
+    const reportWindow = window.open("about:blank", "_blank");
     try {
       const csrfToken = localStorage.getItem("csrf_token");
-      const response = await fetch("/api/admin/export/client-report", {
+      const response = await fetch("/api/admin/export/client-report-print", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -203,36 +199,85 @@ export const ClientDashboard = () => {
         const err = await response.json().catch(() => ({ error: "Ошибка сервера" }));
         throw new Error(err.error || `HTTP ${response.status}`);
       }
-      const contentDisposition = response.headers.get("Content-Disposition") || "";
-      const filenameMatch = contentDisposition.match(/filename=([^;]+)/);
-      const filename = filenameMatch ? filenameMatch[1].trim() : `бюджетный_отчёт_${new Date().toISOString().split("T")[0]}.xlsx`;
-      const buffer = await response.arrayBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 100);
-      showSuccess("Отчёт скачан", "Файл загружен на ваше устройство");
+      const html = await response.text();
+      if (reportWindow) {
+        reportWindow.document.open();
+        reportWindow.document.write(html);
+        reportWindow.document.close();
+        reportWindow.focus();
+        showSuccess("Отчёт открыт", "В новой вкладке доступна кнопка «Распечатать / Сохранить PDF»");
+      } else {
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.target = "_blank"; a.rel = "noopener";
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
+      }
     } catch (error: any) {
+      reportWindow?.close();
       toast({ title: "Ошибка", description: error.message || "Не удалось сформировать отчёт", variant: "destructive" });
     } finally {
       setDownloading(false);
     }
   };
 
+  // Скачивает бинарный файл (PDF / XLSX) как Blob с правильным именем.
+  const downloadBinary = async (url: string, mime: string, fallbackExt: string) => {
+    setPreviewOpen(false);
+    setDownloading(true);
+    try {
+      const csrfToken = localStorage.getItem("csrf_token");
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify(buildRequestBody()),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Ошибка сервера" }));
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+      // Парсим имя файла из Content-Disposition (RFC 5987 + ASCII fallback).
+      const cd = response.headers.get("Content-Disposition") || "";
+      let filename = `бюджетный_отчёт_${new Date().toISOString().split("T")[0]}.${fallbackExt}`;
+      const utfMatch = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+      const asciiMatch = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
+      if (utfMatch) try { filename = decodeURIComponent(utfMatch[1]); } catch {}
+      else if (asciiMatch) filename = asciiMatch[1];
+      const buffer = await response.arrayBuffer();
+      const blob = new Blob([buffer], { type: mime });
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { window.URL.revokeObjectURL(blobUrl); document.body.removeChild(a); }, 100);
+      showSuccess("Отчёт скачан", filename);
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось скачать отчёт", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadPdf = () => downloadBinary(
+    "/api/admin/export/client-report-pdf",
+    "application/pdf",
+    "pdf"
+  );
+  const handleDownloadXlsx = () => downloadBinary(
+    "/api/admin/export/client-report",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "xlsx"
+  );
+
   return (
     <DashboardLayout>
       <DashboardHeader
-        title="Здравствуйте, Клиент"
-        subtitle="Ваши счета и платежи"
+        title="Ваши финансы"
       />
 
       <div className="space-y-8">
@@ -297,9 +342,9 @@ export const ClientDashboard = () => {
               {previewing ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
-                <Download className="h-4 w-4 mr-2" />
+                <FileText className="h-4 w-4 mr-2" />
               )}
-              Скачать бюджетный отчёт
+              Открыть бюджетный отчёт
             </Button>
           </div>
         </div>
@@ -335,46 +380,33 @@ export const ClientDashboard = () => {
                 </div>
               </div>
             )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPreviewOpen(false)} data-testid="button-preview-cancel">
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-2">
+              <Button variant="outline" onClick={() => setPreviewOpen(false)} disabled={downloading} data-testid="button-preview-cancel">
                 Отмена
               </Button>
-              <Button onClick={handleDownloadReport} disabled={downloading} data-testid="button-preview-confirm-download">
-                {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                Скачать
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 sm:ml-auto">
+                <Button variant="outline" onClick={handleDownloadXlsx} disabled={downloading} data-testid="button-preview-download-xlsx">
+                  {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+                  Excel
+                </Button>
+                <Button variant="outline" onClick={handleDownloadPdf} disabled={downloading} data-testid="button-preview-download-pdf">
+                  {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  PDF
+                </Button>
+                <Button onClick={handleOpenHtmlReport} disabled={downloading} data-testid="button-preview-open-html">
+                  {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                  Открыть страницу
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         <OverduePaymentsAlert role="client" />
-        
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-2xl">Обзор</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ClientStats />
-          </CardContent>
-        </Card>
 
-        <ClientBudgetDashboard />
-
-        <ClientAgency30Report />
-
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-4 flex flex-row items-center justify-between">
-            <CardTitle className="text-2xl">Мои счета</CardTitle>
-            <ViewModeToggle 
-              value={viewMode}
-              onValueChange={setViewMode}
-              className="hidden sm:flex"
-            />
-          </CardHeader>
-          <CardContent className="px-0">
-            <ClientInvoicesList viewMode={viewMode} />
-          </CardContent>
-        </Card>
+        {/* Единый обзор. Бюджеты проектов / Agency30 / Мои счета —
+            убраны как дублирующие представления тех же данных. */}
+        <ClientStats dateFrom={dateFrom} dateTo={dateTo} />
       </div>
     </DashboardLayout>
   );

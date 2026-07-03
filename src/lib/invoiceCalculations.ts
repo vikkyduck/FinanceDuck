@@ -126,23 +126,10 @@ export function calculatePartnerDebt(
 }
 
 // ─── Formatting utilities ─────────────────────────────────────────────────────
-
-export function formatCurrency(amount: number): string {
-  const formatted = new Intl.NumberFormat('ru-RU', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-  return `${formatted} ₽`;
-}
-
-export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(d);
-}
+// Реэкспорт из единого Format-сервиса, чтобы не ломать legacy-импорты вида
+// `import { formatCurrency, formatDate } from "@/lib/invoiceCalculations"`.
+// Любой новый код должен импортировать напрямую из @/lib/format.
+export { formatMoney as formatCurrency, formatDate } from "./format";
 
 export function getSchemeLabel(
   scheme: import("@shared/financialEngine").InvoiceScheme,

@@ -16,6 +16,7 @@ import { ClientsTableSkeleton } from "../InvoicesSkeleton";
 import { handleValidationError, showSuccess } from "@/lib/errorHandler";
 import { useRateLimit } from "@/hooks/useRateLimit";
 import { invoiceService, ClientWithPartners, PartnerListItem } from "@/lib/services/invoices";
+import { apiPost } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 interface ManageClientsDialogProps {
@@ -28,9 +29,12 @@ interface ClientFormData {
   telegram: string;
   phone: string;
   partnerIds: string[];
+  tgChatId: string;
+  tgBotToken: string;
+  contactPerson: string;
 }
 
-const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerIds: [] };
+const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerIds: [], tgChatId: "", tgBotToken: "", contactPerson: "" };
 
 export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogProps) => {
   const { role } = useAuth();
@@ -112,6 +116,9 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
         telegram: form.telegram.trim() || undefined,
         phone: form.phone.trim() || undefined,
         partnerId: form.partnerIds.length === 1 ? form.partnerIds[0] : undefined,
+        tgChatId: form.tgChatId.trim() || undefined,
+        tgBotToken: form.tgBotToken.trim() || undefined,
+        contactPerson: form.contactPerson.trim() || null,
       });
       
       if (isAdmin && form.partnerIds.length > 0) {
@@ -136,6 +143,9 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
       telegram: client.telegram || "",
       phone: client.phone || "",
       partnerIds: client.partners.map(p => p.id),
+      tgChatId: (client as any).tgChatId || "",
+      tgBotToken: (client as any).tgBotToken || "",
+      contactPerson: (client as any).contactPerson || "",
     });
   };
 
@@ -143,6 +153,26 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
     setEditingId(null);
     setEditForm(emptyForm);
     setEditPartnerPopoverOpen(false);
+  };
+
+  const sendTgTest = async (clientId: string) => {
+    if (!editForm.tgChatId.trim()) {
+      toast.error("Сначала заполните TG Chat ID и сохраните");
+      return;
+    }
+    try {
+      // Save changes first so server has current settings.
+      if (editingId === clientId) {
+        await invoiceService.updateClient(clientId, {
+          tgChatId: editForm.tgChatId.trim() || null,
+          tgBotToken: editForm.tgBotToken.trim() || null,
+        } as any);
+      }
+      await apiPost(`/clients/${clientId}/telegram-test`, {});
+      showSuccess("Telegram", "Тестовое сообщение отправлено");
+    } catch (e: any) {
+      toast.error(e?.message || "Не удалось отправить тест");
+    }
   };
 
   const saveEdit = async () => {
@@ -160,6 +190,9 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
         telegram: editForm.telegram.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
         partnerId: editForm.partnerIds.length === 1 ? editForm.partnerIds[0] : undefined,
+        tgChatId: editForm.tgChatId.trim() || null,
+        tgBotToken: editForm.tgBotToken.trim() || null,
+        contactPerson: editForm.contactPerson.trim() || null,
       });
       
       if (isAdmin) {
@@ -226,6 +259,18 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
                       placeholder="ООО Клиент"
                       data-testid="input-client-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1 text-xs sm:text-sm">
+                      <User className="h-3 w-3" />
+                      Контактное лицо
+                    </Label>
+                    <Input
+                      value={form.contactPerson}
+                      onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+                      placeholder="Иван Петров"
+                      data-testid="input-client-contact-person"
                     />
                   </div>
                   {isAdmin && (
@@ -302,6 +347,38 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t mt-2">
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1 text-xs sm:text-sm">
+                      <Send className="h-3 w-3" />
+                      TG Chat ID
+                    </Label>
+                    <Input
+                      value={form.tgChatId}
+                      onChange={(e) => setForm({ ...form, tgChatId: e.target.value })}
+                      placeholder="-1001234567890"
+                      data-testid="input-client-tg-chat-id"
+                    />
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      ID группы для уведомлений (с минусом для супергрупп)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1 text-xs sm:text-sm">
+                      <Send className="h-3 w-3" />
+                      TG Bot Token
+                    </Label>
+                    <Input
+                      value={form.tgBotToken}
+                      onChange={(e) => setForm({ ...form, tgBotToken: e.target.value })}
+                      placeholder="опционально — иначе общий бот"
+                      data-testid="input-client-tg-bot-token"
+                    />
+                    <p className="text-[10px] text-muted-foreground leading-tight">
+                      Свой бот клиента. Пусто → используется общий бот сервиса.
+                    </p>
+                  </div>
+                </div>
                 <Button onClick={handleAdd} disabled={loading} className="w-full" data-testid="button-add-client">
                   {loading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -347,14 +424,32 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                           >
                             <TableCell>
                               {editingId === client.id ? (
-                                <Input
-                                  value={editForm.name}
-                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                  className="h-8"
-                                  data-testid="input-edit-client-name"
-                                />
+                                <div className="space-y-1">
+                                  <Input
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="h-8"
+                                    placeholder="Название"
+                                    data-testid="input-edit-client-name"
+                                  />
+                                  <Input
+                                    value={editForm.contactPerson}
+                                    onChange={(e) => setEditForm({ ...editForm, contactPerson: e.target.value })}
+                                    className="h-7 text-xs"
+                                    placeholder="Контактное лицо"
+                                    data-testid="input-edit-client-contact-person"
+                                  />
+                                </div>
                               ) : (
-                                <span className="font-medium">{client.name}</span>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{client.name}</span>
+                                  {(client as any).contactPerson && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                      <User className="h-3 w-3" />
+                                      {(client as any).contactPerson}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </TableCell>
                             <TableCell>
@@ -427,6 +522,31 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                                     placeholder="Телефон"
                                     className="h-7 text-xs"
                                   />
+                                  <Input
+                                    value={editForm.tgChatId}
+                                    onChange={(e) => setEditForm({ ...editForm, tgChatId: e.target.value })}
+                                    placeholder="TG Chat ID (-1001234...)"
+                                    className="h-7 text-xs"
+                                    data-testid="input-edit-client-tg-chat-id"
+                                  />
+                                  <Input
+                                    value={editForm.tgBotToken}
+                                    onChange={(e) => setEditForm({ ...editForm, tgBotToken: e.target.value })}
+                                    placeholder="TG Bot Token (опц.)"
+                                    className="h-7 text-xs"
+                                    data-testid="input-edit-client-tg-bot-token"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs w-full"
+                                    onClick={() => sendTgTest(client.id)}
+                                    disabled={loading || !editForm.tgChatId.trim()}
+                                    data-testid="button-tg-test"
+                                  >
+                                    <Send className="h-3 w-3 mr-1" />
+                                    Тест Telegram
+                                  </Button>
                                 </div>
                               ) : (
                                 <div className="flex flex-wrap gap-1">
@@ -442,7 +562,13 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                                       {client.phone}
                                     </Badge>
                                   )}
-                                  {!client.telegram && !client.phone && (
+                                  {(client as any).tgChatId && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <Send className="h-3 w-3 mr-1" />
+                                      TG: {(client as any).tgChatId}
+                                    </Badge>
+                                  )}
+                                  {!client.telegram && !client.phone && !(client as any).tgChatId && (
                                     <span className="text-xs text-muted-foreground">Нет контактов</span>
                                   )}
                                 </div>

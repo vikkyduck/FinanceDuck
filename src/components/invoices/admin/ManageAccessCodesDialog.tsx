@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Trash2, Plus, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { formatDate } from "@/lib/format";
 
 interface ManageAccessCodesDialogProps {
   open: boolean;
@@ -355,7 +356,7 @@ export const ManageAccessCodesDialog = ({ open, onOpenChange }: ManageAccessCode
                           </TableCell>
                           <TableCell>
                             {token.lastUsedAt 
-                              ? new Date(token.lastUsedAt).toLocaleDateString('ru-RU')
+                              ? formatDate(token.lastUsedAt)
                               : 'Не использовался'}
                           </TableCell>
                           <TableCell>

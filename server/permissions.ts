@@ -7,7 +7,36 @@
  * can SEE, not what is calculated.
  */
 
-import { UserRole } from "../shared/schema";
+import { UserRole, InvoiceScheme } from "../shared/schema";
+
+// Клиенту открытая раскладка «комиссия / доступно / потрачено / осталось»
+// показывается ТОЛЬКО по агентским 30%/40% — у них % зашит в названии и
+// согласован с клиентом. По commission_based, partner_10 и partner_15
+// конкретный процент клиенту не показываем (это внутренние условия).
+const CLIENT_FINANCIAL_VISIBLE_SCHEMES: ReadonlySet<InvoiceScheme> = new Set([
+  'agency_30',
+  'agency_40',
+]);
+
+export function isClientFinancialVisible(scheme: unknown): boolean {
+  return typeof scheme === 'string'
+    && CLIENT_FINANCIAL_VISIBLE_SCHEMES.has(scheme as InvoiceScheme);
+}
+
+/**
+ * Видим ли клиенту блок «потрачено/осталось» по счёту в принципе.
+ * Помимо агентских схем — также любые ПЕРИОДИЧЕСКИЕ счета: клиент платит
+ * вперёд за N месяцев, и должен видеть, сколько уже использовано.
+ * Расходы исполнителя при этом всё равно остаются скрытыми (см.
+ * client-safe поля calculations ниже).
+ */
+export function isClientUsageVisible(invoice: {
+  scheme?: unknown;
+  serviceType?: unknown;
+}): boolean {
+  if (isClientFinancialVisible(invoice.scheme)) return true;
+  return invoice.serviceType === 'periodic';
+}
 
 // ---------------------------------------------------------------------------
 // Permission tables
@@ -16,28 +45,31 @@ import { UserRole } from "../shared/schema";
 export const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   admin: [
     'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
+    'clientTitle',
     'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
     'plannedExpenses', 'closingDocumentUrl',
   ],
   partner: [
-    'id', 'invoiceNumber', 'clientId', 'status', 'description',
+    'id', 'invoiceNumber', 'clientId', 'status', 'description', 'clientTitle',
     'clientBill', 'scheme', 'createdAt', 'updatedAt',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'plannedExpenses',
   ],
   client: [
-    'id', 'invoiceNumber', 'status', 'description', 'clientBill',
+    'id', 'invoiceNumber', 'status', 'description', 'clientTitle', 'clientBill',
     'scheme', 'createdAt', 'updatedAt',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes',
+    // Поля для periodic-режима: клиент видит, что он покупает и насколько использовал.
+    'serviceType', 'periodUnit', 'pricePerPeriod', 'totalPeriods', 'periodsUsed',
   ],
   assistant: [
-    'id', 'invoiceNumber', 'clientId', 'status', 'description',
+    'id', 'invoiceNumber', 'clientId', 'status', 'description', 'clientTitle',
     'clientBill', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
     'plannedExpenses',
   ],
   accountant: [
-    'id', 'invoiceNumber', 'clientId', 'status', 'description',
+    'id', 'invoiceNumber', 'clientId', 'status', 'description', 'clientTitle',
     'clientBill', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
     'plannedExpenses', 'closingDocumentUrl',
@@ -59,7 +91,11 @@ export const ROLE_CALCULATION_PERMISSIONS: Record<UserRole, readonly string[]> =
     'partnerTransferDue',
   ],
   client: [
-    'id', 'invoiceId', 'clientBill', 'clientBaseAfterMargin',
+    'id', 'invoiceId', 'clientBill',
+    // Для agency 30/40 показываем явный размер маржи и базу.
+    // commissionAmount/commissionRate клиенту НЕ отдаём — для commission_based
+    // и partner_10/15 конкретный % — внутреннее условие, не для клиента.
+    'agencyMargin', 'clientBaseAfterMargin',
     'clientSpent', 'clientRemaining', 'executorExpensesTotal',
   ],
   assistant: [
@@ -85,7 +121,8 @@ export const ROLE_STATS_PERMISSIONS: Record<UserRole, readonly string[]> = {
   ],
   client: [
     'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
-    'totalClientBill', 'totalExpenses', 'clientRemaining',
+    'totalClientBill', 'paidClientBill', 'pendingClientBill',
+    'totalExpenses', 'clientRemaining',
   ],
   assistant: [
     'totalInvoices', 'paidInvoices', 'pendingInvoices', 'overdueInvoices',
@@ -122,9 +159,24 @@ export function projectInvoiceForRole(
     if (field in invoice) result[field] = invoice[field];
   }
 
-  if (invoice.calculations && typeof invoice.calculations === 'object') {
+  // Клиенту блок calculations отдаём, когда он структурно ему предназначен:
+  //   1) Агентские схемы (agency_30/40) — полный клиентский блок.
+  //   2) Любые ПЕРИОДИЧЕСКИЕ счета — но без executorExpensesTotal:
+  //      клиент видит «использовано/осталось» по месяцам, а не наши расходы.
+  // По остальным (one_time + неагентская) calculations не отдаём вовсе.
+  const includeCalculations =
+    invoice.calculations
+    && typeof invoice.calculations === 'object'
+    && (role !== 'client' || isClientUsageVisible(invoice));
+
+  if (includeCalculations) {
     const calc: Record<string, any> = {};
+    const hideExecutorExpenses =
+      role === 'client'
+      && !isClientFinancialVisible(invoice.scheme)
+      && invoice.serviceType === 'periodic';
     for (const field of allowedCalcFields) {
+      if (hideExecutorExpenses && field === 'executorExpensesTotal') continue;
       if (field in invoice.calculations) calc[field] = invoice.calculations[field];
     }
     result.calculations = calc;

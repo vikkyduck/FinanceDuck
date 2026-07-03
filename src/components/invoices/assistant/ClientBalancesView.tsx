@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { formatMoney } from "@/lib/format";
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, subYears } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,11 +63,7 @@ function n(v: string | number | null | undefined): number {
 }
 
 function formatRub(amount: number) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "RUB",
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return formatMoney(amount);
 }
 
 function isAgency(scheme: string) {

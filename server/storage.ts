@@ -361,6 +361,9 @@ export class DatabaseStorage implements IStorage {
   async createInvoiceExpense(expense: InsertInvoiceExpense) { return invoiceRepo.createInvoiceExpense(db, expense); }
   async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>) { return invoiceRepo.updateInvoiceExpense(db, id, updates); }
   async deleteInvoiceExpense(id: string) { return invoiceRepo.deleteInvoiceExpense(db, id); }
+  async createInvoiceTransfer(args: Parameters<typeof invoiceRepo.createInvoiceTransfer>[1]) { return invoiceRepo.createInvoiceTransfer(db, args); }
+  async deleteInvoiceTransfer(id: string) { return invoiceRepo.deleteInvoiceTransfer(db, id); }
+  async getInvoiceTransfers(invoiceId: string) { return invoiceRepo.getInvoiceTransfers(db, invoiceId); }
   async deleteInvoice(id: string) { return invoiceRepo.deleteInvoice(db, id); }
   async deleteDocument(id: string) { return invoiceRepo.deleteDocument(db, id);
   }
@@ -410,6 +413,11 @@ export class DatabaseStorage implements IStorage {
     let receivedProfit = 0;  // For paid invoices
     let clientRemaining = 0;
     let totalPlannedExpenses = 0;  // Reserved funds from planned expenses
+    // Клиенту по неагентским схемам нельзя показывать расходы и остаток.
+    // Считаем эти суммы только по агентским счетам (agency_30/40),
+    // чтобы по дашборду клиента не утекала «кухня» партнёрских/комиссионных.
+    let clientVisibleExpenses = 0;
+    let clientVisibleRemaining = 0;
     
     for (const r of results) {
       const inv = r.invoice;
@@ -444,9 +452,13 @@ export class DatabaseStorage implements IStorage {
           // Agency schemes: partner & admin get from margin
           totalPartnerCommission += parseNum(calc.partnerShareFromMargin);
           totalAdminShare += parseNum(calc.adminShareFromMargin);
-          clientRemaining += parseNum(calc.clientBaseAfterMargin) - expenses;
+          const agencyRemaining = parseNum(calc.clientBaseAfterMargin) - expenses;
+          clientRemaining += agencyRemaining;
+          clientVisibleExpenses += expenses;
+          clientVisibleRemaining += agencyRemaining;
         } else {
-          // partner_10, partner_15, commission_based
+          // partner_10, partner_15, commission_based — закрытая комиссия,
+          // клиенту не агрегируется в totalExpenses/clientRemaining.
           totalPartnerCommission += parseNum(calc.commissionAmount);
           totalAdminShare += parseNum(calc.amountToAdmin);
           clientRemaining += parseNum(calc.clientRemaining);
@@ -509,7 +521,9 @@ export class DatabaseStorage implements IStorage {
       stats.partnerDebt = partnerDebt;
       stats.clientRemaining = clientRemaining;
     } else if (role === 'client') {
-      stats.clientRemaining = Math.max(0, clientRemaining);
+      // Перекрываем totalExpenses, чтобы клиент видел расходы только по агентским счетам.
+      stats.totalExpenses = clientVisibleExpenses;
+      stats.clientRemaining = Math.max(0, clientVisibleRemaining);
     }
     
     return stats;
@@ -1833,83 +1847,249 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async globalSearch(query: string, role: string): Promise<Array<{
+  async globalSearch(
+    query: string,
+    role: string,
+    options: { clientId?: string } = {},
+  ): Promise<Array<{
     id: string;
-    type: 'invoice' | 'partner' | 'client';
+    type: 'invoice' | 'partner' | 'client' | 'thread' | 'expense';
     title: string;
     subtitle?: string;
     url?: string;
+    score?: number;
   }>> {
-    const results: Array<{
+    type R = {
       id: string;
-      type: 'invoice' | 'partner' | 'client';
+      type: 'invoice' | 'partner' | 'client' | 'thread' | 'expense';
       title: string;
       subtitle?: string;
       url?: string;
-    }> = [];
+      score?: number;
+    };
+    const results: R[] = [];
 
-    if (role !== 'admin' && role !== 'assistant') {
-      return results;
-    }
+    const trimmed = query.trim();
+    if (!trimmed) return results;
+    const isStaff = role === 'admin' || role === 'assistant';
+    const isClient = role === 'client';
+    if (!isStaff && !isClient) return results;
 
-    const searchPattern = `%${query.toLowerCase()}%`;
+    const q = trimmed.toLowerCase();
+    const like = `%${q}%`;
+    // pg_trgm выставляем порог ~0.25 — нормально ловит опечатки до 1-2 букв
+    // в слове и сокращения. Слишком низкий — много шума.
+    const TRG_MIN = 0.25;
+    // Короткие запросы (< 3 символов) триграммы не покрывают, оставляем
+    // только LIKE-логику.
+    const useFuzzy = q.length >= 3;
 
-    // Search invoices
-    const invoiceResults = await db
-      .select({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        clientName: clients.name,
-        partnerName: partners.name,
-      })
-      .from(invoices)
-      .leftJoin(clients, eq(invoices.clientId, clients.id))
-      .leftJoin(partners, eq(invoices.partnerId, partners.id))
-      .where(sql`LOWER(${invoices.invoiceNumber}) LIKE ${searchPattern}`)
-      .limit(5);
+    // ── Счета ────────────────────────────────────────────────────────────
+    const clientFilter = isClient
+      ? sql`AND i.client_id = ${options.clientId}`
+      : sql``;
+    const fuzzyExpr = useFuzzy
+      ? sql`GREATEST(
+            similarity(LOWER(COALESCE(i.invoice_number, '')), ${q}),
+            similarity(LOWER(COALESCE(i.client_title, '')),   ${q}),
+            ${isStaff ? sql`similarity(LOWER(COALESCE(i.notes, '')), ${q}),`         : sql``}
+            ${isStaff ? sql`similarity(LOWER(COALESCE(i.description, '')), ${q}),`   : sql``}
+            ${isStaff ? sql`similarity(LOWER(COALESCE(c.name, '')), ${q})`           : sql`0`}
+          )`
+      : sql`0`;
+    const fuzzyCondition = useFuzzy
+      ? sql`OR (${fuzzyExpr}) >= ${TRG_MIN}`
+      : sql``;
 
-    for (const inv of invoiceResults) {
+    const invRows = await db.execute(sql`
+      SELECT
+        i.id              AS id,
+        i.invoice_number  AS invoice_number,
+        i.client_title    AS client_title,
+        c.name            AS client_name,
+        p.name            AS partner_name,
+        GREATEST(
+          CASE WHEN LOWER(COALESCE(i.invoice_number, '')) LIKE ${like}    THEN 1.0 ELSE 0 END,
+          CASE WHEN LOWER(COALESCE(i.client_title,   '')) LIKE ${like}    THEN 0.95 ELSE 0 END,
+          ${isStaff ? sql`CASE WHEN LOWER(COALESCE(i.notes, '')) LIKE ${like}       THEN 0.8 ELSE 0 END,` : sql``}
+          ${isStaff ? sql`CASE WHEN LOWER(COALESCE(i.description, '')) LIKE ${like} THEN 0.8 ELSE 0 END,` : sql``}
+          ${isStaff ? sql`CASE WHEN LOWER(COALESCE(c.name, '')) LIKE ${like}        THEN 0.85 ELSE 0 END,`: sql``}
+          ${fuzzyExpr}
+        ) AS score
+        FROM invoices i
+        LEFT JOIN clients  c ON c.id = i.client_id
+        LEFT JOIN partners p ON p.id = i.partner_id
+       WHERE (
+         LOWER(COALESCE(i.invoice_number, '')) LIKE ${like}
+         OR LOWER(COALESCE(i.client_title,   '')) LIKE ${like}
+         ${isStaff ? sql`OR LOWER(COALESCE(i.notes, '')) LIKE ${like}`        : sql``}
+         ${isStaff ? sql`OR LOWER(COALESCE(i.description, '')) LIKE ${like}`  : sql``}
+         ${isStaff ? sql`OR LOWER(COALESCE(c.name, '')) LIKE ${like}`         : sql``}
+         ${fuzzyCondition}
+       )
+       ${clientFilter}
+       ORDER BY score DESC
+       LIMIT 8
+    `);
+    const invList = (invRows.rows ?? invRows) as Array<{
+      id: string; invoice_number: string | null; client_title: string | null;
+      client_name: string | null; partner_name: string | null; score: number;
+    }>;
+    for (const inv of invList) {
+      const title = inv.client_title || inv.invoice_number || `Счёт ${inv.id.slice(0, 8)}`;
+      const subtitle = isClient
+        ? (inv.invoice_number ? `№ ${inv.invoice_number}` : undefined)
+        : `№ ${inv.invoice_number || '—'} · ${inv.client_name || 'Клиент'}`;
       results.push({
         id: inv.id,
         type: 'invoice',
-        title: inv.invoiceNumber || `Счёт ${inv.id.slice(0, 8)}`,
-        subtitle: `${inv.clientName || 'Клиент'} • ${inv.partnerName || 'Партнёр'}`,
-        url: `/invoices?invoice=${inv.id}`,
+        title,
+        subtitle,
+        url: `/invoices?open=${inv.id}`,
+        score: Number(inv.score) || 0,
       });
     }
 
-    // Search partners
-    const partnerResults = await db
-      .select({ id: partners.id, name: partners.name })
-      .from(partners)
-      .where(sql`LOWER(${partners.name}) LIKE ${searchPattern}`)
-      .limit(5);
-
-    for (const p of partnerResults) {
+    // ── Треды (по тексту сообщений) ──────────────────────────────────────
+    const threadAccess = isClient ? sql`AND i.client_id = ${options.clientId}` : sql``;
+    const threadFuzzy = useFuzzy
+      ? sql`OR similarity(LOWER(im.body), ${q}) >= ${TRG_MIN}`
+      : sql``;
+    const threadRows = await db.execute(sql`
+      SELECT DISTINCT ON (im.invoice_id, im.expense_id)
+        im.invoice_id    AS invoice_id,
+        im.expense_id    AS expense_id,
+        im.body          AS last_match_body,
+        im.created_at    AS msg_created_at,
+        i.invoice_number AS invoice_number,
+        c.name           AS client_name,
+        GREATEST(
+          CASE WHEN LOWER(im.body) LIKE ${like} THEN 1.0 ELSE 0 END,
+          ${useFuzzy ? sql`similarity(LOWER(im.body), ${q})` : sql`0`}
+        ) AS score
+        FROM invoice_messages im
+        JOIN invoices i ON i.id = im.invoice_id
+        JOIN clients  c ON c.id = i.client_id
+       WHERE (LOWER(im.body) LIKE ${like} ${threadFuzzy})
+         ${threadAccess}
+       ORDER BY im.invoice_id, im.expense_id, im.created_at DESC
+       LIMIT 6
+    `);
+    const threadList = (threadRows.rows ?? threadRows) as Array<{
+      invoice_id: string; expense_id: string | null;
+      last_match_body: string; invoice_number: string | null; client_name: string | null;
+      score: number;
+    }>;
+    for (const t of threadList) {
+      const previewRaw = String(t.last_match_body || '').replace(/\s+/g, ' ').slice(0, 80);
+      const title = isClient
+        ? (t.invoice_number ? `Счёт № ${t.invoice_number}` : 'Тред')
+        : `${t.invoice_number ? `Счёт № ${t.invoice_number}` : 'Тред'} · ${t.client_name || 'Клиент'}`;
+      // URL ведёт прямо на конкретный тред (MessagesPage прочитает query).
+      const threadParams = new URLSearchParams({ invoiceId: t.invoice_id });
+      if (t.expense_id) threadParams.set('expenseId', t.expense_id);
       results.push({
-        id: p.id,
-        type: 'partner',
-        title: p.name,
-        url: '/partners',
+        id: `thread:${t.invoice_id}:${t.expense_id ?? ''}`,
+        type: 'thread',
+        title,
+        subtitle: previewRaw + (previewRaw.length === 80 ? '…' : ''),
+        url: `/messages?${threadParams.toString()}`,
+        score: Number(t.score) || 0,
       });
     }
 
-    // Search clients
-    const clientResults = await db
-      .select({ id: clients.id, name: clients.name })
-      .from(clients)
-      .where(sql`LOWER(${clients.name}) LIKE ${searchPattern}`)
-      .limit(5);
-
-    for (const c of clientResults) {
+    // ── Затраты (invoice_expenses.description) ──────────────────────────
+    // Видны клиенту ТОЛЬКО по агентским 30/40 счетам (видимость «кухни»).
+    // Staff видит все.
+    const expenseClientFilter = isClient
+      ? sql`AND i.client_id = ${options.clientId} AND i.scheme IN ('agency_30', 'agency_40')`
+      : sql``;
+    const expenseFuzzy = useFuzzy
+      ? sql`OR similarity(LOWER(ie.description), ${q}) >= ${TRG_MIN}`
+      : sql``;
+    const expenseRows = await db.execute(sql`
+      SELECT
+        ie.id              AS id,
+        ie.invoice_id      AS invoice_id,
+        ie.description     AS description,
+        ie.amount          AS amount,
+        ie.date            AS date,
+        i.invoice_number   AS invoice_number,
+        c.name             AS client_name,
+        GREATEST(
+          CASE WHEN LOWER(COALESCE(ie.description, '')) LIKE ${like} THEN 1.0 ELSE 0 END,
+          ${useFuzzy ? sql`similarity(LOWER(COALESCE(ie.description, '')), ${q})` : sql`0`}
+        ) AS score
+        FROM invoice_expenses ie
+        JOIN invoices i ON i.id = ie.invoice_id
+        JOIN clients  c ON c.id = i.client_id
+       WHERE (LOWER(COALESCE(ie.description, '')) LIKE ${like} ${expenseFuzzy})
+         ${expenseClientFilter}
+       ORDER BY score DESC, ie.date DESC NULLS LAST
+       LIMIT 6
+    `);
+    const expenseList = (expenseRows.rows ?? expenseRows) as Array<{
+      id: string; invoice_id: string; description: string | null;
+      amount: string | number; date: string | null;
+      invoice_number: string | null; client_name: string | null; score: number;
+    }>;
+    for (const e of expenseList) {
+      const amount = typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount || '0'));
+      const subtitle = isClient
+        ? `Счёт № ${e.invoice_number || '—'}${Number.isFinite(amount) ? ` · ${amount.toLocaleString('ru-RU')} ₽` : ''}`
+        : `Счёт № ${e.invoice_number || '—'} · ${e.client_name || ''}${Number.isFinite(amount) ? ` · ${amount.toLocaleString('ru-RU')} ₽` : ''}`;
       results.push({
-        id: c.id,
-        type: 'client',
-        title: c.name,
-        url: '/clients',
+        id: `expense:${e.id}`,
+        type: 'expense',
+        title: e.description || '—',
+        subtitle,
+        url: `/invoices?open=${e.invoice_id}`,
+        score: Number(e.score) || 0,
       });
     }
 
+    // ── Партнёры/клиенты — только staff ─────────────────────────────────
+    if (isStaff) {
+      const partnerRows = await db.execute(sql`
+        SELECT id, name,
+          GREATEST(
+            CASE WHEN LOWER(name) LIKE ${like} THEN 1.0 ELSE 0 END,
+            ${useFuzzy ? sql`similarity(LOWER(name), ${q})` : sql`0`}
+          ) AS score
+          FROM partners
+         WHERE LOWER(name) LIKE ${like}
+           ${useFuzzy ? sql`OR similarity(LOWER(name), ${q}) >= ${TRG_MIN}` : sql``}
+         ORDER BY score DESC
+         LIMIT 5
+      `);
+      for (const p of ((partnerRows.rows ?? partnerRows) as any[])) {
+        results.push({ id: p.id, type: 'partner', title: p.name, url: '/partners', score: Number(p.score) || 0 });
+      }
+
+      const clientRows = await db.execute(sql`
+        SELECT id, name, contact_person,
+          GREATEST(
+            CASE WHEN LOWER(name) LIKE ${like} THEN 1.0 ELSE 0 END,
+            CASE WHEN LOWER(COALESCE(contact_person, '')) LIKE ${like} THEN 0.9 ELSE 0 END,
+            ${useFuzzy ? sql`similarity(LOWER(name), ${q})` : sql`0`},
+            ${useFuzzy ? sql`similarity(LOWER(COALESCE(contact_person, '')), ${q})` : sql`0`}
+          ) AS score
+          FROM clients
+         WHERE LOWER(name) LIKE ${like}
+           OR LOWER(COALESCE(contact_person, '')) LIKE ${like}
+           ${useFuzzy ? sql`OR similarity(LOWER(name), ${q}) >= ${TRG_MIN}` : sql``}
+           ${useFuzzy ? sql`OR similarity(LOWER(COALESCE(contact_person, '')), ${q}) >= ${TRG_MIN}` : sql``}
+         ORDER BY score DESC
+         LIMIT 5
+      `);
+      for (const c of ((clientRows.rows ?? clientRows) as any[])) {
+        const title = c.contact_person ? `${c.name} (${c.contact_person})` : c.name;
+        results.push({ id: c.id, type: 'client', title, url: '/clients', score: Number(c.score) || 0 });
+      }
+    }
+
+    // Сортируем итог по релевантности (но внутри типа порядок уже от БД).
+    results.sort((a, b) => (b.score || 0) - (a.score || 0));
     return results;
   }
 
@@ -2200,6 +2380,11 @@ export class DatabaseStorage implements IStorage {
       amount: number;
       date: string;
     }>;
+    serviceType?: 'one_time' | 'periodic';
+    periodUnit?: 'month' | 'day';
+    pricePerPeriod?: number;
+    totalPeriods?: number;
+    periodsUsed?: number;
   }>> {
     // Get invoices with calculations for this client
     const clientInvoices = await db
@@ -2241,17 +2426,430 @@ export class DatabaseStorage implements IStorage {
       });
     }
 
-    return clientInvoices
-      .filter(row => row.calculations?.clientBaseAfterMargin)
-      .map(row => ({
-        invoiceId: row.invoice.id,
-        invoiceNumber: row.invoice.invoiceNumber || '',
-        partnerName: row.invoice.partnerId ? partnerMap.get(row.invoice.partnerId) || '—' : '—',
-        totalBudget: parseNum(row.calculations?.clientBaseAfterMargin),
-        spent: parseNum(row.calculations?.executorExpensesTotal),
-        remaining: parseNum(row.calculations?.clientRemaining),
-        expenses: expensesByInvoice.get(row.invoice.id) || [],
-      }));
+    // Клиенту в «Бюджеты проектов» показываем:
+    //   1) Агентские счета (agency_30/40) — реальный бюджет и расходы исполнителя.
+    //   2) Периодические счета (любая схема) — оплачено / использовано / осталось
+    //      по периодам, БЕЗ списка расходов исполнителя (это «кухня»).
+    const result: Array<{
+      invoiceId: string;
+      invoiceNumber: string;
+      partnerName: string;
+      totalBudget: number;
+      spent: number;
+      remaining: number;
+      expenses: Array<{ description: string; amount: number; date: string }>;
+      serviceType?: 'one_time' | 'periodic';
+      periodUnit?: 'month' | 'day';
+      pricePerPeriod?: number;
+      totalPeriods?: number;
+      periodsUsed?: number;
+    }> = [];
+    for (const row of clientInvoices) {
+      const inv = row.invoice;
+      const calc = row.calculations;
+      const partnerName = inv.partnerId ? partnerMap.get(inv.partnerId) || '—' : '—';
+      const isOpenCommission =
+        inv.scheme === 'agency_30'
+        || inv.scheme === 'agency_40';
+
+      if (inv.serviceType === 'periodic') {
+        const price = parseNum(inv.pricePerPeriod ?? '0');
+        const total = Number(inv.totalPeriods ?? 0);
+        const used  = Math.max(0, Math.min(Number(inv.periodsUsed ?? 0), total));
+        if (!Number.isFinite(price) || total < 1) continue;
+        result.push({
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber || '',
+          partnerName,
+          totalBudget: Math.round(price * total * 100) / 100,
+          spent: Math.round(price * used * 100) / 100,
+          remaining: Math.round(price * (total - used) * 100) / 100,
+          expenses: [], // расходы исполнителя клиенту по periodic не показываем
+          serviceType: 'periodic',
+          periodUnit: (inv.periodUnit ?? 'month') as 'month' | 'day',
+          pricePerPeriod: price,
+          totalPeriods: total,
+          periodsUsed: used,
+        });
+        continue;
+      }
+
+      if (isOpenCommission && calc?.clientBaseAfterMargin) {
+        // Только агентские 30%/40% — открытая раскладка с расходами и остатком.
+        result.push({
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber || '',
+          partnerName,
+          totalBudget: parseNum(calc.clientBaseAfterMargin),
+          spent: parseNum(calc.executorExpensesTotal),
+          remaining: parseNum(calc.clientRemaining),
+          expenses: expensesByInvoice.get(inv.id) || [],
+        });
+      }
+      // commission_based / partner_10 / partner_15 (one_time) — клиенту в
+      // «Бюджеты проектов» структурно не показываем. Конкретные счета он
+      // увидит в списке счетов (сумма + статус), а описания списаний —
+      // в детальной карточке без сумм.
+    }
+    return result;
+  }
+
+  /**
+   * Три блока для клиентского «Обзора»:
+   *   1) agency  — открытая комиссия (agency_30/40): Σ доступно/потрачено/осталось + таблица счетов.
+   *   2) recurring — счета из шаблонов recurring_invoices: «осталось N мес ≈ M ₽» на услугу.
+   *   3) oneTime — неагентские разовые: оплачено / к оплате (X из Y · ₽).
+   * Любая сумма приходит как number с защитой от NaN.
+   */
+  async getClientOverviewBuckets(clientId: string, dateFrom?: string, dateTo?: string): Promise<{
+    agency: {
+      available: number;
+      spent: number;
+      remaining: number;
+      count: number;
+      invoices: Array<{
+        invoiceId: string;
+        invoiceNumber: string;
+        status: string;
+        bill: number;
+        marginRate: number;
+        commissionAmount: number;
+        budgetAfter: number;
+        spent: number;
+        remaining: number;
+        notes: string | null;
+        expenses: Array<{
+          id: string;
+          description: string;
+          amount: number;
+          date: string | null;
+        }>;
+      }>;
+    };
+    recurring: Array<{
+      // 'standalone' = единичный periodic-счёт; 'template' = серия из recurring_invoices
+      kind: 'standalone' | 'template';
+      key: string;
+      invoiceNumber: string;
+      description: string;
+      partnerName: string;
+      unit: 'month' | 'day' | 'hour';
+      unitLabel: string;
+      unitPrice: number;
+      totalUnits: number;
+      usedUnits: number;
+      remainingUnits: number;
+      remainingMoney: number;
+      invoices: Array<{
+        invoiceId: string;
+        invoiceNumber: string;
+        status: string;
+        bill: number;
+        paymentDate: string | null;
+        actualPaymentDate: string | null;
+        notes: string | null;
+      }>;
+    }>;
+    oneTime: {
+      totalCount: number;
+      paidCount: number;
+      pendingCount: number;
+      paidAmount: number;
+      pendingAmount: number;
+      totalAmount: number;
+      invoices: Array<{
+        invoiceId: string;
+        invoiceNumber: string;
+        status: string;
+        bill: number;
+        paymentDate: string | null;
+        actualPaymentDate: string | null;
+        notes: string | null;
+      }>;
+    };
+  }> {
+    const fromDate = dateFrom ? new Date(dateFrom) : null;
+    const toDate = dateTo ? new Date(`${dateTo}T23:59:59.999Z`) : null;
+
+    // Все счета клиента с расчётами.
+    const rows = await db
+      .select({ invoice: invoices, calculations: invoiceCalculations })
+      .from(invoices)
+      .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+      .where(eq(invoices.clientId, clientId));
+
+    const inRange = (paymentDate: string | null) => {
+      if (!fromDate && !toDate) return true;
+      if (!paymentDate) return false;
+      const t = new Date(paymentDate).getTime();
+      if (Number.isNaN(t)) return false;
+      if (fromDate && t < fromDate.getTime()) return false;
+      if (toDate && t > toDate.getTime()) return false;
+      return true;
+    };
+
+    const active = rows.filter(r => r.invoice.status !== 'cancelled' && inRange(r.invoice.paymentDate as any));
+
+    // --- Блок 1: агентские 30/40 ---
+    const agencyRows = active.filter(r => r.invoice.scheme === 'agency_30' || r.invoice.scheme === 'agency_40');
+    // Подтягиваем затраты по этим счетам одним запросом. ВАЖНО: только для
+    // agency 30/40. По commission_based/partner — затраты клиенту видны не
+    // должны быть никогда (см. видимость в кабинете и в expenses-endpoint).
+    const agencyIds = agencyRows.map(r => r.invoice.id);
+    const expensesByAgencyInvoice = new Map<string, Array<{
+      id: string; description: string; amount: number; date: string | null;
+    }>>();
+    if (agencyIds.length > 0) {
+      const expRows = await db
+        .select()
+        .from(invoiceExpenses)
+        .where(inArray(invoiceExpenses.invoiceId, agencyIds))
+        .orderBy(desc(invoiceExpenses.date));
+      for (const e of expRows) {
+        const list = expensesByAgencyInvoice.get(e.invoiceId) || [];
+        list.push({
+          id: e.id,
+          description: e.description || '',
+          amount: parseNum(e.amount),
+          date: e.date as any || null,
+        });
+        expensesByAgencyInvoice.set(e.invoiceId, list);
+      }
+    }
+
+    let aAvail = 0, aSpent = 0, aRemain = 0;
+    const agencyInvoices = agencyRows.map(r => {
+      const inv = r.invoice;
+      const c = r.calculations;
+      const bill = parseNum(c?.clientBill ?? inv.clientBill);
+      const marginRate = inv.scheme === 'agency_30' ? 30 : 40;
+      const commissionAmount = parseNum(c?.agencyMargin ?? bill * (marginRate / 100));
+      const budgetAfter = parseNum(c?.clientBaseAfterMargin ?? bill * (1 - marginRate / 100));
+      const spent = parseNum(c?.executorExpensesTotal);
+      const remaining = parseNum(c?.clientRemaining ?? (budgetAfter - spent));
+      aAvail += budgetAfter; aSpent += spent; aRemain += remaining;
+      return {
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber || '',
+        status: inv.status,
+        bill, marginRate, commissionAmount, budgetAfter, spent, remaining,
+        notes: inv.clientTitle || null,
+        expenses: expensesByAgencyInvoice.get(inv.id) || [],
+      };
+    });
+
+    // --- Блок 2: регулярные ---
+    // Классификатор расширен: счёт попадает в блок 2, если он привязан к
+    // шаблону recurring_invoices ИЛИ если у него service_type='periodic'
+    // (предоплата за N единиц — месяц/день/час). Без agency.
+    const nonAgencyActive = active.filter(r => r.invoice.scheme !== 'agency_30' && r.invoice.scheme !== 'agency_40');
+    const isPeriodicLike = (inv: any) => !!inv.recurringInvoiceId || inv.serviceType === 'periodic';
+    const recurringInvoiceRows = nonAgencyActive.filter(r => isPeriodicLike(r.invoice));
+
+    // Считаем «использовано» = COUNT(invoice_expenses) WHERE createdBy
+    // принадлежит admin/assistant токенам. Расходы клиента (просмотр) и
+    // партнёра не учитываются — единица списывается, только когда работу
+    // отметили мы.
+    const periodicInvoiceIds = recurringInvoiceRows.map(r => r.invoice.id);
+    const usedByInvoice = new Map<string, number>();
+    if (periodicInvoiceIds.length > 0) {
+      const usageRows = await db
+        .select({
+          invoiceId: invoiceExpenses.invoiceId,
+          cnt: sql<number>`COUNT(*)::int`,
+        })
+        .from(invoiceExpenses)
+        .leftJoin(accessTokens, eq(accessTokens.id, invoiceExpenses.createdBy))
+        .where(and(
+          inArray(invoiceExpenses.invoiceId, periodicInvoiceIds),
+          inArray(accessTokens.role, ['admin', 'assistant']),
+        ))
+        .groupBy(invoiceExpenses.invoiceId);
+      for (const u of usageRows) usedByInvoice.set(u.invoiceId, Number(u.cnt) || 0);
+    }
+
+    const unitLabel = (u: string): string => u === 'day' ? 'дн' : u === 'hour' ? 'ч' : 'мес';
+
+    type RecurringInvoiceRow = {
+      invoiceId: string; invoiceNumber: string; status: string;
+      bill: number; paymentDate: string | null; actualPaymentDate: string | null;
+      notes: string | null;
+    };
+    let recurringBlock: Array<{
+      kind: 'standalone' | 'template';
+      key: string; invoiceNumber: string; description: string; partnerName: string;
+      unit: 'month' | 'day' | 'hour'; unitLabel: string; unitPrice: number;
+      totalUnits: number; usedUnits: number;
+      remainingUnits: number; remainingMoney: number;
+      invoices: RecurringInvoiceRow[];
+    }> = [];
+
+    // Партнёры для отображения имён.
+    const periodicPartnerIds = Array.from(new Set(recurringInvoiceRows
+      .map(r => r.invoice.partnerId)
+      .filter((x): x is string => !!x)));
+    const partnersByIdMap = new Map<string, string>();
+    if (periodicPartnerIds.length > 0) {
+      const partnerRows = await db.select().from(partners).where(inArray(partners.id, periodicPartnerIds));
+      for (const p of partnerRows) partnersByIdMap.set(p.id, p.name);
+    }
+
+    // 2a) Standalone-periodic счета: каждый счёт = одна услуга.
+    const standaloneRows = recurringInvoiceRows.filter(r => !r.invoice.recurringInvoiceId && r.invoice.serviceType === 'periodic');
+    for (const r of standaloneRows) {
+      const inv = r.invoice;
+      const total = Number(inv.totalPeriods ?? 0);
+      const unit = (inv.periodUnit as 'month' | 'day' | 'hour') || 'month';
+      const unitPrice = parseNum(inv.pricePerPeriod);
+      if (!Number.isFinite(unitPrice) || total < 1) continue;
+      const used = Math.min(total, Math.max(0, usedByInvoice.get(inv.id) ?? Number(inv.periodsUsed ?? 0)));
+      const remaining = Math.max(0, total - used);
+      const partnerName = inv.partnerId ? (partnersByIdMap.get(inv.partnerId) || '—') : '—';
+      recurringBlock.push({
+        kind: 'standalone',
+        key: inv.id,
+        invoiceNumber: inv.invoiceNumber || '',
+        description: inv.clientTitle || (inv.invoiceNumber ? `Счёт № ${inv.invoiceNumber}` : '—'),
+        partnerName,
+        unit,
+        unitLabel: unitLabel(unit),
+        unitPrice,
+        totalUnits: total,
+        usedUnits: used,
+        remainingUnits: remaining,
+        remainingMoney: Math.round(remaining * unitPrice * 100) / 100,
+        invoices: [{
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber || '',
+          status: inv.status,
+          bill: parseNum(r.calculations?.clientBill ?? inv.clientBill),
+          paymentDate: inv.paymentDate as any || null,
+          actualPaymentDate: inv.actualPaymentDate as any || null,
+          notes: inv.clientTitle || null,
+        }],
+      });
+    }
+
+    // 2b) Шаблоны recurring_invoices: серия счетов = одна услуга.
+    const recurringIds = Array.from(new Set(recurringInvoiceRows
+      .map(r => r.invoice.recurringInvoiceId)
+      .filter((x): x is string => !!x)));
+    if (recurringIds.length > 0) {
+      const templates = await db
+        .select({ rec: recurringInvoices, partnerName: partners.name })
+        .from(recurringInvoices)
+        .leftJoin(partners, eq(recurringInvoices.partnerId, partners.id))
+        .where(inArray(recurringInvoices.id, recurringIds));
+
+      const periodsBetween = (start: Date, end: Date, freq: 'monthly' | 'quarterly' | 'yearly'): number => {
+        if (end < start) return 0;
+        const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+        const dayBonus = end.getDate() >= start.getDate() ? 1 : 0;
+        const m = months + dayBonus;
+        if (freq === 'monthly')   return Math.max(0, m);
+        if (freq === 'quarterly') return Math.max(0, Math.floor(m / 3));
+        return Math.max(0, Math.floor(m / 12));
+      };
+
+      for (const t of templates) {
+        const tpl = t.rec;
+        const tplInvoices = recurringInvoiceRows.filter(r => r.invoice.recurringInvoiceId === tpl.id);
+        // «Использовано» по шаблону = сумма расходов админа/ассистента
+        // по всем привязанным счетам.
+        const usedUnits = tplInvoices.reduce((s, r) => s + (usedByInvoice.get(r.invoice.id) ?? 0), 0);
+        const startD = new Date(tpl.startDate);
+        const endD = tpl.endDate ? new Date(tpl.endDate) : null;
+        const unitPrice = parseNum(tpl.amount);
+        const freq = tpl.frequency as 'monthly' | 'quarterly' | 'yearly';
+        // У шаблона нет явной единицы потребления (frequency — это период
+        // выставления, а не списания). Мап по дефолту: монтли→month и т.д.
+        const unit: 'month' | 'day' | 'hour' = freq === 'monthly' ? 'month' : freq === 'quarterly' ? 'month' : 'month';
+        const totalUnits = endD ? periodsBetween(startD, endD, freq) : 0;
+        const remainingUnits = endD ? Math.max(0, totalUnits - usedUnits) : 0;
+        const matchedInvoice = tplInvoices[0];
+
+        const invoiceList: RecurringInvoiceRow[] = tplInvoices
+          .sort((a, b) => {
+            const ad = a.invoice.paymentDate ? new Date(a.invoice.paymentDate).getTime() : 0;
+            const bd = b.invoice.paymentDate ? new Date(b.invoice.paymentDate).getTime() : 0;
+            return bd - ad;
+          })
+          .map(r => ({
+            invoiceId: r.invoice.id,
+            invoiceNumber: r.invoice.invoiceNumber || '',
+            status: r.invoice.status,
+            bill: parseNum(r.calculations?.clientBill ?? r.invoice.clientBill),
+            paymentDate: r.invoice.paymentDate as any || null,
+            actualPaymentDate: r.invoice.actualPaymentDate as any || null,
+            notes: r.invoice.clientTitle || null,
+          }));
+
+        recurringBlock.push({
+          kind: 'template',
+          key: tpl.id,
+          invoiceNumber: matchedInvoice?.invoice.invoiceNumber || '',
+          description: matchedInvoice?.invoice.clientTitle || tpl.description || '—',
+          partnerName: t.partnerName || '—',
+          unit,
+          unitLabel: unitLabel(unit),
+          unitPrice,
+          totalUnits,
+          usedUnits,
+          remainingUnits,
+          remainingMoney: Math.round(remainingUnits * unitPrice * 100) / 100,
+          invoices: invoiceList,
+        });
+      }
+    }
+
+    // --- Блок 3: разовые (НЕ periodic-like) ---
+    const oneTimeRows = nonAgencyActive.filter(r => !isPeriodicLike(r.invoice));
+    let paidCount = 0, pendingCount = 0, paidAmount = 0, pendingAmount = 0;
+    const oneTimeInvoices = oneTimeRows
+      .slice()
+      .sort((a, b) => {
+        // Сначала непогашенные (sent/draft), потом по убыванию paymentDate.
+        const aPaid = a.invoice.status === 'paid' ? 1 : 0;
+        const bPaid = b.invoice.status === 'paid' ? 1 : 0;
+        if (aPaid !== bPaid) return aPaid - bPaid;
+        const ad = a.invoice.paymentDate ? new Date(a.invoice.paymentDate).getTime() : 0;
+        const bd = b.invoice.paymentDate ? new Date(b.invoice.paymentDate).getTime() : 0;
+        return bd - ad;
+      })
+      .map(r => {
+        const bill = parseNum(r.calculations?.clientBill ?? r.invoice.clientBill);
+        if (r.invoice.status === 'paid') { paidCount++; paidAmount += bill; }
+        else                              { pendingCount++; pendingAmount += bill; }
+        return {
+          invoiceId: r.invoice.id,
+          invoiceNumber: r.invoice.invoiceNumber || '',
+          status: r.invoice.status,
+          bill,
+          paymentDate: r.invoice.paymentDate as any || null,
+          actualPaymentDate: r.invoice.actualPaymentDate as any || null,
+          notes: r.invoice.clientTitle || null,
+        };
+      });
+
+    return {
+      agency: {
+        available: aAvail,
+        spent: aSpent,
+        remaining: aRemain,
+        count: agencyInvoices.length,
+        invoices: agencyInvoices,
+      },
+      recurring: recurringBlock,
+      oneTime: {
+        totalCount: oneTimeRows.length,
+        paidCount,
+        pendingCount,
+        paidAmount,
+        pendingAmount,
+        totalAmount: paidAmount + pendingAmount,
+        invoices: oneTimeInvoices,
+      },
+    };
   }
 
   async getPartnerInvoicesDetail(partnerId: string): Promise<Array<{

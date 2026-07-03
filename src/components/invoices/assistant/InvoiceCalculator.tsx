@@ -3,6 +3,7 @@ import { DollarSign, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getSchemeLabel } from "@/lib/invoiceCalculations";
+import { formatMoney } from "@/lib/format";
 
 interface InvoiceCalculatorProps {
   scheme: string;
@@ -26,12 +27,7 @@ export const InvoiceCalculator = ({
     );
   }
 
-  const formatMoney = (amount: number) =>
-    new Intl.NumberFormat("ru-RU", {
-      style: "currency",
-      currency: "RUB",
-      maximumFractionDigits: 0,
-    }).format(amount);
+  // formatMoney импортируется из единого Format-сервиса
 
   return (
     <AnimatePresence mode="wait">

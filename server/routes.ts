@@ -10,17 +10,14 @@ import { exportRouter } from "./routes/export";
 import { backupRouter } from "./routes/backup";
 import { actionLogRouter } from "./routes/actionLog";
 import { assistantRouter } from "./routes/assistant";
+import { myInvoicesRouter } from "./routes/myInvoices";
+import { messagesRouter } from "./routes/messages";
+import { meRouter } from "./routes/me";
 
 export function registerHealthCheck(app: Express) {
-  app.get("/", (req: Request, res: Response, next: NextFunction) => {
-    const userAgent = req.headers["user-agent"] || "";
-    const acceptHeader = req.headers["accept"] || "";
-    if (!userAgent || userAgent.includes("HealthCheck") || userAgent.includes("kube-probe") || userAgent.includes("curl") || !acceptHeader.includes("text/html")) {
-      return res.status(200).send("OK");
-    }
-    next();
-  });
-
+  // Health endpoints — для мониторинга и для фронта (useApiHealthCheck).
+  // Корень "/" не перехватываем — пусть его отдаёт static/Vite middleware,
+  // чтобы Telegram, WhatsApp и другие preview-боты получали HTML с meta-тегами.
   app.get("/health", (_req: Request, res: Response) => {
     res.status(200).json({ status: "ok", timestamp: Date.now() });
   });
@@ -42,4 +39,7 @@ export function registerRoutes(app: Express): void {
   app.use(backupRouter);
   app.use(actionLogRouter);
   app.use(assistantRouter);
+  app.use(myInvoicesRouter);
+  app.use(messagesRouter);
+  app.use(meRouter);
 }

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InvoiceProgressBadge } from "./InvoiceProgressBadge";
 import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
-import { Eye, CheckCircle2, Send, Trash2, EyeOff, Clock } from "lucide-react";
+import { Eye, CheckCircle2, Send, Trash2, EyeOff, Clock, Repeat } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
 
@@ -116,6 +117,11 @@ export const InvoiceCard = ({
             <div>
               <p className="text-xs text-muted-foreground">Клиент</p>
               <p className="font-medium text-sm">{invoice.clients?.name || invoice.client_name}</p>
+              {(invoice.clients as any)?.contactPerson && (
+                <p className="text-xs text-muted-foreground">
+                  Контакт: {(invoice.clients as any).contactPerson}
+                </p>
+              )}
             </div>
 
             {/* Amount */}
@@ -125,6 +131,45 @@ export const InvoiceCard = ({
                 {formatCurrency(clientBill)}
               </p>
             </div>
+
+            {/* Периодическая услуга — единый блок для всех ролей.
+                Показываем цену за период, использовано / осталось, прогресс. */}
+            {invoice.service_type === 'periodic' && (() => {
+              const total = Number(invoice.total_periods ?? 0);
+              const used = Math.max(0, Math.min(Number(invoice.periods_used ?? 0), total));
+              const price = Number(invoice.price_per_period ?? 0);
+              const left = Math.max(0, total - used);
+              const unit = invoice.period_unit === 'day' ? 'дн' : 'мес';
+              const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+              const unitWord = invoice.period_unit === 'day' ? 'день' : 'месяц';
+              return (
+                <div className="rounded-lg border border-indigo-200/50 dark:border-indigo-800/30 bg-indigo-50/40 dark:bg-indigo-950/20 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                    <Repeat className="h-3.5 w-3.5" />
+                    Периодическая услуга
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Цена за {unit}</p>
+                      <p className="font-medium">{formatCurrency(price)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Всего {unitWord}ев</p>
+                      <p className="font-medium">{total}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Использовано</p>
+                      <p className="font-medium">{used} из {total} {unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Осталось</p>
+                      <p className="font-medium">{left} {unit} · {formatCurrency(price * left)}</p>
+                    </div>
+                  </div>
+                  <Progress value={pct} className="h-1.5" />
+                </div>
+              );
+            })()}
 
             {/* Условия сотрудничества (только для партнёра и админа) */}
             {(role === 'partner' || role === 'admin') && (

@@ -10,12 +10,15 @@ import {
   Key,
   Database,
   History,
-  Calculator
+  Calculator,
+  MessageSquare,
+  Shield
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertCounts } from "@/hooks/useAlertCounts";
+import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback } from "react";
 import { Badge } from "./ui/badge";
@@ -42,6 +45,7 @@ export function AppSidebar() {
   const { logout } = useAuth();
   const { toast } = useToast();
   const alertCounts = useAlertCounts();
+  const unread = useUnreadMessages();
   const [isNavigating, setIsNavigating] = useState(false);
 
   const isCollapsed = state === "collapsed";
@@ -114,20 +118,22 @@ export function AppSidebar() {
     groups.push({
       label: "Главное",
       items: [
-        { 
-          title: "Главная", 
-          url: "/", 
+        {
+          title: "Главная",
+          url: "/",
           icon: Home,
           badge: alertCounts.overdueInvoices > 0 ? alertCounts.overdueInvoices : undefined,
           badgeVariant: "destructive" as const
         },
-        { 
-          title: "Счета", 
-          url: "/invoices", 
+        // Клиенту пункт «Счета» не нужен — он дублирует «Главную»
+        // (обе ведут на ClientDashboard). Оставляем только для других ролей.
+        ...(role !== "client" ? [{
+          title: "Счета",
+          url: "/invoices",
           icon: FileText,
           badge: alertCounts.pendingInvoices > 0 ? alertCounts.pendingInvoices : undefined,
-          badgeVariant: "secondary" as const
-        },
+          badgeVariant: "secondary" as const,
+        }] : []),
         ...(role === "assistant" ? [{
           title: "По клиентам",
           url: "/client-balances",
@@ -138,6 +144,18 @@ export function AppSidebar() {
           url: "/stats",
           icon: BarChart3,
         }] : []),
+        {
+          title: "Сообщения",
+          url: "/messages",
+          icon: MessageSquare,
+          badge: unread.totalUnread > 0 ? unread.totalUnread : undefined,
+          badgeVariant: "destructive" as const,
+        },
+        {
+          title: "Безопасность",
+          url: "/security",
+          icon: Shield,
+        },
       ]
     });
 

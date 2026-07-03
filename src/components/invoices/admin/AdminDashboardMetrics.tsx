@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatMoney } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -214,14 +215,7 @@ const MONTH_NAMES = [
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
 ];
 
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "RUB",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+const formatCurrency = (amount: number) => formatMoney(amount);
 
 export const AdminDashboardMetrics = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());

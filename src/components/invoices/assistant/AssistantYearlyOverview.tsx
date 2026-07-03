@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
+import { formatMoney } from "@/lib/format";
 
 interface Props {
   selectedYear: number;
@@ -99,7 +100,7 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
               Переведено от клиентов в {selectedYear}
             </p>
             <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              {stats.total.toLocaleString('ru-RU')} ₽
+              {formatMoney(stats.total)}
             </h2>
           </div>
 
@@ -121,7 +122,7 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
               </div>
               <div className="min-w-0">
                 <p className="text-lg sm:text-2xl font-bold break-words">
-                  {stats.totalExpenses.toLocaleString('ru-RU')} ₽
+                  {formatMoney(stats.totalExpenses)}
                 </p>
                 <p className="text-xs text-muted-foreground">Проведено расходов</p>
               </div>
@@ -133,7 +134,7 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
               </div>
               <div className="min-w-0">
                 <p className="text-lg sm:text-2xl font-bold break-words">
-                  {Math.round(stats.average).toLocaleString('ru-RU')} ₽
+                  {formatMoney(stats.average)}
                 </p>
                 <p className="text-xs text-muted-foreground">Средний чек</p>
               </div>

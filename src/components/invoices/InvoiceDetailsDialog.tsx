@@ -13,11 +13,13 @@ import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { formatCurrency, formatDate, getSchemeLabel, calculateInvoice } from "@/lib/invoiceCalculations";
-import { CalendarIcon, Plus, Trash2, FileText, Loader2, X } from "lucide-react";
+import { CalendarIcon, Plus, Trash2, FileText, Loader2, X, MessageSquare } from "lucide-react";
+import { SendMessageDialog } from "@/components/messages/SendMessageDialog";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { AddExpenseDialog } from "./assistant/AddExpenseDialog";
+import { ClientCombobox } from "./assistant/ClientCombobox";
 import { EditExpenseDialog } from "./assistant/EditExpenseDialog";
 import { SignedActsSection } from "./SignedActsSection";
 import { useToast } from "@/hooks/use-toast";
@@ -88,6 +90,30 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   const [hideFromAssistant, setHideFromAssistant] = useState(false);
   const [updatingHideFromAssistant, setUpdatingHideFromAssistant] = useState(false);
 
+  // Периодические услуги — управление числом закрытых периодов.
+  const [periodsUsedEdit, setPeriodsUsedEdit] = useState<number | ''>('');
+  const [updatingPeriodsUsed, setUpdatingPeriodsUsed] = useState(false);
+  const [closingPeriod, setClosingPeriod] = useState(false);
+  // Сообщения по счёту/списанию.
+  const [messageInvoiceOpen, setMessageInvoiceOpen] = useState(false);
+  const [messageExpense, setMessageExpense] = useState<{ id: string; description: string; amount: number } | null>(null);
+
+  // Конвертация one_time → periodic (превратить в подписку).
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertUnit, setConvertUnit] = useState<'month' | 'day' | 'hour'>('month');
+  const [convertPrice, setConvertPrice] = useState<string>('');
+  const [convertTotal, setConvertTotal] = useState<string>('');
+  const [converting, setConverting] = useState(false);
+
+  // Название для клиента (отдельно от notes/description).
+  const [clientTitleEdit, setClientTitleEdit] = useState<string>('');
+  const [updatingClientTitle, setUpdatingClientTitle] = useState(false);
+
+  // Перенос счёта между клиентами (admin only).
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveClientId, setMoveClientId] = useState<string>('');
+  const [movingInvoice, setMovingInvoice] = useState(false);
+
   // Состояние для планируемых расходов (только для партнёрских схем и админа)
   const [plannedExpensesEdit, setPlannedExpensesEdit] = useState<number | ''>('');
   const [updatingPlannedExpenses, setUpdatingPlannedExpenses] = useState(false);
@@ -131,20 +157,24 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       const bill = calc?.client_bill ?? invoice.client_bill ?? 0;
       setClientBillEdit(bill);
       setHideFromAssistant(invoice.hidden_from_assistant || false);
-      
+
       // Устанавливаем значение planned_expenses для партнёрских схем
       const plannedExp = invoice.planned_expenses ? parseFloat(invoice.planned_expenses) : 0;
       setPlannedExpensesEdit(plannedExp);
+
+      // Текущее число закрытых периодов
+      setPeriodsUsedEdit(invoice.periods_used ?? 0);
+
+      // Текущее «Название для клиента»
+      setClientTitleEdit(invoice.client_title ?? "");
     }
   }, [invoice]);
 
   const fetchInvoiceDetails = async () => {
-    console.log('[InvoiceDetailsDialog] === START FETCH ===', { invoiceId, userRole });
     setLoading(true);
 
     try {
       if (!invoiceId) {
-        console.log('[InvoiceDetailsDialog] No invoiceId, aborting');
         setLoading(false);
         return;
       }
@@ -153,8 +183,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         apiGet<any>(`/invoices/${invoiceId}`),
         apiGet<any[]>(`/invoices/${invoiceId}/expenses`).catch(() => [])
       ]);
-      console.log('[InvoiceDetailsDialog] Invoice loaded:', invoiceData);
-      console.log('[InvoiceDetailsDialog] Expenses loaded:', expensesData);
 
       const mappedInvoice = {
         id: invoiceData.id,
@@ -173,6 +201,12 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         partners: invoiceData.partner ? { name: invoiceData.partner.name } : null,
         client_bill: invoiceData.calculations?.clientBill || invoiceData.clientBill,
         partner_commission_rate: invoiceData.calculations?.commissionRate,
+        client_title: invoiceData.clientTitle ?? null,
+        service_type:    invoiceData.serviceType    ?? 'one_time',
+        period_unit:     invoiceData.periodUnit     ?? 'month',
+        price_per_period: invoiceData.pricePerPeriod,
+        total_periods:   invoiceData.totalPeriods,
+        periods_used:    invoiceData.periodsUsed ?? 0,
         invoice_calculations: invoiceData.calculations ? {
           client_bill: invoiceData.calculations.clientBill,
           commission_rate: invoiceData.calculations.commissionRate,
@@ -204,11 +238,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         paidByAdmin: exp.paidByAdmin === true,
       }));
       setExpenses(mappedExpenses);
-
-      console.log('[InvoiceDetailsDialog] === FETCH COMPLETE ===', {
-        hasInvoice: !!mappedInvoice,
-        expensesCount: mappedExpenses.length
-      });
     } catch (error: any) {
       console.error("[InvoiceDetailsDialog] === FETCH FAILED ===", error);
       toast({
@@ -603,6 +632,155 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     }
   };
 
+  const handleClosePeriod = async () => {
+    if (!invoiceId) return;
+    setClosingPeriod(true);
+    try {
+      await apiPost(`/invoices/${invoiceId}/close-period`, {});
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      await fetchInvoiceDetails();
+      toast({ title: "Период закрыт", description: "Использовано на 1 больше." });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось закрыть период", variant: "destructive" });
+    } finally {
+      setClosingPeriod(false);
+    }
+  };
+
+  const handleSavePeriodsUsed = async () => {
+    if (!invoiceId) return;
+    const total = Number(invoice?.total_periods ?? 0);
+    const value = Number(periodsUsedEdit);
+    if (!Number.isInteger(value) || value < 0) {
+      toast({ title: "Ошибка", description: "Значение должно быть целым ≥ 0", variant: "destructive" });
+      return;
+    }
+    if (value > total) {
+      toast({ title: "Ошибка", description: `Не может быть больше ${total}`, variant: "destructive" });
+      return;
+    }
+    setUpdatingPeriodsUsed(true);
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { periodsUsed: value });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      await fetchInvoiceDetails();
+      toast({ title: "Сохранено", description: "Число закрытых периодов обновлено." });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось сохранить", variant: "destructive" });
+    } finally {
+      setUpdatingPeriodsUsed(false);
+    }
+  };
+
+  const handleMoveInvoice = async () => {
+    if (!invoiceId || !moveClientId) return;
+    if (moveClientId === invoice?.client_id) {
+      toast({ title: "Это тот же клиент", description: "Выберите другого клиента." });
+      return;
+    }
+    if (!confirm("Перенести счёт другому клиенту? Все списания, расчёты и история останутся привязаны к счёту.")) return;
+    setMovingInvoice(true);
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { clientId: moveClientId });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/overview-buckets'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/clients'] });
+      await fetchInvoiceDetails();
+      setMoveOpen(false);
+      setMoveClientId('');
+      toast({ title: "Перенесено", description: "Счёт теперь у другого клиента." });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось перенести счёт", variant: "destructive" });
+    } finally {
+      setMovingInvoice(false);
+    }
+  };
+
+  const handleSaveClientTitle = async () => {
+    if (!invoiceId) return;
+    const trimmed = clientTitleEdit.trim();
+    setUpdatingClientTitle(true);
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, { clientTitle: trimmed || null });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/overview-buckets'] });
+      await fetchInvoiceDetails();
+      toast({ title: "Сохранено", description: trimmed ? "Название клиенту обновлено." : "Название убрано." });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось сохранить", variant: "destructive" });
+    } finally {
+      setUpdatingClientTitle(false);
+    }
+  };
+
+  const handleConvertToSubscription = async () => {
+    if (!invoiceId) return;
+    const price = parseFloat(convertPrice);
+    const total = parseInt(convertTotal, 10);
+    if (!Number.isFinite(price) || price <= 0) {
+      toast({ title: "Ошибка", description: "Цена за единицу должна быть > 0", variant: "destructive" });
+      return;
+    }
+    if (!Number.isInteger(total) || total < 1) {
+      toast({ title: "Ошибка", description: "Количество должно быть ≥ 1", variant: "destructive" });
+      return;
+    }
+    setConverting(true);
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, {
+        serviceType: 'periodic',
+        periodUnit: convertUnit,
+        pricePerPeriod: price.toString(),
+        totalPeriods: total,
+        periodsUsed: 0,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/overview-buckets'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      await fetchInvoiceDetails();
+      setConvertOpen(false);
+      setConvertPrice('');
+      setConvertTotal('');
+      toast({ title: "Готово", description: "Счёт превращён в подписку." });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось превратить счёт", variant: "destructive" });
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const handleRevertToOneTime = async () => {
+    if (!invoiceId) return;
+    if (!confirm("Превратить подписку обратно в разовый счёт? Цена за период и количество периодов будут очищены.")) return;
+    setConverting(true);
+    try {
+      await apiPatch(`/invoices/${invoiceId}`, {
+        serviceType: 'one_time',
+        pricePerPeriod: null,
+        totalPeriods: null,
+        periodsUsed: 0,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/client/overview-buckets'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      await fetchInvoiceDetails();
+      toast({ title: "Готово", description: "Подписка превращена обратно в разовый счёт." });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message || "Не удалось преобразовать", variant: "destructive" });
+    } finally {
+      setConverting(false);
+    }
+  };
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: "Черновик",
@@ -633,10 +811,22 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
           <DialogHeader>
-            <DialogTitle>Счет № {invoice.invoice_number}</DialogTitle>
-            <DialogDescription>
-              Детальная информация по счету
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DialogTitle>Счет № {invoice.invoice_number}</DialogTitle>
+                <DialogDescription>Детальная информация по счету</DialogDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 shrink-0"
+                onClick={() => setMessageInvoiceOpen(true)}
+                data-testid="button-message-invoice"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Написать
+              </Button>
+            </div>
           </DialogHeader>
 
           <div className="space-y-6">
@@ -648,7 +838,48 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
               <CardContent className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Клиент</p>
-                  <p className="font-medium">{invoice.clients?.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium">{invoice.clients?.name}</p>
+                    {userRole === 'admin' && !moveOpen && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => { setMoveClientId(invoice.client_id || ''); setMoveOpen(true); }}
+                        data-testid="button-move-invoice"
+                      >
+                        Перенести →
+                      </Button>
+                    )}
+                  </div>
+                  {userRole === 'admin' && moveOpen && (
+                    <div className="mt-2 space-y-2 rounded-md border bg-muted/20 p-2">
+                      <Label className="text-xs">Новый клиент</Label>
+                      <ClientCombobox
+                        value={moveClientId}
+                        onChange={setMoveClientId}
+                      />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { setMoveOpen(false); setMoveClientId(''); }}
+                          disabled={movingInvoice}
+                        >
+                          Отмена
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleMoveInvoice}
+                          disabled={movingInvoice || !moveClientId || moveClientId === invoice.client_id}
+                          data-testid="button-confirm-move"
+                        >
+                          {movingInvoice && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                          Перенести
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Партнер</p>
@@ -686,6 +917,223 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                   </div>
                 )}
                 
+                {/* Название для клиента — admin/assistant */}
+                {(userRole === 'admin' || userRole === 'assistant') && (
+                  <div className="col-span-2 pt-3 border-t">
+                    <Label htmlFor="client-title" className="text-sm font-medium">
+                      Название для клиента
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      То, что увидит клиент в кабинете. Перебивает «Примечания» и внутреннее «Описание».
+                    </p>
+                    <div className="flex items-end gap-2">
+                      <Input
+                        id="client-title"
+                        value={clientTitleEdit}
+                        onChange={(e) => setClientTitleEdit(e.target.value)}
+                        placeholder="Например: Цимерман А. — продление 6 мес"
+                        className="h-9"
+                        data-testid="input-client-title-edit"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleSaveClientTitle}
+                        disabled={updatingClientTitle || clientTitleEdit === (invoice.client_title ?? "")}
+                        data-testid="button-save-client-title"
+                      >
+                        {updatingClientTitle && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                        Сохранить
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Превратить разовый счёт в подписку — только admin/assistant */}
+                {invoice.service_type !== 'periodic' && (userRole === 'admin' || userRole === 'assistant') && (
+                  <div className="col-span-2 pt-3 border-t">
+                    {!convertOpen ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setConvertOpen(true)}
+                        className="gap-2"
+                        data-testid="button-convert-to-subscription"
+                      >
+                        + Превратить в подписку
+                      </Button>
+                    ) : (
+                      <div className="bg-indigo-50/40 dark:bg-indigo-950/20 p-3 rounded-lg space-y-3">
+                        <p className="text-sm font-semibold">Превратить в подписку</p>
+                        <p className="text-xs text-muted-foreground">
+                          Сумма счёта пересчитается автоматически: цена × количество. «Использовано» будет считаться по записям расходов админа/ассистента.
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Единица</Label>
+                            <div className="grid grid-cols-3 gap-1">
+                              {(['month', 'day', 'hour'] as const).map(u => (
+                                <button
+                                  key={u}
+                                  type="button"
+                                  onClick={() => setConvertUnit(u)}
+                                  className={`h-9 rounded-md border text-sm transition-colors ${
+                                    convertUnit === u
+                                      ? 'border-primary bg-primary/10 font-medium'
+                                      : 'border-input hover:bg-accent'
+                                  }`}
+                                  data-testid={`convert-unit-${u}`}
+                                >
+                                  {u === 'month' ? 'Месяц' : u === 'day' ? 'День' : 'Час'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Цена за {convertUnit === 'month' ? 'месяц' : convertUnit === 'day' ? 'день' : 'час'}</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={convertPrice}
+                              onChange={(e) => setConvertPrice(e.target.value)}
+                              placeholder="270000"
+                              className="h-9"
+                              data-testid="input-convert-price"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Количество</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={convertTotal}
+                              onChange={(e) => setConvertTotal(e.target.value)}
+                              placeholder="11"
+                              className="h-9"
+                              data-testid="input-convert-total"
+                            />
+                          </div>
+                        </div>
+                        {parseFloat(convertPrice) > 0 && parseInt(convertTotal, 10) > 0 && (
+                          <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
+                            <span className="text-muted-foreground">Новая сумма счёта:</span>
+                            <span className="font-semibold tabular-nums">
+                              {formatCurrency(parseFloat(convertPrice) * parseInt(convertTotal, 10))}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-end gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => { setConvertOpen(false); setConvertPrice(''); setConvertTotal(''); }}
+                            disabled={converting}
+                          >
+                            Отмена
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleConvertToSubscription}
+                            disabled={converting || !(parseFloat(convertPrice) > 0) || !(parseInt(convertTotal, 10) > 0)}
+                            data-testid="button-confirm-convert"
+                          >
+                            {converting && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                            Превратить
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Периодическая услуга — для всех ролей, у админа/ассистента — с управлением */}
+                {invoice.service_type === 'periodic' && (() => {
+                  const total = Number(invoice.total_periods ?? 0);
+                  const used  = Math.max(0, Math.min(Number(invoice.periods_used ?? 0), total));
+                  const price = Number(invoice.price_per_period ?? 0);
+                  const remaining = Math.max(0, total - used);
+                  const unitLabel = invoice.period_unit === 'day' ? 'дн' : invoice.period_unit === 'hour' ? 'ч' : 'мес';
+                  const canManage = userRole === 'admin' || userRole === 'assistant';
+                  const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+                  return (
+                    <div className="col-span-2 pt-3 border-t">
+                      <p className="text-sm font-semibold text-muted-foreground mb-2">Периодическая услуга</p>
+                      <div className="bg-indigo-50/40 dark:bg-indigo-950/20 p-3 rounded-lg space-y-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Цена за {unitLabel}</p>
+                            <p className="font-semibold tabular-nums">{formatCurrency(price)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Всего</p>
+                            <p className="font-semibold tabular-nums">{total} {unitLabel}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Использовано</p>
+                            <p className="font-semibold tabular-nums">{used} {unitLabel}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Осталось</p>
+                            <p className="font-semibold tabular-nums">{remaining} {unitLabel} · {formatCurrency(price * remaining)}</p>
+                          </div>
+                        </div>
+                        <Progress value={pct} className="h-2" />
+                        {canManage && (
+                          <div className="flex flex-wrap items-end gap-3 pt-2">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={handleClosePeriod}
+                              disabled={closingPeriod || used >= total}
+                              data-testid="button-close-period"
+                            >
+                              {closingPeriod && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                              + Закрыть {invoice.period_unit === 'day' ? 'день' : invoice.period_unit === 'hour' ? 'час' : 'месяц'}
+                            </Button>
+                            <div className="flex items-end gap-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Закрыто (ручная правка)</Label>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={total}
+                                  step={1}
+                                  value={periodsUsedEdit}
+                                  onChange={(e) => setPeriodsUsedEdit(e.target.value === '' ? '' : Number(e.target.value))}
+                                  className="w-24 h-9 text-sm"
+                                  data-testid="input-periods-used"
+                                />
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={handleSavePeriodsUsed}
+                                disabled={updatingPeriodsUsed || periodsUsedEdit === '' || Number(periodsUsedEdit) === used}
+                                data-testid="button-save-periods-used"
+                              >
+                                {updatingPeriodsUsed && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                                Сохранить
+                              </Button>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={handleRevertToOneTime}
+                              disabled={converting}
+                              className="ml-auto text-muted-foreground hover:text-foreground"
+                              data-testid="button-revert-to-onetime"
+                            >
+                              Превратить обратно в разовый
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Условия сотрудничества - только для партнёра и админа */}
                 {(userRole === 'partner' || userRole === 'admin') && (
                   <div className="col-span-2 pt-3 border-t">
@@ -1251,7 +1699,11 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                         <TableRow>
                           <TableHead>Дата</TableHead>
                           <TableHead>Описание</TableHead>
-                          <TableHead className="text-right">Сумма</TableHead>
+                          {/* Клиенту по неагентским счетам суммы списаний не показываем. */}
+                          {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40') && (
+                            <TableHead className="text-right">Сумма</TableHead>
+                          )}
+                          <TableHead className="w-24">Сообщения</TableHead>
                           {(permissions.canDeleteExpenses || canEdit) && <TableHead className="w-20">Действия</TableHead>}
                         </TableRow>
                       </TableHeader>
@@ -1260,7 +1712,19 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                           <TableRow key={expense.id}>
                             <TableCell>{formatDate(expense.date)}</TableCell>
                             <TableCell>{expense.description}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
+                            {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40') && (
+                              <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
+                            )}
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMessageExpense({ id: expense.id, description: expense.description, amount: Number(expense.amount) })}
+                                data-testid={`button-message-expense-${expense.id}`}
+                              >
+                                <MessageSquare className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
                             {(permissions.canDeleteExpenses || canEdit) && (
                               <TableCell>
                                 <div className="flex items-center gap-1">
@@ -1302,12 +1766,15 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
               </Card>
             )}
 
-            {/* Signed Acts Section */}
-            <SignedActsSection
-              invoiceId={invoiceId || ""}
-              userRole={userRole}
-              canEdit={canEdit}
-            />
+            {/* Signed Acts Section — клиенту не нужны: за документооборот
+                и за траты отвечают разные люди со стороны клиента. */}
+            {userRole !== 'client' && (
+              <SignedActsSection
+                invoiceId={invoiceId || ""}
+                userRole={userRole}
+                canEdit={canEdit}
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -1416,6 +1883,28 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {invoiceId && (
+        <SendMessageDialog
+          open={messageInvoiceOpen}
+          onOpenChange={setMessageInvoiceOpen}
+          invoiceId={invoiceId}
+          invoiceNumber={invoice?.invoice_number}
+          currentRole={userRole as any}
+        />
+      )}
+      {invoiceId && messageExpense && (
+        <SendMessageDialog
+          open={!!messageExpense}
+          onOpenChange={(o) => { if (!o) setMessageExpense(null); }}
+          invoiceId={invoiceId}
+          invoiceNumber={invoice?.invoice_number}
+          expenseId={messageExpense.id}
+          expenseDescription={messageExpense.description}
+          expenseAmount={messageExpense.amount}
+          currentRole={userRole as any}
+        />
+      )}
     </>
   );
 };

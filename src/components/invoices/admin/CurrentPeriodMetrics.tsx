@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MetricCardSkeletonGrid } from "@/components/ui/metric-card-skeleton";
 import { apiGet } from "@/lib/api";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatMoney } from "@/lib/format";
 
 interface MonthlyData {
   monthNumber: number;
@@ -146,7 +147,7 @@ export const CurrentPeriodMetrics = ({ selectedYear }: { selectedYear: number })
               <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                 <div className="text-xl sm:text-3xl font-bold">
                   {metric.format === "currency"
-                    ? `${metric.value.toLocaleString("ru-RU")} ₽`
+                    ? formatMoney(metric.value)
                     : `${metric.value.toFixed(1)}%`}
                 </div>
                 {metric.trend !== 0 && (

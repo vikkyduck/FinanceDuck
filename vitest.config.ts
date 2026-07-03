@@ -13,5 +13,11 @@ export default defineConfig({
     environment: "node",
     include: ["**/*.test.ts", "**/*.test.tsx"],
     exclude: ["node_modules/**", "dist/**", "dist-server/**"],
+    // Импорт server/db.ts утверждает наличие DATABASE_URL и создаёт (ленивый,
+    // не подключающийся) Pool. Тесты работают с отдельной PGlite-БД, которую
+    // передают в функции репозиториев параметром db; этот URL нужен только
+    // чтобы модуль db.ts импортировался без ошибки.
+    env: { DATABASE_URL: "postgres://vitest-unused" },
+    testTimeout: 20000,
   },
 });

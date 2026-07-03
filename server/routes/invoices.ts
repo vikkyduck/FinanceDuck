@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { storage } from "../storage";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
-import { stripSensitiveFieldsForRole, stripSensitiveFieldsFromList, isClientFinancialVisible } from "../permissions";
+import { stripSensitiveFieldsForRole, stripSensitiveFieldsFromList, isClientFinancialVisible, isClientUsageVisible } from "../permissions";
 import { pick, INVOICE_WRITABLE_FIELDS, EXPENSE_WRITABLE_FIELDS } from "../lib/sanitize";
 
 export const invoicesRouter = Router();
@@ -256,28 +256,37 @@ invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("a
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_expense", entityType: "expense", entityId: expense.id, description: `Создан расход: ${req.body.description || expense.id}`, details: JSON.stringify({ invoiceId: id, amount: req.body.amount, paidByPartner: req.body.paidByPartner }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
-    // Fire-and-forget TG notification — только для агентских схем 30/40
-    // (для остальных клиент в кабинете не видит расходов, поэтому и в группу не пишем).
+    // Fire-and-forget TG notification. Шлём клиенту, когда он видит движение по
+    // счёту: агентские схемы (видит расходы в кабинете) ИЛИ периодические
+    // (видит потребление по периодам). Для периодических показываем КЛИЕНТСКУЮ
+    // ставку за период (pricePerPeriod), а не себестоимость исполнителя, и не
+    // раскрываем описание расхода (там имя/оклад исполнителя — внутреннее).
     (async () => {
       try {
         const inv = await storage.getInvoice(id);
-        if (!inv || !isClientFinancialVisible(inv.scheme)) return;
+        if (!inv || !isClientUsageVisible(inv)) return;
         const { resolveTelegramTarget, sendTelegramMessage, escapeHtml, publicUrl } = await import("../lib/telegram");
         const client = inv.clientId ? await storage.getClient(inv.clientId) : null;
         const target = resolveTelegramTarget(client as any);
         if (!target) return;
+        const isPeriodic = inv.serviceType === "periodic";
         const invoiceLabel = inv.clientTitle || inv.invoiceNumber || id;
+        // Клиентская сумма: для периодических — ставка за период, иначе — сама трата.
+        const clientAmount = isPeriodic ? (Number(inv.pricePerPeriod) || 0) : (Number(expense.amount) || 0);
         const amountStr = new Intl.NumberFormat("ru-RU", {
           style: "currency", currency: "RUB", minimumFractionDigits: 0, maximumFractionDigits: 2,
-        }).format(Number(expense.amount) || 0);
+        }).format(clientAmount);
+        const unitLabel = ({ month: "месяц", day: "день", hour: "час" } as Record<string, string>)[String(inv.periodUnit)] || "период";
+        // Для периодических — нейтральная клиентская подпись (без исполнителя).
+        const lineDesc = isPeriodic ? `Списание за ${unitLabel}` : (expense.description || "—");
         const link = publicUrl(`/invoices/${id}`);
         const linkPart = link ? `\n<a href="${escapeHtml(link)}">Открыть счёт →</a>` : "";
         const contactSuffix = (client as any)?.contactPerson
           ? ` (${escapeHtml((client as any).contactPerson)})`
           : "";
         const html =
-          `💸 <b>Новая трата</b> · ${escapeHtml(invoiceLabel)}${contactSuffix}\n` +
-          `${escapeHtml(expense.description || "—")} — <b>${escapeHtml(amountStr)}</b>` +
+          `💸 <b>${isPeriodic ? "Списание" : "Новая трата"}</b> · ${escapeHtml(invoiceLabel)}${contactSuffix}\n` +
+          `${escapeHtml(lineDesc)} — <b>${escapeHtml(amountStr)}</b>` +
           linkPart;
         await sendTelegramMessage(target, html);
       } catch (e) {

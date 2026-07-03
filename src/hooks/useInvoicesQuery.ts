@@ -61,7 +61,7 @@ export function useInvoicesQuery(role: UserRole, filters: InvoiceFilters = {}) {
   const isVisible = useVisibility();
   const queryClient = useQueryClient();
   
-  const queryKey = ['invoices', role, filters];
+  const queryKey = ['/api/invoices', role, filters];
   
   const query = useQuery<InvoicesResponse>({
     queryKey,
@@ -84,7 +84,7 @@ export function useInvoicesQuery(role: UserRole, filters: InvoiceFilters = {}) {
 
   useEffect(() => {
     if (isVisible && query.isStale) {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
     }
   }, [isVisible, query.isStale, queryClient]);
 
@@ -95,7 +95,7 @@ export function useInvalidateInvoices() {
   const queryClient = useQueryClient();
   
   return useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin'] });
@@ -111,7 +111,7 @@ export function usePrefetchInvoices(role: UserRole, filters: InvoiceFilters = {}
     if (filters.year) params.set('year', String(filters.year));
     
     queryClient.prefetchQuery({
-      queryKey: ['invoices', role, filters],
+      queryKey: ['/api/invoices', role, filters],
       queryFn: async () => {
         const url = `/invoices?${params.toString()}`;
         return apiGet<InvoicesResponse>(url);

@@ -37,7 +37,7 @@ export const OverduePaymentsAlert = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices-overdue'] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
       toast({
         title: "Успешно",
         description: "Счет отмечен как оплаченный",

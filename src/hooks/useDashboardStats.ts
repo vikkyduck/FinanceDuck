@@ -57,6 +57,6 @@ export function useInvalidateDashboardStats() {
   
   return () => {
     queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-    queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
   };
 }

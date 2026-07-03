@@ -96,7 +96,7 @@ export const AssistantDashboard = () => {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
         }}
       />
       <ManagePartnersDialog 

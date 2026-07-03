@@ -251,6 +251,13 @@ export async function getInvoices(
   partnerId?: string,
   clientId?: string,
 ): Promise<InvoiceWithRelations[]> {
+  // Deny-by-default: роли partner/client ОБЯЗАНЫ иметь свой scope-id.
+  // Без него нельзя проваливаться в общий (неотфильтрованный) запрос —
+  // иначе токен без partnerId/clientId увидел бы ВСЕ счета (IDOR).
+  if ((role === 'partner' && !partnerId) || (role === 'client' && !clientId)) {
+    return [];
+  }
+
   const baseQuery = db
     .select({ invoice: invoices, calculations: invoiceCalculations, partner: partners, client: clients })
     .from(invoices)
@@ -295,6 +302,13 @@ export async function getInvoice(
   partnerId?: string,
   clientId?: string,
 ): Promise<InvoiceWithRelations | null> {
+  // Deny-by-default: роли partner/client без своего scope-id НЕ должны
+  // проваливаться в общий фильтр `eq(invoices.id, id)` — иначе токен без
+  // partnerId/clientId прочитал бы любой счёт по id (IDOR).
+  if ((role === 'partner' && !partnerId) || (role === 'client' && !clientId)) {
+    return null;
+  }
+
   // Build ownership WHERE clause
   let ownerFilter;
   if (role === 'partner' && partnerId) {

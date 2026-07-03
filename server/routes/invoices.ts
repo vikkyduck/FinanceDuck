@@ -59,9 +59,15 @@ invoicesRouter.post("/api/invoices", authMiddleware, requireRole("admin", "assis
         const target = resolveTelegramTarget(client as any);
         if (!target) return;
         const label = fullInvoice.clientTitle || fullInvoice.invoiceNumber || invoice.id;
+        // Агентские 30/40: показываем клиенту рабочую базу БЕЗ комиссии
+        // агентства (client_base_after_margin), а не gross. Для остальных схем —
+        // сумму счёта как есть.
+        const displayAmount = isClientFinancialVisible(fullInvoice.scheme)
+          ? (Number(fullInvoice.calculations?.clientBaseAfterMargin) || Number(fullInvoice.clientBill) || 0)
+          : (Number(fullInvoice.clientBill) || 0);
         const amountStr = new Intl.NumberFormat("ru-RU", {
           style: "currency", currency: "RUB", minimumFractionDigits: 0, maximumFractionDigits: 2,
-        }).format(Number(fullInvoice.clientBill) || 0);
+        }).format(displayAmount);
         const statusMap: Record<string, string> = {
           pending: "ожидает оплаты",
           paid: "оплачен",

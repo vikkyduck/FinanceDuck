@@ -8,8 +8,15 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 
 const MAX_LOGIN_ATTEMPTS   = 5;
+// Порог по IP выше, чем по коду: ловим «распыление» многих кодов с одного IP,
+// не наказывая легитимного пользователя, разок опечатавшегося в своём коде.
+const MAX_IP_ATTEMPTS      = 30;
 const LOCKOUT_DURATION_MS  = 15 * 60 * 1000; // 15 min
 const ATTEMPT_WINDOW_MS    = 60 * 60 * 1000; // 1 hr reset window
+
+// Ключ для IP хранится в той же таблице с неймспейс-префиксом (без коллизий
+// с реальными кодами, без изменения схемы).
+const ipKey = (ip: string) => `IPLOCK:${ip}`;
 
 interface RateLimitRow {
   attempt_count: number;
@@ -19,16 +26,16 @@ interface RateLimitRow {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function getRow(code: string): Promise<RateLimitRow | null> {
+async function getRow(key: string): Promise<RateLimitRow | null> {
   const rows = await db.execute<RateLimitRow>(
     sql`SELECT attempt_count, last_attempt, locked_until
         FROM login_rate_limits
-        WHERE code = ${code.toUpperCase()}`,
+        WHERE code = ${key.toUpperCase()}`,
   );
   return rows.rows[0] ?? null;
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Generic core (по любому ключу: код или IP) ────────────────────────────────
 
 export interface AttemptStatus {
   isLocked: boolean;
@@ -36,53 +43,41 @@ export interface AttemptStatus {
   lockedUntil?: number;
 }
 
-export async function getLoginAttemptStatus(code: string): Promise<AttemptStatus> {
+async function statusForKey(key: string, max: number): Promise<AttemptStatus> {
   const now = Date.now();
-  const row = await getRow(code);
+  const row = await getRow(key);
 
-  if (!row) {
-    return { isLocked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
-  }
+  if (!row) return { isLocked: false, attemptsRemaining: max };
 
-  const lastAttempt  = Number(row.last_attempt);
-  const lockedUntil  = row.locked_until ? Number(row.locked_until) : null;
+  const lastAttempt = Number(row.last_attempt);
+  const lockedUntil = row.locked_until ? Number(row.locked_until) : null;
 
-  // Lock window still active
   if (lockedUntil && now < lockedUntil) {
     return { isLocked: true, attemptsRemaining: 0, lockedUntil };
   }
 
-  // Attempt window or lock expired — clean up stale row
-  if (lockedUntil && now >= lockedUntil || now - lastAttempt > ATTEMPT_WINDOW_MS) {
-    await db.execute(sql`DELETE FROM login_rate_limits WHERE code = ${code.toUpperCase()}`);
-    return { isLocked: false, attemptsRemaining: MAX_LOGIN_ATTEMPTS };
+  if ((lockedUntil && now >= lockedUntil) || now - lastAttempt > ATTEMPT_WINDOW_MS) {
+    await db.execute(sql`DELETE FROM login_rate_limits WHERE code = ${key.toUpperCase()}`);
+    return { isLocked: false, attemptsRemaining: max };
   }
 
-  return {
-    isLocked: false,
-    attemptsRemaining: Math.max(0, MAX_LOGIN_ATTEMPTS - row.attempt_count),
-  };
+  return { isLocked: false, attemptsRemaining: Math.max(0, max - row.attempt_count) };
 }
 
-export async function recordFailedLogin(
-  code: string,
+async function recordFailForKey(
+  key: string, max: number,
 ): Promise<{ attemptsRemaining: number; lockedUntil?: number }> {
-  const upper = code.toUpperCase();
+  const upper = key.toUpperCase();
   const now   = Date.now();
   const row   = await getRow(upper);
 
-  let newCount   = 1;
+  let newCount = 1;
   let lockedUntil: number | null = null;
-
   if (row) {
     const lastAttempt = Number(row.last_attempt);
-    // If outside the window, start fresh
     newCount = now - lastAttempt > ATTEMPT_WINDOW_MS ? 1 : row.attempt_count + 1;
   }
-
-  if (newCount >= MAX_LOGIN_ATTEMPTS) {
-    lockedUntil = now + LOCKOUT_DURATION_MS;
-  }
+  if (newCount >= max) lockedUntil = now + LOCKOUT_DURATION_MS;
 
   await db.execute(
     sql`INSERT INTO login_rate_limits (code, attempt_count, last_attempt, locked_until)
@@ -93,10 +88,27 @@ export async function recordFailedLogin(
           locked_until  = ${lockedUntil}`,
   );
 
-  return {
-    attemptsRemaining: Math.max(0, MAX_LOGIN_ATTEMPTS - newCount),
-    lockedUntil: lockedUntil ?? undefined,
-  };
+  return { attemptsRemaining: Math.max(0, max - newCount), lockedUntil: lockedUntil ?? undefined };
+}
+
+// ─── Public API — по коду ───────────────────────────────────────────────────────
+
+export function getLoginAttemptStatus(code: string): Promise<AttemptStatus> {
+  return statusForKey(code, MAX_LOGIN_ATTEMPTS);
+}
+
+export function recordFailedLogin(code: string) {
+  return recordFailForKey(code, MAX_LOGIN_ATTEMPTS);
+}
+
+// ─── Public API — по IP (защита от перебора многих кодов с одного адреса) ────────
+
+export function getIpAttemptStatus(ip: string): Promise<AttemptStatus> {
+  return statusForKey(ipKey(ip), MAX_IP_ATTEMPTS);
+}
+
+export function recordFailedLoginIp(ip: string) {
+  return recordFailForKey(ipKey(ip), MAX_IP_ATTEMPTS);
 }
 
 export async function clearLoginAttempts(code: string): Promise<boolean> {
@@ -118,7 +130,8 @@ export async function getLockedCodes(): Promise<
   const rows = await db.execute<{ code: string; locked_until: string; attempt_count: number }>(
     sql`SELECT code, locked_until, attempt_count
         FROM login_rate_limits
-        WHERE locked_until IS NOT NULL AND locked_until > ${now}`,
+        WHERE locked_until IS NOT NULL AND locked_until > ${now}
+          AND code NOT LIKE 'IPLOCK:%'`,
   );
   return rows.rows.map(r => ({
     code:        r.code,

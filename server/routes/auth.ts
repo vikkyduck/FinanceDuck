@@ -9,12 +9,32 @@ import {
 import {
   getLoginAttemptStatus,
   recordFailedLogin,
+  getIpAttemptStatus,
+  recordFailedLoginIp,
   clearLoginAttempts,
   clearAllLoginAttempts,
   getLockedCodes,
 } from "../rateLimiter";
 
 export const authRouter = Router();
+
+/**
+ * Опции session-cookie. В production ЖЁСТКО secure:true — не полагаемся на
+ * то, что прокси проставит x-forwarded-proto (иначе кука могла бы уйти без
+ * Secure). sameSite=none требует secure и корректен по HTTPS.
+ */
+function sessionCookieOptions(req: Request) {
+  const isProd    = process.env.NODE_ENV === "production";
+  const isProxied = req.headers["x-forwarded-proto"] === "https";
+  const secure    = isProd || isProxied || req.secure;
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: (secure ? "none" : "lax") as "none" | "lax",
+    maxAge: 30 * 60 * 1000,
+    path: "/",
+  };
+}
 
 authRouter.post("/api/admin/unlock-user", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -57,6 +77,21 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
     if (!code) {
       return res.status(400).json({ success: false, error: "missing_code", message: "Код доступа обязателен" });
     }
+    const ip = req.ip || (req.headers["x-forwarded-for"] as string) || "unknown";
+
+    // Блокировка по IP: ловит перебор МНОГИХ кодов с одного адреса (per-code
+    // лимита для этого мало — каждый новый код обнуляет счётчик).
+    const ipStatus = await getIpAttemptStatus(ip);
+    if (ipStatus.isLocked) {
+      return res.status(429).json({
+        success: false,
+        error: "account_locked",
+        message: "Слишком много попыток с этого адреса. Попробуйте позже.",
+        locked_until: new Date(ipStatus.lockedUntil!).toISOString(),
+        attempts_remaining: 0,
+      });
+    }
+
     const attemptStatus = await getLoginAttemptStatus(code);
     if (attemptStatus.isLocked) {
       return res.status(429).json({
@@ -69,7 +104,7 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
     }
     const token = await storage.verifyAccessCode(code);
     if (!token) {
-      const result = await recordFailedLogin(code);
+      const [result] = await Promise.all([recordFailedLogin(code), recordFailedLoginIp(ip)]);
       return res.status(401).json({
         success: false,
         error: "invalid_code",
@@ -78,17 +113,11 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
         locked_until: result.lockedUntil ? new Date(result.lockedUntil).toISOString() : undefined,
       });
     }
+    // На успехе чистим счётчик кода; IP-счётчик не трогаем (анти-спрей окно
+    // само истечёт, легитимный юзер редко копит десятки фейлов).
     await clearLoginAttempts(code);
     const session = await storage.createSession(token.id, req.ip, req.headers["user-agent"]);
-    const isProxied = req.headers["x-forwarded-proto"] === "https";
-    const isSecure = isProxied || req.secure;
-    res.cookie(SESSION_COOKIE, session.sessionId, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: isSecure ? "none" : "lax",
-      maxAge: 30 * 60 * 1000,
-      path: "/",
-    });
+    res.cookie(SESSION_COOKIE, session.sessionId, sessionCookieOptions(req));
     res.json({ success: true, csrfToken: session.csrfToken, user: { role: token.role, partnerId: token.partnerId, clientId: token.clientId } });
   } catch (error) {
     console.error("Login error:", error);
@@ -122,14 +151,6 @@ authRouter.post("/api/auth/refresh", async (req: Request, res: Response) => {
     res.clearCookie(SESSION_COOKIE);
     return res.status(401).json({ error: "Session expired" });
   }
-  const isProxied = req.headers["x-forwarded-proto"] === "https";
-  const isSecure = isProxied || req.secure;
-  res.cookie(SESSION_COOKIE, sessionId, {
-    httpOnly: true,
-    secure: isSecure,
-    sameSite: isSecure ? "none" : "lax",
-    maxAge: 30 * 60 * 1000,
-    path: "/",
-  });
+  res.cookie(SESSION_COOKIE, sessionId, sessionCookieOptions(req));
   res.json({ success: true, expiresAt: newExpiresAt });
 });

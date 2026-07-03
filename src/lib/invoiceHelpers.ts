@@ -12,3 +12,26 @@
 export function isAgencyScheme(scheme: string | null | undefined): boolean {
   return scheme === "agency_30" || scheme === "agency_40";
 }
+
+/**
+ * Единые подписи статусов счёта (единственное число, для отображения).
+ * Раньше этот словарь дословно повторялся в 5 файлах. ВНИМАНИЕ: у фильтров
+ * (InvoiceFilters) — ДРУГОЙ словарь (множественное число + overdue), он живёт
+ * отдельно и сюда не сводится.
+ */
+export const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: "Черновик",
+  sent: "Отправлен",
+  paid: "Оплачен",
+  cancelled: "Отменён",
+};
+
+/**
+ * invoice_calculations из API приходит то массивом (join), то объектом, то
+ * null. Приводим к «объект или null». Заменяет повторяющийся костыль
+ * `Array.isArray(calc) ? calc[0] : calc` (5× в InvoiceDetailsDialog).
+ */
+export function normalizeCalculations<T = any>(raw: T | T[] | null | undefined): T | null {
+  if (Array.isArray(raw)) return (raw[0] as T) ?? null;
+  return (raw as T) ?? null;
+}

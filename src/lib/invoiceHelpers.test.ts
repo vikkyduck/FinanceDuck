@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isAgencyScheme } from "./invoiceHelpers";
+import { isAgencyScheme, normalizeCalculations, INVOICE_STATUS_LABELS } from "./invoiceHelpers";
 
 describe("isAgencyScheme", () => {
   it("true для агентских схем", () => {
@@ -15,5 +15,31 @@ describe("isAgencyScheme", () => {
     expect(isAgencyScheme(null)).toBe(false);
     expect(isAgencyScheme(undefined)).toBe(false);
     expect(isAgencyScheme("")).toBe(false);
+  });
+});
+
+describe("normalizeCalculations", () => {
+  it("массив → первый элемент", () => {
+    expect(normalizeCalculations([{ a: 1 }, { a: 2 }])).toEqual({ a: 1 });
+  });
+  it("пустой массив → null", () => {
+    expect(normalizeCalculations([])).toBeNull();
+  });
+  it("объект → тот же объект", () => {
+    const o = { clientBill: "100" };
+    expect(normalizeCalculations(o)).toBe(o);
+  });
+  it("null/undefined → null", () => {
+    expect(normalizeCalculations(null)).toBeNull();
+    expect(normalizeCalculations(undefined)).toBeNull();
+  });
+});
+
+describe("INVOICE_STATUS_LABELS", () => {
+  it("покрывает основные статусы", () => {
+    expect(INVOICE_STATUS_LABELS.draft).toBe("Черновик");
+    expect(INVOICE_STATUS_LABELS.sent).toBe("Отправлен");
+    expect(INVOICE_STATUS_LABELS.paid).toBe("Оплачен");
+    expect(INVOICE_STATUS_LABELS.cancelled).toBe("Отменён");
   });
 });

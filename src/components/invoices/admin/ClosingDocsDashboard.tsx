@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { INVOICE_STATUS_LABELS as STATUS_LABELS } from "@/lib/invoiceHelpers";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FileText, ChevronDown, ChevronUp, RefreshCw, AlertCircle, CheckCircle2, ExternalLink, Link2 } from "lucide-react";
@@ -29,12 +30,6 @@ interface ClientDocsData {
   invoicesWithoutDoc: number;
   invoiceDetails: InvoiceDetail[];
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  paid: "Оплачен",
-  sent: "Отправлен",
-  draft: "Черновик",
-};
 
 export const ClosingDocsDashboard = () => {
   const queryClient = useQueryClient();

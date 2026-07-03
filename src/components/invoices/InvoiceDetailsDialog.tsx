@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { isAgencyScheme } from "@/lib/invoiceHelpers";
+import { isAgencyScheme, normalizeCalculations } from "@/lib/invoiceHelpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -144,7 +144,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     // Сбрасываем локальное значение процента партнёра при смене счёта
     if (invoice?.scheme === 'commission_based') {
       const calcRaw = invoice.invoice_calculations;
-      const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
+      const calc = normalizeCalculations(calcRaw);
       const rate = calc?.commission_rate ?? invoice.partner_commission_rate ?? 10;
       setPartnerRate(rate);
     } else {
@@ -154,7 +154,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     // Устанавливаем значение client_bill для редактирования
     if (invoice) {
       const calcRaw = invoice.invoice_calculations;
-      const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
+      const calc = normalizeCalculations(calcRaw);
       const bill = calc?.client_bill ?? invoice.client_bill ?? 0;
       setClientBillEdit(bill);
       setHideFromAssistant(invoice.hidden_from_assistant || false);
@@ -539,7 +539,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     }
 
     const calcRaw = invoice.invoice_calculations;
-    const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw;
+    const calc = normalizeCalculations(calcRaw);
     const currentBill = calc?.client_bill ?? invoice.client_bill ?? 0;
     if (currentBill === newBill) return;
 
@@ -803,7 +803,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   }
 
   const calcRaw = invoice.invoice_calculations;
-  const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
+  const calc = normalizeCalculations(calcRaw);
   const isAgency30 = isAgencyScheme(invoice.scheme);
   const permissions = getVisibleFields(userRole, invoice.scheme);
 

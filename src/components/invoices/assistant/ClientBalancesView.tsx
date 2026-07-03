@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { formatMoney } from "@/lib/format";
-import { isAgencyScheme } from "@/lib/invoiceHelpers";
+import { isAgencyScheme, INVOICE_STATUS_LABELS as STATUS_LABELS } from "@/lib/invoiceHelpers";
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, subYears } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,13 +34,6 @@ interface RawInvoice {
     executorExpensesTotal?: string | number | null;
   } | null;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: "Черновик",
-  sent: "Отправлен",
-  paid: "Оплачен",
-  cancelled: "Отменён",
-};
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",

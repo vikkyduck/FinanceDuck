@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { INVOICE_STATUS_LABELS } from "@/lib/invoiceHelpers";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useState } from "react";
@@ -125,13 +126,6 @@ function formatChangedFields(details: string | null): { field: string; value: st
       hideFromAssistant: "Скрыто от ассистента",
     };
     
-    const statusLabels: Record<string, string> = {
-      draft: "Черновик",
-      sent: "Отправлен",
-      paid: "Оплачен",
-      cancelled: "Отменён",
-    };
-    
     const hiddenFields = [
       "partnerCommissionRate", "partnerCommissionFormula", "commissionScheme",
       "partnerPaymentFormula", "clientPaymentFormula", "id", "createdAt", "updatedAt",
@@ -150,7 +144,7 @@ function formatChangedFields(details: string | null): { field: string; value: st
       } else if (typeof value === "object") {
         continue;
       } else if (key === "status" || key === "invoiceStatus") {
-        displayValue = statusLabels[String(value)] || String(value);
+        displayValue = INVOICE_STATUS_LABELS[String(value)] || String(value);
       } else {
         displayValue = String(value);
       }

@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { INVOICE_STATUS_LABELS as statusLabels } from "@/lib/invoiceHelpers";
 import { ArrowLeft, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,13 +48,6 @@ interface Expense {
   amount: string;
   paidBy: string;
 }
-
-const statusLabels: Record<string, string> = {
-  draft: "Черновик",
-  sent: "Отправлен",
-  paid: "Оплачен",
-  cancelled: "Отменен",
-};
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   draft: "secondary",

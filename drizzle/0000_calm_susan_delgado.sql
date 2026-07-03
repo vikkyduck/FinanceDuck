@@ -1,7 +1,7 @@
 CREATE TYPE "public"."act_type" AS ENUM('executor', 'company');--> statement-breakpoint
 CREATE TYPE "public"."assistant_action_type" AS ENUM('create_invoice', 'update_invoice', 'delete_invoice', 'create_expense', 'update_expense', 'delete_expense', 'create_client', 'update_client', 'delete_client', 'create_partner', 'update_partner', 'delete_partner', 'upload_act', 'delete_act', 'create_recurring_invoice', 'update_recurring_invoice', 'delete_recurring_invoice', 'transfer_funds', 'transfer_funds_delete', 'other');--> statement-breakpoint
 CREATE TYPE "public"."frequency" AS ENUM('monthly', 'quarterly', 'yearly');--> statement-breakpoint
-CREATE TYPE "public"."invoice_scheme" AS ENUM('partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based');--> statement-breakpoint
+CREATE TYPE "public"."invoice_scheme" AS ENUM('partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based', 'agency');--> statement-breakpoint
 CREATE TYPE "public"."invoice_status" AS ENUM('draft', 'sent', 'paid', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."period_unit" AS ENUM('month', 'day', 'hour');--> statement-breakpoint
 CREATE TYPE "public"."service_type" AS ENUM('one_time', 'periodic');--> statement-breakpoint

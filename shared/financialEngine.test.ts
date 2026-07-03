@@ -88,6 +88,44 @@ describe("calculateFinancials — commission_based", () => {
   });
 });
 
+describe("calculateFinancials — agency (гибкая: маржа% + партнёр%, партнёр от всей суммы)", () => {
+  // Сигнатура: calculateFinancials(scheme, clientBill, partnerCommRate, exec, byP, byA, planned, agencyMarginRate)
+  it("пример пользователя: 1млн, маржа 40%, партнёр 15% → 400к/600к/150к/250к", () => {
+    const r = calculateFinancials("agency", 1_000_000, 15, 0, 0, 0, 0, 40);
+    money(r.agencyMargin!, 400_000);
+    money(r.clientBaseAfterMargin!, 600_000);
+    money(r.partnerShareFromMargin!, 150_000);
+    money(r.adminShareFromMargin!, 250_000);
+    money(r.netProfitAdmin, 250_000);
+    money(r.partnerTransferDue, 250_000);
+    money(r.adminShare50, 125_000);
+  });
+  it("обобщает жёсткую agency_30 (маржа 30%, партнёр 15%)", () => {
+    const flex = calculateFinancials("agency", 1_000_000, 15, 0, 0, 0, 0, 30);
+    const hard = calculateFinancials("agency_30", 1_000_000);
+    money(flex.agencyMargin!, hard.agencyMargin!);
+    money(flex.partnerShareFromMargin!, hard.partnerShareFromMargin!);
+    money(flex.adminShareFromMargin!, hard.adminShareFromMargin!);
+    money(flex.clientBaseAfterMargin!, hard.clientBaseAfterMargin!);
+  });
+  it("расходы уменьшают остаток клиента, прибыль админа фиксирована", () => {
+    const r = calculateFinancials("agency", 1_000_000, 15, 100_000, 0, 0, 0, 40);
+    money(r.clientSpent!, 100_000);
+    money(r.clientRemaining!, 500_000); // 600к − 100к
+    money(r.netProfitAdmin, 250_000);   // не зависит от расходов
+  });
+  it("процент партнёра больше маржи → обрезается до маржи (админу 0)", () => {
+    const r = calculateFinancials("agency", 1_000_000, 40, 0, 0, 0, 0, 30);
+    money(r.partnerShareFromMargin!, 300_000); // capped at margin 30%
+    money(r.adminShareFromMargin!, 0);
+  });
+  it("партнёр 0% → вся маржа админу", () => {
+    const r = calculateFinancials("agency", 1_000_000, 0, 0, 0, 0, 0, 40);
+    money(r.partnerShareFromMargin!, 0);
+    money(r.adminShareFromMargin!, 400_000);
+  });
+});
+
 describe("инварианты / крайние случаи", () => {
   it("clientRemaining никогда не отрицателен (расходы > planned)", () => {
     const r = calculateFinancials("partner_10", 1000, 0, 200, 0, 0, 100);

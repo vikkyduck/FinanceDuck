@@ -13,7 +13,10 @@ export type InvoiceScheme =
   | 'partner_15'
   | 'agency_30'
   | 'agency_40'
-  | 'commission_based';
+  | 'commission_based'
+  // Гибкая агентская схема: маржа агентства и процент партнёра задаются
+  // вручную (обобщает жёсткие agency_30/40). Клиент видит маржу и списания.
+  | 'agency';
 
 export interface FinancialResult {
   clientBill: number;
@@ -43,6 +46,9 @@ export interface FinancialResult {
  * @param expensesByPartner   Expenses paid by partner from client money (paidByAdmin = false)
  * @param expensesByAdmin     Expenses paid by admin from own funds (paidByAdmin = true)
  * @param plannedExpenses     Reserved amount for future expenses (affects partner transfer for non-agency schemes)
+ * @param agencyMarginRate    Agency margin % — ТОЛЬКО для гибкой схемы 'agency'
+ *                            (комиссия агентства, видна клиенту). Для 'agency'
+ *                            partnerCommRate = процент партнёра от всей суммы.
  */
 export function calculateFinancials(
   scheme: InvoiceScheme,
@@ -52,6 +58,7 @@ export function calculateFinancials(
   expensesByPartner: number = 0,
   expensesByAdmin: number = 0,
   plannedExpenses: number = 0,
+  agencyMarginRate: number = 0,
 ): FinancialResult {
   const base: FinancialResult = {
     clientBill,
@@ -100,6 +107,41 @@ export function calculateFinancials(
 
       return {
         ...base,
+        agencyMargin,
+        partnerShareFromMargin,
+        adminShareFromMargin,
+        clientBaseAfterMargin,
+        clientSpent: executorExpenses,
+        clientRemaining,
+        partnerTransferDue,
+        netProfitAdmin,
+        adminShare50: netProfitAdmin / 2,
+        catShare50:   netProfitAdmin / 2,
+      };
+    }
+
+    case 'agency': {
+      // Гибкая агентская схема (обобщает жёсткие agency_30/40).
+      //   agencyMarginRate — комиссия агентства, % от суммы (видна клиенту);
+      //   partnerCommRate  — процент партнёра, % от ВСЕЙ суммы (скрыт);
+      //   админу — остаток маржи (маржа − доля партнёра).
+      // Пример: 1 000 000, маржа 40%, партнёр 15% → маржа 400к, клиенту 600к,
+      //   партнёру 150к, админу 250к.
+      const marginRate  = Math.max(0, Math.min(100, agencyMarginRate)) / 100;
+      // Партнёр не может получить больше самой маржи.
+      const partnerRate = Math.max(0, Math.min(marginRate * 100, partnerCommRate)) / 100;
+
+      const agencyMargin           = clientBill * marginRate;
+      const partnerShareFromMargin = clientBill * partnerRate;
+      const adminShareFromMargin   = agencyMargin - partnerShareFromMargin;
+      const clientBaseAfterMargin  = clientBill * (1 - marginRate);
+      const clientRemaining        = clientBaseAfterMargin - executorExpenses;
+      const partnerTransferDue     = adminShareFromMargin; // партнёр должен админу его долю
+      const netProfitAdmin         = adminShareFromMargin; // расходы из клиентского бюджета
+
+      return {
+        ...base,
+        commissionRate: agencyMarginRate, // ставка маржи (для показа/персиста)
         agencyMargin,
         partnerShareFromMargin,
         adminShareFromMargin,

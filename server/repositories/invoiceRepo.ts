@@ -122,6 +122,7 @@ export function calculateInvoiceServer(
   expensesPaidByPartner = 0,
   expensesPaidByAdmin = 0,
   plannedExpenses = 0,
+  agencyMarginRate = 0,
 ): Partial<InvoiceCalculation> {
   const f = calculateFinancials(
     scheme,
@@ -131,6 +132,7 @@ export function calculateInvoiceServer(
     expensesPaidByPartner,
     expensesPaidByAdmin,
     plannedExpenses,
+    agencyMarginRate,
   );
 
   const r: Partial<InvoiceCalculation> = {
@@ -208,14 +210,20 @@ async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promi
   const periodicBill = derivePeriodicClientBill(invoice);
   const effectiveBill = periodicBill ?? storedBill;
 
+  // Гибкая agency: партнёр из invoices.partnerCommissionRate, маржа из calc.commissionRate.
+  const isAgencyFlex = invoice.scheme === 'agency';
+  const partnerRate  = isAgencyFlex ? parseNum(invoice.partnerCommissionRate) : commissionRate;
+  const marginRate   = isAgencyFlex ? (commissionRate ?? 0) : 0;
+
   let computed = calculateInvoiceServer(
     invoice.scheme as InvoiceScheme,
     effectiveBill,
-    commissionRate,
+    partnerRate,
     total,
     expensesPaidByPartner,
     expensesPaidByAdmin,
     plannedExp,
+    marginRate,
   );
   computed = applyPeriodicOverrides(invoice, computed);
   const transferBalance = await getTransferBalance(db, invoiceId);
@@ -399,14 +407,21 @@ export async function createInvoice(
     const executorExpenses = parseNum(calculations.executorExpensesTotal);
     const plannedExp     = parseNum(created.plannedExpenses);
 
+    // Гибкая agency: маржа приходит в calculations.commissionRate, а процент
+    // партнёра — в invoices.partnerCommissionRate (скрыт от клиента).
+    const isAgencyFlex = created.scheme === 'agency';
+    const partnerRate  = isAgencyFlex ? parseNum(created.partnerCommissionRate) : commissionRate;
+    const marginRate   = isAgencyFlex ? (commissionRate ?? 0) : 0;
+
     let computed = calculateInvoiceServer(
       created.scheme as InvoiceScheme,
       clientBill,
-      commissionRate,
+      partnerRate,
       executorExpenses,
       0,
       0,
       plannedExp,
+      marginRate,
     );
     computed = applyPeriodicOverrides(created, computed);
 
@@ -456,14 +471,21 @@ export async function updateInvoiceCalculations(
   const periodicBill = derivePeriodicClientBill(invoice);
   const effectiveBill = periodicBill ?? clientBill;
 
+  // Гибкая agency: partnerCommRate — из invoices.partnerCommissionRate,
+  // маржа (agencyMarginRate) — из commissionRate (calc/вход).
+  const isAgencyFlex = invoice.scheme === 'agency';
+  const partnerRate  = isAgencyFlex ? parseNum(invoice.partnerCommissionRate) : commissionRate;
+  const marginRate   = isAgencyFlex ? (commissionRate ?? 0) : 0;
+
   let computed = calculateInvoiceServer(
     invoice.scheme as InvoiceScheme,
     effectiveBill,
-    commissionRate,
+    partnerRate,
     executorExpenses,
     expensesPaidByPartner,
     expensesPaidByAdmin,
     plannedExp,
+    marginRate,
   );
   computed = applyPeriodicOverrides(invoice, computed);
 

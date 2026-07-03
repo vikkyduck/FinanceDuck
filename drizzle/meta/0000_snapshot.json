@@ -1,5 +1,5 @@
 {
-  "id": "ee02ca5f-a663-427b-8250-e96c09bfdb4a",
+  "id": "1a2b7609-3c7d-4b91-b51f-a33ac8faaf4c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -2121,7 +2121,8 @@
         "partner_15",
         "agency_30",
         "agency_40",
-        "commission_based"
+        "commission_based",
+        "agency"
       ]
     },
     "public.invoice_status": {

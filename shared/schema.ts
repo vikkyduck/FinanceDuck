@@ -1,7 +1,7 @@
 import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, integer, bigint } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client', 'accountant']);
-export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based']);
+export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based', 'agency']);
 export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'cancelled']);
 export const actTypeEnum = pgEnum('act_type', ['executor', 'company']);
 export const serviceTypeEnum = pgEnum('service_type', ['one_time', 'periodic']);

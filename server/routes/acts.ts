@@ -97,7 +97,6 @@ actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "
   try {
     const { id } = req.params;
     const { actType, fileName, fileData, mimeType, isLink, url } = req.body;
-    console.log("[Upload Act] Request received - invoiceId:", id, "actType:", actType, "fileName:", fileName, "role:", req.user?.role, "tokenId:", req.user?.token?.id);
     const invoice = await storage.getInvoice(id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
     if (req.user?.role === "accountant" && !invoice.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
@@ -109,10 +108,8 @@ actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "
     const invoiceNumber = invoice.invoiceNumber;
     const displayName = invoiceNumber || client?.name || partner?.name || invoice.description || id;
     const actTypeLabel = actType === "company" ? "компании" : "исполнителя";
-    console.log("[Upload Act] About to log action for act:", act.id, "token:", req.user!.token.id);
     try {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "upload_act", entityType: "act", entityId: act.id, description: `Загружен акт ${actTypeLabel}: ${displayName}`, details: JSON.stringify({ invoiceId: id, invoiceNumber, clientName: client?.name, partnerName: partner?.name, actType, fileName, isLink: isLink || false }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
-      console.log("[Upload Act] Action logged successfully");
     } catch (logError) { console.error("[Upload Act] Failed to log action:", logError); }
     const { fileData: _, ...actWithoutData } = act;
     res.status(201).json(actWithoutData);

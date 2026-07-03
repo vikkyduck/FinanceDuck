@@ -112,6 +112,18 @@ export function formatNumber(value: MoneyInput, decimals: boolean = false): stri
   return formatMoney(value, { decimals, bare: true });
 }
 
+/**
+ * Русская плюрализация по числу: pluralizeRu(n, [одна, две-четыре, пять]).
+ * pluralizeRu(1,f)→f[0], (2..4)→f[1], (5..20,0)→f[2], с учётом mod10/mod100
+ * (21→f[0], 22→f[1], 25→f[2]). Единый хелпер — раньше копировался по файлам.
+ */
+export function pluralizeRu(n: number, forms: [string, string, string]): string {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return forms[0];
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
+  return forms[2];
+}
+
 // Алиасы для совместимости с legacy-импортами из invoiceCalculations.ts —
 // чтобы не править 50 файлов в одну итерацию: legacy продолжает работать
 // и под капотом использует этот же сервис.

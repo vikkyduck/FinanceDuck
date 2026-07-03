@@ -66,12 +66,6 @@ export const SalesStatistics = ({ year }: SalesStatisticsProps) => {
     return monthNames[new Date().getMonth()];
   };
 
-  const pluralize = (n: number) => {
-    if (n === 1) return 'черновик';
-    if (n >= 2 && n <= 4) return 'черновика';
-    return 'черновиков';
-  };
-
   const statsConfig: StatConfig[] = [
     {
       icon: FileText,

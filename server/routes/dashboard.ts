@@ -231,10 +231,8 @@ dashboardRouter.post("/api/admin/monthly-plans", authMiddleware, requireRole("ad
 });
 
 dashboardRouter.post("/api/admin/recalculate-invoices", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
-  console.log("[API] Recalculate invoices request received");
   try {
     const result = await storage.recalculateAllInvoices();
-    console.log("[API] Recalculate invoices result:", result);
     res.json({ success: true, message: `Recalculated ${result.updated} invoices with ${result.errors} errors`, ...result });
   } catch (error) {
     console.error("[API] Recalculate invoices error:", error);

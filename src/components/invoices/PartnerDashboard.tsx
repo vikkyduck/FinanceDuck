@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -209,7 +210,7 @@ export const PartnerDashboard = () => {
       const calc = inv.calculations || {};
       const commissionAmount = parseFloat(calc.commissionAmount || "0");
       const partnerShareFromMargin = parseFloat(calc.partnerShareFromMargin || "0");
-      const partnerCommission = (inv.scheme === 'agency_30' || inv.scheme === 'agency_40') ? partnerShareFromMargin : commissionAmount;
+      const partnerCommission = isAgencyScheme(inv.scheme) ? partnerShareFromMargin : commissionAmount;
       
       const invoiceYear = inv.paymentDate 
         ? new Date(inv.paymentDate).getFullYear()

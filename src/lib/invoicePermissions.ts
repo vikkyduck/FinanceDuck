@@ -1,3 +1,5 @@
+import { isAgencyScheme } from "./invoiceHelpers";
+
 export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
 export type InvoiceScheme = 'agency_30' | 'agency_40' | 'commission_based';
 
@@ -64,10 +66,10 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       showBasicInfo: true,
       showClientBill: true,
       showCommissionDetails: false, // НЕ видит процент партнера
-      showAgencyMargin: scheme === 'agency_30' || scheme === 'agency_40', // Видит общую маржу агентства, но НЕ разбивку
-      showClientBudget: scheme === 'agency_30' || scheme === 'agency_40', // Видит базу клиента только для agency схем
+      showAgencyMargin: isAgencyScheme(scheme), // Видит общую маржу агентства, но НЕ разбивку
+      showClientBudget: isAgencyScheme(scheme), // Видит базу клиента только для agency схем
       showExpensesTotal: true, // Видит расходы для обеих схем
-      showClientRemaining: scheme === 'agency_30' || scheme === 'agency_40', // Видит остаток клиента только для agency схем
+      showClientRemaining: isAgencyScheme(scheme), // Видит остаток клиента только для agency схем
       showPartnerShare: false, // НЕ видит распределение партнер/админ (15%/15%)
       showAdminShare: false, // НЕ видит долю админа
       showNetProfitAdmin: false,
@@ -86,7 +88,7 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
 
   // Client permissions - different based on scheme
   if (userRole === 'client') {
-    if (scheme === 'agency_30' || scheme === 'agency_40') {
+    if (isAgencyScheme(scheme)) {
       // For agency schemes, show budget and expenses
       return {
         showBasicInfo: true,
@@ -146,10 +148,10 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       showBasicInfo: true,
       showClientBill: true,
       showCommissionDetails: false,
-      showAgencyMargin: scheme === 'agency_30' || scheme === 'agency_40',
-      showClientBudget: scheme === 'agency_30' || scheme === 'agency_40',
+      showAgencyMargin: isAgencyScheme(scheme),
+      showClientBudget: isAgencyScheme(scheme),
       showExpensesTotal: true,
-      showClientRemaining: scheme === 'agency_30' || scheme === 'agency_40',
+      showClientRemaining: isAgencyScheme(scheme),
       showPartnerShare: false,
       showAdminShare: false,
       showNetProfitAdmin: false,

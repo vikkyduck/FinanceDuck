@@ -1,5 +1,6 @@
 import { useSwipeable } from "react-swipeable";
 import { motion, AnimatePresence } from "framer-motion";
+import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -180,7 +181,7 @@ export const InvoiceCard = ({
                     <span className="text-muted-foreground">Схема:</span>
                     <span className="font-medium">{getSchemeLabel(scheme, role, commissionRate)}</span>
                   </div>
-                  {(scheme === 'agency_30' || scheme === 'agency_40') ? (
+                  {(isAgencyScheme(scheme)) ? (
                     <div className="text-xs text-muted-foreground pt-1">
                       Условия вознаграждения фиксируются в договоре и не раскрываются ассистенту.
                     </div>
@@ -210,7 +211,7 @@ export const InvoiceCard = ({
                   </div>
                 </div>
                 
-                {(scheme === 'agency_30' || scheme === 'agency_40') ? (
+                {(isAgencyScheme(scheme)) ? (
                   <div className="grid grid-cols-2 gap-2 text-sm pt-1">
                     <div>
                       <p className="text-xs text-muted-foreground">Доля партнёра</p>

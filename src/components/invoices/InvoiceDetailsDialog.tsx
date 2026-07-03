@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -803,7 +804,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
 
   const calcRaw = invoice.invoice_calculations;
   const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw || null;
-  const isAgency30 = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
+  const isAgency30 = isAgencyScheme(invoice.scheme);
   const permissions = getVisibleFields(userRole, invoice.scheme);
 
   return (

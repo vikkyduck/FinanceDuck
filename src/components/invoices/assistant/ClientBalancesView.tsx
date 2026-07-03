@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { formatMoney } from "@/lib/format";
+import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, subYears } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,12 +67,9 @@ function formatRub(amount: number) {
   return formatMoney(amount);
 }
 
-function isAgency(scheme: string) {
-  return scheme === "agency_30" || scheme === "agency_40";
-}
 
 function getWorkingBudget(inv: RawInvoice): number {
-  if (isAgency(inv.scheme)) {
+  if (isAgencyScheme(inv.scheme)) {
     const base = n(inv.calculations?.clientBaseAfterMargin);
     return base > 0 ? base : n(inv.calculations?.clientBill ?? inv.clientBill);
   }
@@ -84,7 +82,7 @@ function getSpent(inv: RawInvoice): number {
 }
 
 function getRemaining(inv: RawInvoice): number {
-  if (isAgency(inv.scheme)) {
+  if (isAgencyScheme(inv.scheme)) {
     // Agency schemes: clientRemaining = clientBaseAfterMargin - expenses (stored correctly in DB)
     const rem = n(inv.calculations?.clientRemaining);
     if (rem !== 0) return rem;

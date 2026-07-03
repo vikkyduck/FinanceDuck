@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -654,13 +655,13 @@ export const UnifiedInvoicesList = ({
                       <>
                         <TableCell className="text-muted-foreground">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
                         <TableCell className="font-semibold text-primary">
-                          {(invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40')
+                          {(isAgencyScheme(invoice.scheme))
                             ? formatCurrency(invoice.partner_share_from_margin || 0)
                             : formatCurrency(invoice.commission_amount || 0)
                           }
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {(invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40')
+                          {(isAgencyScheme(invoice.scheme))
                             ? formatCurrency(invoice.admin_share_from_margin || 0)
                             : '—'
                           }
@@ -839,7 +840,7 @@ export const UnifiedInvoicesList = ({
           {displayInvoices.map((invoice, index) => {
           // «Открытая комиссия» для клиента — только agency_30/40 (30/40% маржа
           // в названии). commission_based, partner_10, partner_15 — закрытые.
-          const isAgency30 = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
+          const isAgency30 = isAgencyScheme(invoice.scheme);
           
           return (
             <Card 
@@ -881,7 +882,7 @@ export const UnifiedInvoicesList = ({
                   //   periodic (любая схема)  → оплачено / цена / использовано / осталось
                   //   остальное (commission_based one_time, partner_10/15) → только сумма + статус
                   (() => {
-                    const isAgencyScheme = invoice.scheme === 'agency_30' || invoice.scheme === 'agency_40';
+                    const isAgencyScheme = isAgencyScheme(invoice.scheme);
                     const isPeriodic = invoice.service_type === 'periodic';
                     const bill = Number(invoice.client_bill || 0);
                     return (

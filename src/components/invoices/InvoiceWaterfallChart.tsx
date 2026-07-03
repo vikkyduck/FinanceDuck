@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from "recharts";
+import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { formatCurrency } from "@/lib/invoiceCalculations";
 
 interface WaterfallChartProps {
@@ -67,7 +68,7 @@ export function InvoiceWaterfallChart({
     });
     runningTotal = safeClientBill;
 
-    if (scheme === "agency_30" || scheme === "agency_40") {
+    if (isAgencyScheme(scheme)) {
       const partnerPercent = scheme === "agency_40" ? "16%" : "15%";
       const adminPercent = scheme === "agency_40" ? "24%" : "15%";
       

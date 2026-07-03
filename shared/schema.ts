@@ -155,7 +155,10 @@ export const invoiceCalculations = pgTable("invoice_calculations", {
   assistantBonusPaid: boolean("assistant_bonus_paid").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // Джойнится к invoices в каждом запросе дашборда — без индекса был seq scan.
+  index("idx_invoice_calculations_invoice").on(table.invoiceId),
+]);
 
 export const invoiceExpenses = pgTable("invoice_expenses", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -166,7 +169,10 @@ export const invoiceExpenses = pgTable("invoice_expenses", {
   date: date("date").defaultNow().notNull(),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // Фильтруется/джойнится по invoiceId (inArray в дашбордах, расходы счёта).
+  index("idx_invoice_expenses_invoice").on(table.invoiceId),
+]);
 
 // Внутренний перенос средств между счетами ОДНОГО клиента.
 // НЕ затрагивает client_bill и админскую математику (комиссия, перевод
@@ -192,7 +198,11 @@ export const partnerPayments = pgTable("partner_payments", {
   notes: text("notes"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // getPartnerPayments фильтрует по partnerId; долги/остатки — по invoiceId.
+  index("idx_partner_payments_partner").on(table.partnerId),
+  index("idx_partner_payments_invoice").on(table.invoiceId),
+]);
 
 export const signedActs = pgTable("signed_acts", {
   id: uuid("id").defaultRandom().primaryKey(),

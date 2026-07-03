@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { db } from "./db";
+import { backupCryptoEnabled, encryptBackup, decryptBackup, isEncryptedEnvelope } from "./lib/backupCrypto";
 import {
   invoices,
   clients,
@@ -41,6 +42,20 @@ export interface BackupData {
 
 async function ensureBackupDir(): Promise<void> {
   await fs.mkdir(BACKUP_DIR, { recursive: true });
+}
+
+// JSON serializes Dates as ISO strings. Drizzle's timestamp columns expect
+// Date objects on insert (it calls .toISOString() internally). Walk the row
+// and convert ISO-looking strings back to Date so restore round-trips cleanly.
+const ISO_DATE_RX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
+function reviveDates<T extends Record<string, any>>(row: T): T {
+  for (const key of Object.keys(row)) {
+    const v = row[key];
+    if (typeof v === "string" && ISO_DATE_RX.test(v)) {
+      (row as any)[key] = new Date(v);
+    }
+  }
+  return row;
 }
 
 function parseBackupType(filename: string): "auto" | "manual" {
@@ -92,9 +107,14 @@ export class BackupService {
     };
 
     const jsonContent = JSON.stringify(backupData, null, 2);
-    await fs.writeFile(filePath, jsonContent, "utf8");
+    // Шифруем содержимое, если задан секрет. Конверт хранит createdAt/type
+    // открыто (для списка), а сами данные — в ciphertext.
+    const fileContent = backupCryptoEnabled
+      ? JSON.stringify(encryptBackup(jsonContent, { createdAt: backupData.createdAt, type }))
+      : jsonContent;
+    await fs.writeFile(filePath, fileContent, "utf8");
 
-    console.log(`[Backup] Created backup: ${filename}`);
+    console.log(`[Backup] Created backup: ${filename}${backupCryptoEnabled ? " (encrypted)" : ""}`);
 
     if (type === "auto") {
       await this.cleanupOldBackups();
@@ -104,7 +124,7 @@ export class BackupService {
       id: filename,
       filename,
       createdAt: backupData.createdAt,
-      sizeBytes: Buffer.byteLength(jsonContent, "utf8"),
+      sizeBytes: Buffer.byteLength(fileContent, "utf8"),
       type,
     };
   }
@@ -153,7 +173,12 @@ export class BackupService {
     try {
       const filePath = path.join(BACKUP_DIR, path.basename(backupId));
       const content = await fs.readFile(filePath, "utf8");
-      return JSON.parse(content) as BackupData;
+      const parsed = JSON.parse(content);
+      // Зашифрованный конверт → расшифровать; легаси открытый JSON → как есть.
+      if (isEncryptedEnvelope(parsed)) {
+        return JSON.parse(decryptBackup(parsed)) as BackupData;
+      }
+      return parsed as BackupData;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException)?.code;
       if (code !== "ENOENT") {
@@ -185,32 +210,32 @@ export class BackupService {
         await tx.delete(accessTokens);
 
         if (backupData.data.partners?.length) {
-          await tx.insert(partners).values(backupData.data.partners);
+          await tx.insert(partners).values(backupData.data.partners.map(reviveDates));
         }
         if (backupData.data.clients?.length) {
-          await tx.insert(clients).values(backupData.data.clients);
+          await tx.insert(clients).values(backupData.data.clients.map(reviveDates));
         }
         if (backupData.data.accessTokens?.length) {
-          await tx.insert(accessTokens).values(backupData.data.accessTokens);
+          await tx.insert(accessTokens).values(backupData.data.accessTokens.map(reviveDates));
         }
         if (backupData.data.invoices?.length) {
-          await tx.insert(invoices).values(backupData.data.invoices);
+          await tx.insert(invoices).values(backupData.data.invoices.map(reviveDates));
         }
         if (backupData.data.invoiceExpenses?.length) {
-          await tx.insert(invoiceExpenses).values(backupData.data.invoiceExpenses);
+          await tx.insert(invoiceExpenses).values(backupData.data.invoiceExpenses.map(reviveDates));
         }
         if (backupData.data.invoiceCalculations?.length) {
           await tx
             .insert(invoiceCalculations)
-            .values(backupData.data.invoiceCalculations);
+            .values(backupData.data.invoiceCalculations.map(reviveDates));
         }
         if (backupData.data.partnerPayments?.length) {
-          await tx.insert(partnerPayments).values(backupData.data.partnerPayments);
+          await tx.insert(partnerPayments).values(backupData.data.partnerPayments.map(reviveDates));
         }
         if (backupData.data.recurringInvoices?.length) {
           await tx
             .insert(recurringInvoices)
-            .values(backupData.data.recurringInvoices);
+            .values(backupData.data.recurringInvoices.map(reviveDates));
         }
       });
 

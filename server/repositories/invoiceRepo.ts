@@ -7,7 +7,7 @@
 
 import { db as _db } from "../db";
 import {
-  invoices, invoiceCalculations, invoiceExpenses, partners, clients,
+  invoices, invoiceCalculations, invoiceExpenses, invoiceTransfers, partners, clients,
   Invoice, InvoiceCalculation, InvoiceExpense, Partner, Client,
   InsertInvoice, InsertInvoiceExpense,
   UserRole, InvoiceScheme,
@@ -18,6 +18,10 @@ import {
 import { calculateFinancials, parseNum } from "../../shared/financialEngine";
 
 type DB = typeof _db;
+// Тип транзакции Drizzle. Хелперы принимают DB | Tx, чтобы одинаково
+// работать и вне, и внутри db.transaction(...).
+type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
+type DBorTx = DB | Tx;
 type InvoiceWithRelations = Invoice & {
   calculations?: InvoiceCalculation;
   partner?: Partner;
@@ -28,6 +32,88 @@ type InvoiceWithRelations = Invoice & {
 // Internal adapter — converts shared engine numbers → Drizzle string fields
 // Exported so recurring/dashboard repos can reuse without duplicating.
 // ---------------------------------------------------------------------------
+// Periodic service helpers — клиентская «дорожка» (по периодам) живёт
+// отдельно от админской денежной математики. financialEngine не трогаем.
+// ---------------------------------------------------------------------------
+
+/**
+ * Для periodic-счетов сумма счёта = price_per_period × total_periods
+ * (предоплата за всё). Для one_time возвращает undefined — clientBill
+ * остаётся таким, каким его прислали (ручной ввод).
+ */
+export function derivePeriodicClientBill(invoice: {
+  serviceType?: string | null;
+  pricePerPeriod?: string | number | null;
+  totalPeriods?: number | null;
+}): number | undefined {
+  if (invoice.serviceType !== 'periodic') return undefined;
+  const price = parseNum(invoice.pricePerPeriod ?? 0);
+  const total = Number(invoice.totalPeriods ?? 0);
+  if (!Number.isFinite(price) || !Number.isFinite(total) || total < 1) return undefined;
+  return Math.round(price * total * 100) / 100;
+}
+
+/**
+ * Для periodic переопределяем clientSpent/clientRemaining так, чтобы
+ * они отражали ЗАКРЫТЫЕ ПЕРИОДЫ, а не реальные расходы на исполнителя.
+ * Админская математика (commissionAmount, partnerTransferDue,
+ * netProfitAdmin, executorExpensesTotal) остаётся как была.
+ */
+/**
+ * Применяет переносы средств к клиентским полям без затрагивания
+ * админской математики. transferBalance > 0 — нетто-приход (на счёт-получатель),
+ * < 0 — нетто-расход (со счёта-источника). Меняем только clientRemaining.
+ */
+export function applyTransferOverrides(
+  transferBalance: number,
+  computed: Partial<InvoiceCalculation>,
+): Partial<InvoiceCalculation> {
+  if (!Number.isFinite(transferBalance) || transferBalance === 0) return computed;
+  const remaining = parseNum(computed.clientRemaining ?? 0);
+  const adjusted = remaining + transferBalance;
+  return {
+    ...computed,
+    clientRemaining: adjusted.toString(),
+  };
+}
+
+/** Сумма всех приходов и расходов по переносам — нетто для счёта. */
+export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise<number> {
+  const res: any = await db.execute(sql`
+    SELECT
+      COALESCE((SELECT SUM(amount)::numeric FROM invoice_transfers WHERE to_invoice_id   = ${invoiceId}), 0) -
+      COALESCE((SELECT SUM(amount)::numeric FROM invoice_transfers WHERE from_invoice_id = ${invoiceId}), 0)
+      AS balance
+  `);
+  const row = (res.rows ?? res)[0];
+  return parseNum(row?.balance ?? 0);
+}
+
+export function applyPeriodicOverrides(
+  invoice: {
+    serviceType?: string | null;
+    pricePerPeriod?: string | number | null;
+    totalPeriods?: number | null;
+    periodsUsed?: number | null;
+  },
+  computed: Partial<InvoiceCalculation>,
+): Partial<InvoiceCalculation> {
+  if (invoice.serviceType !== 'periodic') return computed;
+  const price = parseNum(invoice.pricePerPeriod ?? 0);
+  const total = Number(invoice.totalPeriods ?? 0);
+  const used  = Math.max(0, Math.min(Number(invoice.periodsUsed ?? 0), total));
+  if (!Number.isFinite(price) || total < 1) return computed;
+
+  const spent     = Math.round(price * used * 100) / 100;
+  const remaining = Math.round(price * (total - used) * 100) / 100;
+
+  return {
+    ...computed,
+    clientSpent:     spent.toString(),
+    clientRemaining: remaining.toString(),
+  };
+}
+
 export function calculateInvoiceServer(
   scheme: InvoiceScheme,
   clientBill: number,
@@ -69,7 +155,7 @@ export function calculateInvoiceServer(
 // ---------------------------------------------------------------------------
 // Private helpers (not exported)
 // ---------------------------------------------------------------------------
-async function _getInvoiceExpenses(db: DB, invoiceId: string): Promise<InvoiceExpense[]> {
+async function _getInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<InvoiceExpense[]> {
   return db
     .select()
     .from(invoiceExpenses)
@@ -77,7 +163,7 @@ async function _getInvoiceExpenses(db: DB, invoiceId: string): Promise<InvoiceEx
     .orderBy(desc(invoiceExpenses.date));
 }
 
-async function _getInvoiceRaw(db: DB, id: string): Promise<InvoiceWithRelations | null> {
+async function _getInvoiceRaw(db: DBorTx, id: string): Promise<InvoiceWithRelations | null> {
   const [result] = await db
     .select({ invoice: invoices, calculations: invoiceCalculations, partner: partners, client: clients })
     .from(invoices)
@@ -96,7 +182,7 @@ async function _getInvoiceRaw(db: DB, id: string): Promise<InvoiceWithRelations 
 }
 
 /** Recalculate stored calculations after expense changes */
-async function _recalculateInvoiceExpenses(db: DB, invoiceId: string): Promise<void> {
+async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<void> {
   const expenses = await _getInvoiceExpenses(db, invoiceId);
   const total                = expenses.reduce((s, e) => s + parseNum(e.amount), 0);
   const expensesPaidByPartner = expenses.filter(e => e.paidByAdmin !== true).reduce((s, e) => s + parseNum(e.amount), 0);
@@ -112,23 +198,43 @@ async function _recalculateInvoiceExpenses(db: DB, invoiceId: string): Promise<v
     .limit(1);
   if (!existing) return;
 
-  const clientBill     = parseNum(existing.clientBill);
+  const storedBill     = parseNum(existing.clientBill);
   const commissionRate = existing.commissionRate ? parseNum(existing.commissionRate) : undefined;
   const plannedExp     = parseNum(invoice.plannedExpenses);
 
-  const computed = calculateInvoiceServer(
+  // Для periodic сумма счёта могла измениться (цена за период или
+  // количество периодов) — пересчитываем clientBill и в invoices, и в
+  // invoice_calculations.
+  const periodicBill = derivePeriodicClientBill(invoice);
+  const effectiveBill = periodicBill ?? storedBill;
+
+  let computed = calculateInvoiceServer(
     invoice.scheme as InvoiceScheme,
-    clientBill,
+    effectiveBill,
     commissionRate,
     total,
     expensesPaidByPartner,
     expensesPaidByAdmin,
     plannedExp,
   );
+  computed = applyPeriodicOverrides(invoice, computed);
+  const transferBalance = await getTransferBalance(db, invoiceId);
+  computed = applyTransferOverrides(transferBalance, computed);
 
   await db.update(invoiceCalculations)
     .set({ ...computed, updatedAt: new Date() })
     .where(eq(invoiceCalculations.invoiceId, invoiceId));
+
+  if (periodicBill !== undefined && periodicBill !== storedBill) {
+    await db.update(invoices)
+      .set({ clientBill: periodicBill.toString(), updatedAt: new Date() })
+      .where(eq(invoices.id, invoiceId));
+  }
+}
+
+/** Пересчитать счёт по последним переносам — публичная обёртка над _recalculateInvoiceExpenses. */
+export async function recalcInvoice(db: DB, invoiceId: string): Promise<void> {
+  await _recalculateInvoiceExpenses(db, invoiceId);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,25 +368,37 @@ export async function createInvoice(
   invoice: InsertInvoice,
   calculations: Partial<InvoiceCalculation>,
 ): Promise<Invoice> {
-  const [created] = await db.insert(invoices).values(invoice).returning();
+  // Для periodic сумма счёта = price × periods (предоплата за всё) —
+  // переписываем clientBill ДО вставки строки счёта и расчёта.
+  const periodicBill = derivePeriodicClientBill(invoice);
+  if (periodicBill !== undefined) {
+    invoice = { ...invoice, clientBill: periodicBill.toString() };
+  }
 
-  const clientBill     = parseNum(calculations.clientBill);
-  const commissionRate = calculations.commissionRate ? parseNum(calculations.commissionRate) : undefined;
-  const executorExpenses = parseNum(calculations.executorExpensesTotal);
-  const plannedExp     = parseNum(created.plannedExpenses);
+  // Счёт и строка расчётов пишутся атомарно: либо оба, либо ни одного —
+  // иначе при сбое между вставками остаётся счёт-сирота без calculations.
+  return db.transaction(async (tx) => {
+    const [created] = await tx.insert(invoices).values(invoice).returning();
 
-  const computed = calculateInvoiceServer(
-    created.scheme as InvoiceScheme,
-    clientBill,
-    commissionRate,
-    executorExpenses,
-    0,
-    0,
-    plannedExp,
-  );
+    const clientBill     = periodicBill ?? parseNum(calculations.clientBill);
+    const commissionRate = calculations.commissionRate ? parseNum(calculations.commissionRate) : undefined;
+    const executorExpenses = parseNum(calculations.executorExpensesTotal);
+    const plannedExp     = parseNum(created.plannedExpenses);
 
-  await db.insert(invoiceCalculations).values({ invoiceId: created.id, clientBill: computed.clientBill || "0", ...computed });
-  return created;
+    let computed = calculateInvoiceServer(
+      created.scheme as InvoiceScheme,
+      clientBill,
+      commissionRate,
+      executorExpenses,
+      0,
+      0,
+      plannedExp,
+    );
+    computed = applyPeriodicOverrides(created, computed);
+
+    await tx.insert(invoiceCalculations).values({ invoiceId: created.id, clientBill: computed.clientBill || "0", ...computed });
+    return created;
+  });
 }
 
 export async function updateInvoice(
@@ -320,15 +438,20 @@ export async function updateInvoiceCalculations(
   const expensesPaidByAdmin   = expenses.filter(e => e.paidByAdmin === true).reduce((s, e) => s + parseNum(e.amount), 0);
   const plannedExp            = parseNum(invoice.plannedExpenses);
 
-  const computed = calculateInvoiceServer(
+  // Для periodic clientBill = price × periods, перекрываем вход в расчёт.
+  const periodicBill = derivePeriodicClientBill(invoice);
+  const effectiveBill = periodicBill ?? clientBill;
+
+  let computed = calculateInvoiceServer(
     invoice.scheme as InvoiceScheme,
-    clientBill,
+    effectiveBill,
     commissionRate,
     executorExpenses,
     expensesPaidByPartner,
     expensesPaidByAdmin,
     plannedExp,
   );
+  computed = applyPeriodicOverrides(invoice, computed);
 
   if (existing) {
     const [updated] = await db.update(invoiceCalculations)
@@ -353,9 +476,13 @@ export async function getAllExpenses(db: DB): Promise<InvoiceExpense[]> {
 }
 
 export async function createInvoiceExpense(db: DB, expense: InsertInvoiceExpense): Promise<InvoiceExpense> {
-  const [created] = await db.insert(invoiceExpenses).values(expense).returning();
-  await _recalculateInvoiceExpenses(db, expense.invoiceId);
-  return created;
+  // Вставка расхода + пересчёт calculations — одна транзакция, чтобы счёт
+  // не остался с расходом, но без обновлённого остатка.
+  return db.transaction(async (tx) => {
+    const [created] = await tx.insert(invoiceExpenses).values(expense).returning();
+    await _recalculateInvoiceExpenses(tx, expense.invoiceId);
+    return created;
+  });
 }
 
 export async function updateInvoiceExpense(
@@ -366,21 +493,106 @@ export async function updateInvoiceExpense(
   const [expense] = await db.select().from(invoiceExpenses).where(eq(invoiceExpenses.id, id)).limit(1);
   if (!expense) return null;
 
-  const [updated] = await db.update(invoiceExpenses)
-    .set(updates)
-    .where(eq(invoiceExpenses.id, id))
-    .returning();
+  return db.transaction(async (tx) => {
+    const [updated] = await tx.update(invoiceExpenses)
+      .set(updates)
+      .where(eq(invoiceExpenses.id, id))
+      .returning();
 
-  await _recalculateInvoiceExpenses(db, expense.invoiceId);
-  return updated || null;
+    await _recalculateInvoiceExpenses(tx, expense.invoiceId);
+    return updated || null;
+  });
 }
 
 export async function deleteInvoiceExpense(db: DB, id: string): Promise<void> {
   const [expense] = await db.select().from(invoiceExpenses).where(eq(invoiceExpenses.id, id)).limit(1);
   if (expense) {
-    await db.delete(invoiceExpenses).where(eq(invoiceExpenses.id, id));
-    await _recalculateInvoiceExpenses(db, expense.invoiceId);
+    await db.transaction(async (tx) => {
+      await tx.delete(invoiceExpenses).where(eq(invoiceExpenses.id, id));
+      await _recalculateInvoiceExpenses(tx, expense.invoiceId);
+    });
   }
+}
+
+/**
+ * Создаёт перенос средств между двумя счетами одного клиента.
+ * Валидация: оба счёта существуют, принадлежат одному клиенту, сумма > 0,
+ * не больше «доступно» на счёте-источнике (clientRemaining).
+ */
+export async function createInvoiceTransfer(
+  db: DB,
+  args: { fromInvoiceId: string; toInvoiceId: string; amount: number; notes?: string | null; createdBy: string },
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const { fromInvoiceId, toInvoiceId, amount, notes, createdBy } = args;
+  if (fromInvoiceId === toInvoiceId) return { ok: false, error: "Счёт-источник и счёт-получатель совпадают" };
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Сумма должна быть положительной" };
+
+  // Вся операция — одна транзакция. Строку расчётов счёта-источника берём
+  // под FOR UPDATE, поэтому параллельные переносы сериализуются и не могут
+  // оба пройти проверку остатка и увести счёт в минус (TOCTOU-гонка).
+  return db.transaction(async (tx) => {
+    const fromInv = await _getInvoiceRaw(tx, fromInvoiceId);
+    const toInv   = await _getInvoiceRaw(tx, toInvoiceId);
+    if (!fromInv || !toInv) return { ok: false, error: "Счёт не найден" };
+    if (!fromInv.clientId || fromInv.clientId !== toInv.clientId) {
+      return { ok: false, error: "Перенос возможен только между счетами одного клиента" };
+    }
+
+    // Блокирующее чтение остатка: до коммита этой транзакции никакой другой
+    // перенос по тому же счёту-источнику не прочитает clientRemaining.
+    const [lockedCalc] = await tx
+      .select({ clientRemaining: invoiceCalculations.clientRemaining })
+      .from(invoiceCalculations)
+      .where(eq(invoiceCalculations.invoiceId, fromInvoiceId))
+      .for("update")
+      .limit(1);
+
+    const remaining = parseNum(
+      lockedCalc?.clientRemaining ?? fromInv.calculations?.clientRemaining ?? "0",
+    );
+    if (amount > remaining + 1e-6) {
+      return { ok: false, error: `На счёте-источнике доступно ${remaining}, нельзя перенести ${amount}` };
+    }
+
+    const [created] = await tx.insert(invoiceTransfers).values({
+      fromInvoiceId, toInvoiceId, amount: amount.toString(),
+      notes: notes ?? null, createdBy,
+    }).returning({ id: invoiceTransfers.id });
+
+    await _recalculateInvoiceExpenses(tx, fromInvoiceId);
+    await _recalculateInvoiceExpenses(tx, toInvoiceId);
+    return { ok: true, id: created.id };
+  });
+}
+
+export async function deleteInvoiceTransfer(db: DB, id: string): Promise<void> {
+  const [row] = await db.select().from(invoiceTransfers).where(eq(invoiceTransfers.id, id)).limit(1);
+  if (!row) return;
+  await db.transaction(async (tx) => {
+    await tx.delete(invoiceTransfers).where(eq(invoiceTransfers.id, id));
+    await _recalculateInvoiceExpenses(tx, row.fromInvoiceId);
+    await _recalculateInvoiceExpenses(tx, row.toInvoiceId);
+  });
+}
+
+export async function getInvoiceTransfers(db: DB, invoiceId: string) {
+  // Все переносы, в которых счёт участвует как источник или получатель.
+  // Возвращаем direction: 'out' (со счёта) или 'in' (на счёт), счёт-партнёр.
+  const rows = await db.execute(sql`
+    SELECT
+      t.id, t.amount::numeric AS amount, t.notes, t.created_at,
+      t.from_invoice_id, t.to_invoice_id,
+      CASE WHEN t.from_invoice_id = ${invoiceId} THEN 'out' ELSE 'in' END AS direction,
+      CASE WHEN t.from_invoice_id = ${invoiceId} THEN ti.invoice_number ELSE fi.invoice_number END AS counterparty_number,
+      CASE WHEN t.from_invoice_id = ${invoiceId} THEN ti.client_title   ELSE fi.client_title   END AS counterparty_title,
+      CASE WHEN t.from_invoice_id = ${invoiceId} THEN t.to_invoice_id   ELSE t.from_invoice_id END AS counterparty_id
+    FROM invoice_transfers t
+    LEFT JOIN invoices fi ON fi.id = t.from_invoice_id
+    LEFT JOIN invoices ti ON ti.id = t.to_invoice_id
+    WHERE t.from_invoice_id = ${invoiceId} OR t.to_invoice_id = ${invoiceId}
+    ORDER BY t.created_at DESC
+  `);
+  return (rows.rows ?? rows) as any[];
 }
 
 export async function deleteInvoice(db: DB, id: string): Promise<void> {
@@ -422,15 +634,17 @@ export async function recalculateAllInvoices(db: DB): Promise<{ updated: number;
       const commissionRate = existing.commissionRate ? parseNum(existing.commissionRate) : undefined;
       const plannedExp     = parseNum(invoice.plannedExpenses);
 
-      const computed = calculateInvoiceServer(
+      const periodicBill = derivePeriodicClientBill(invoice);
+      let computed = calculateInvoiceServer(
         invoice.scheme as InvoiceScheme,
-        clientBill,
+        periodicBill ?? clientBill,
         commissionRate,
         totalExpenses,
         expensesPaidByPartner,
         expensesPaidByAdmin,
         plannedExp,
       );
+      computed = applyPeriodicOverrides(invoice, computed);
 
       await db.update(invoiceCalculations)
         .set({ ...computed, updatedAt: new Date() })

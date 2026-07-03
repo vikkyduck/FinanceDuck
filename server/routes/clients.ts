@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { UserRole } from "../../shared/schema";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
 import { stripPartnerInfoFromClient, stripPartnerInfoFromClients } from "../permissions";
+import { pick, CLIENT_WRITABLE_FIELDS } from "../lib/sanitize";
 
 export const clientsRouter = Router();
 
@@ -99,7 +100,7 @@ clientsRouter.get("/api/clients/:id", authMiddleware, async (req: AuthenticatedR
 clientsRouter.post("/api/clients", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role || "client";
-    const client = await storage.createClient(req.body);
+    const client = await storage.createClient(pick(req.body, CLIENT_WRITABLE_FIELDS));
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_client", entityType: "client", entityId: client.id, description: `Создан клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
@@ -114,7 +115,7 @@ clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "as
   try {
     const { id } = req.params;
     const role = req.user?.role || "client";
-    const client = await storage.updateClient(id, req.body);
+    const client = await storage.updateClient(id, pick(req.body, CLIENT_WRITABLE_FIELDS));
     if (!client) return res.status(404).json({ error: "Client not found" });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_client", entityType: "client", entityId: id, description: `Обновлён клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
@@ -123,6 +124,31 @@ clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "as
   } catch (error) {
     console.error("Update client error:", error);
     res.status(500).json({ error: "Failed to update client" });
+  }
+});
+
+// Тестовая отправка в Telegram — для проверки настроек клиента.
+// Доступ — admin/assistant (те же, кто настраивает).
+clientsRouter.post("/api/clients/:id/telegram-test", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { resolveTelegramTarget, sendTelegramMessage, escapeHtml } = await import("../lib/telegram");
+    const client = await storage.getClient(req.params.id);
+    if (!client) return res.status(404).json({ error: "Client not found" });
+    const target = resolveTelegramTarget(client as any);
+    if (!target) {
+      return res.status(400).json({
+        error: "Не задан Telegram chat_id (и нет глобального бота FALLBACK_TG_BOT_TOKEN)",
+      });
+    }
+    const html =
+      `✅ <b>Тестовое сообщение</b>\n` +
+      `Клиент: <i>${escapeHtml(client.name)}</i>\n` +
+      `Если ты это видишь — интеграция настроена корректно.`;
+    await sendTelegramMessage(target, html);
+    res.json({ ok: true });
+  } catch (error: any) {
+    console.error("Telegram test error:", error);
+    res.status(500).json({ error: error.message || "Не удалось отправить тестовое сообщение" });
   }
 });
 
@@ -200,6 +226,19 @@ clientsRouter.get("/api/client/budget", authMiddleware, requireRole("client"), a
   } catch (error) {
     console.error("Get client budget error:", error);
     res.status(500).json({ error: "Failed to get client budget" });
+  }
+});
+
+clientsRouter.get("/api/client/overview-buckets", authMiddleware, requireRole("client"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const clientId = req.user?.clientId;
+    if (!clientId) return res.status(403).json({ error: "No client ID found" });
+    const dateFrom = typeof req.query.dateFrom === 'string' ? req.query.dateFrom : undefined;
+    const dateTo   = typeof req.query.dateTo   === 'string' ? req.query.dateTo   : undefined;
+    res.json(await storage.getClientOverviewBuckets(clientId, dateFrom, dateTo));
+  } catch (error) {
+    console.error("Get client overview buckets error:", error);
+    res.status(500).json({ error: "Failed to get overview" });
   }
 });
 

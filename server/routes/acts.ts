@@ -41,9 +41,26 @@ actsRouter.get("/api/access-tokens", authMiddleware, requireRole("admin"), async
   catch (error) { console.error("Get tokens error:", error); res.status(500).json({ error: "Failed to get tokens" }); }
 });
 
+const VALID_ROLES = ["assistant", "partner", "admin", "client", "accountant"] as const;
+
 actsRouter.post("/api/access-tokens", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { code, role, partnerId, clientId } = req.body;
+    const { code, role, partnerId, clientId } = req.body || {};
+    // Валидация: код непустой, роль из известного набора.
+    if (typeof code !== "string" || code.trim().length === 0) {
+      return res.status(400).json({ error: "code обязателен" });
+    }
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: "Недопустимая роль" });
+    }
+    // Deny-by-default в связке с IDOR-фиксом: partner/client-токен БЕЗ своего
+    // scope-id бесполезен и опасен — не создаём такой.
+    if (role === "partner" && !partnerId) {
+      return res.status(400).json({ error: "Для роли partner обязателен partnerId" });
+    }
+    if (role === "client" && !clientId) {
+      return res.status(400).json({ error: "Для роли client обязателен clientId" });
+    }
     res.status(201).json(await storage.createAccessToken(code, role, partnerId, clientId));
   } catch (error) { console.error("Create token error:", error); res.status(500).json({ error: "Failed to create token" }); }
 });

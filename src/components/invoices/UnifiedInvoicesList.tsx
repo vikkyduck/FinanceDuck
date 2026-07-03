@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,8 +64,64 @@ export const UnifiedInvoicesList = ({
   const monthParam = searchParams.get('month');
   const yearParam = searchParams.get('year');
   const statusParam = searchParams.get('statusFilter') as InvoiceStatus | null;
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  // Список читается через React Query под общим префиксом ключа ['/api/invoices'],
+  // поэтому инвалидация из InvoiceDetailsDialog/удаления обновляет его мгновенно
+  // (раньше был ручной useState + setInterval-поллинг мимо кэша — правки счёта
+  // проявлялись только через таймер). Фетч без параметров: сервер сам скоупит по
+  // токену/роли, а фильтры остаются клиентскими (useInvoiceFilters).
+  const {
+    data: invoices = [],
+    isLoading: loading,
+    error: invoicesError,
+  } = useQuery<any[]>({
+    queryKey: ['/api/invoices', 'unified-list'],
+    queryFn: async () => {
+      const data = await apiGet<any[]>('/invoices');
+      return data.map((inv: any) => ({
+        id: inv.id,
+        invoice_number: inv.invoiceNumber,
+        client_id: inv.clientId,
+        partner_id: inv.partnerId,
+        scheme: inv.scheme,
+        status: inv.status,
+        payment_date: inv.paymentDate,
+        actual_payment_date: inv.actualPaymentDate,
+        issue_date: inv.issueDate,
+        notes: inv.notes,
+        created_at: inv.createdAt,
+        client_name: inv.client?.name,
+        partner_name: inv.partner?.name,
+        client_bill: inv.calculations?.clientBill || inv.clientBill,
+        commission_rate: inv.calculations?.commissionRate,
+        commission_amount: inv.calculations?.commissionAmount,
+        agency_margin: inv.calculations?.agencyMargin,
+        client_base_after_margin: inv.calculations?.clientBaseAfterMargin,
+        amount_to_admin: inv.calculations?.amountToAdmin,
+        partner_share_from_margin: inv.calculations?.partnerShareFromMargin,
+        admin_share_from_margin: inv.calculations?.adminShareFromMargin,
+        executor_expenses_total: inv.calculations?.executorExpensesTotal || '0',
+        net_profit_admin: inv.calculations?.netProfitAdmin,
+        client_remaining: inv.calculations?.clientRemaining,
+        partner_transfer_due: inv.calculations?.partnerTransferDue,
+        partner_commission_rate: inv.partnerCommissionRate,
+        service_type: inv.serviceType,
+        period_unit: inv.periodUnit,
+        price_per_period: inv.pricePerPeriod,
+        total_periods: inv.totalPeriods,
+        periods_used: inv.periodsUsed,
+        hidden_from_assistant: inv.hiddenFromAssistant,
+      }));
+    },
+    staleTime: 30000,
+    // enableRealtime → фоновый опрос; RQ сам ставит его на паузу для скрытой
+    // вкладки и делает refetch при возврате фокуса.
+    refetchInterval: enableRealtime ? 120000 : false,
+  });
+
+  const refreshInvoices = () =>
+    queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(openInvoiceParam);
   const [detailsOpen, setDetailsOpen] = useState(!!openInvoiceParam);
   const [isOpeningDetails, setIsOpeningDetails] = useState(false);
@@ -121,9 +178,20 @@ export const UnifiedInvoicesList = ({
     setMonthFilter('all');
   };
 
+  // 401/просрочка сессии → на /auth; прочие ошибки — тост (как было в ручном fetch).
   useEffect(() => {
-    fetchInvoices();
-  }, [partnerId, clientId]);
+    if (!invoicesError) return;
+    const msg = (invoicesError as Error).message || '';
+    if (msg.includes('Not authenticated') || msg.includes('Session expired') || msg.includes('401')) {
+      window.location.href = '/auth';
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Ошибка загрузки",
+        description: msg || "Не удалось загрузить счета",
+      });
+    }
+  }, [invoicesError]);
 
   // ?statusFilter=... из URL — quick-action из ⌘K-палитры.
   // Применяется и при заходе на страницу, и если юзер уже на /invoices.
@@ -201,83 +269,6 @@ export const UnifiedInvoicesList = ({
     };
   }, [clientIdParam, partnerIdParam, monthParam, yearParam, clientId, partnerId, setClientFilter, setPartnerFilter, setMonthFilter]);
 
-  useEffect(() => {
-    if (!enableRealtime) return;
-    
-    let isVisible = document.visibilityState === 'visible';
-    
-    const handleVisibilityChange = () => {
-      isVisible = document.visibilityState === 'visible';
-      if (isVisible) fetchInvoices();
-    };
-    
-    const pollInterval = setInterval(() => {
-      if (isVisible) fetchInvoices();
-    }, 120000);
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      clearInterval(pollInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [partnerId, clientId, enableRealtime]);
-
-  const fetchInvoices = async () => {
-    try {
-      const data = await apiGet<any[]>('/invoices');
-
-      const mappedInvoices = data.map((inv: any) => ({
-        id: inv.id,
-        invoice_number: inv.invoiceNumber,
-        client_id: inv.clientId,
-        partner_id: inv.partnerId,
-        scheme: inv.scheme,
-        status: inv.status,
-        payment_date: inv.paymentDate,
-        actual_payment_date: inv.actualPaymentDate,
-        issue_date: inv.issueDate,
-        notes: inv.notes,
-        created_at: inv.createdAt,
-        client_name: inv.client?.name,
-        partner_name: inv.partner?.name,
-        client_bill: inv.calculations?.clientBill || inv.clientBill,
-        commission_rate: inv.calculations?.commissionRate,
-        commission_amount: inv.calculations?.commissionAmount,
-        agency_margin: inv.calculations?.agencyMargin,
-        client_base_after_margin: inv.calculations?.clientBaseAfterMargin,
-        amount_to_admin: inv.calculations?.amountToAdmin,
-        partner_share_from_margin: inv.calculations?.partnerShareFromMargin,
-        admin_share_from_margin: inv.calculations?.adminShareFromMargin,
-        executor_expenses_total: inv.calculations?.executorExpensesTotal || '0',
-        net_profit_admin: inv.calculations?.netProfitAdmin,
-        client_remaining: inv.calculations?.clientRemaining,
-        partner_transfer_due: inv.calculations?.partnerTransferDue,
-        partner_commission_rate: inv.partnerCommissionRate,
-        service_type: inv.serviceType,
-        period_unit: inv.periodUnit,
-        price_per_period: inv.pricePerPeriod,
-        total_periods: inv.totalPeriods,
-        periods_used: inv.periodsUsed,
-        hidden_from_assistant: inv.hiddenFromAssistant,
-      }));
-
-      setInvoices(mappedInvoices);
-    } catch (error: any) {
-      console.error('Error fetching invoices:', error);
-      if (error.message?.includes('Not authenticated') || error.message?.includes('Session expired')) {
-        window.location.href = '/auth';
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Ошибка загрузки",
-          description: error.message || "Не удалось загрузить счета",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleViewDetails = (invoiceId: string) => {
     if (isOpeningDetails) return;
     setIsOpeningDetails(true);
@@ -314,7 +305,7 @@ export const UnifiedInvoicesList = ({
       });
 
       setDeleteInvoice(null);
-      fetchInvoices();
+      refreshInvoices();
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -355,7 +346,7 @@ export const UnifiedInvoicesList = ({
       });
 
       setSelectedInvoices([]);
-      fetchInvoices();
+      refreshInvoices();
     } catch (error: any) {
       toast({
         variant: "destructive",

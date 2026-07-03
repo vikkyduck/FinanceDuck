@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,67 @@ interface ClientFormData {
 }
 
 const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerIds: [], tgChatId: "", tgBotToken: "", contactPerson: "" };
+
+// Мультиселект партнёров на cmdk: встроенный поиск + CommandList корректно
+// скроллится внутри Dialog (обычный overflow-div внутри Popover в
+// scroll-lock-диалоге глотал колесо мыши — партнёров ниже было не достать).
+interface PartnerMultiSelectProps {
+  partners: PartnerListItem[];
+  selected: string[];
+  onToggle: (partnerId: string) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  triggerClassName?: string;
+  contentWidth?: string;
+  compact?: boolean;
+}
+
+const PartnerMultiSelect = ({
+  partners, selected, onToggle, open, onOpenChange,
+  triggerClassName = "", contentWidth = "w-[280px]", compact = false,
+}: PartnerMultiSelectProps) => {
+  const label = selected.length === 0
+    ? (compact ? "Выберите" : "Выберите партнёров")
+    : `Выбрано: ${selected.length}`;
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          size={compact ? "sm" : "default"}
+          className={`w-full justify-between font-normal ${triggerClassName}`}
+          data-testid="select-client-partners"
+        >
+          <span className={`truncate ${compact ? "text-xs" : ""}`}>{label}</span>
+          <ChevronsUpDown className={`${compact ? "ml-1 h-3 w-3" : "ml-2 h-4 w-4"} shrink-0 opacity-50`} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className={`${contentWidth} p-0`} align="start">
+        <Command>
+          <CommandInput placeholder="Поиск партнёра…" />
+          <CommandList className="max-h-[240px]">
+            <CommandEmpty>Партнёр не найден</CommandEmpty>
+            {partners.map((partner) => {
+              const checked = selected.includes(partner.id);
+              return (
+                <CommandItem
+                  key={partner.id}
+                  value={partner.name}
+                  onSelect={() => onToggle(partner.id)}
+                  className="cursor-pointer"
+                >
+                  <Checkbox checked={checked} className="mr-2 pointer-events-none" />
+                  <span className="text-sm">{partner.name}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogProps) => {
   const { role } = useAuth();
@@ -274,45 +336,14 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                         <User className="h-3 w-3" />
                         Партнёры
                       </Label>
-                      <Popover open={addPartnerPopoverOpen} onOpenChange={setAddPartnerPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            className="w-full justify-between font-normal"
-                            data-testid="select-client-partners"
-                          >
-                            <span className="truncate">
-                              {form.partnerIds.length === 0 
-                                ? "Выберите партнёров"
-                                : `Выбрано: ${form.partnerIds.length}`}
-                            </span>
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[280px] p-2">
-                          <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                            {partners.map((partner) => (
-                              <div
-                                key={partner.id}
-                                className="flex items-center space-x-2 p-2 hover-elevate rounded-md cursor-pointer"
-                                onClick={() => setForm({ ...form, partnerIds: togglePartner(form.partnerIds, partner.id) })}
-                              >
-                                <Checkbox
-                                  checked={form.partnerIds.includes(partner.id)}
-                                  onCheckedChange={() => setForm({ ...form, partnerIds: togglePartner(form.partnerIds, partner.id) })}
-                                />
-                                <span className="text-sm">{partner.name}</span>
-                              </div>
-                            ))}
-                            {partners.length === 0 && (
-                              <div className="text-sm text-muted-foreground text-center py-2">
-                                Нет партнёров
-                              </div>
-                            )}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
+                      <PartnerMultiSelect
+                        partners={partners}
+                        selected={form.partnerIds}
+                        onToggle={(id) => setForm({ ...form, partnerIds: togglePartner(form.partnerIds, id) })}
+                        open={addPartnerPopoverOpen}
+                        onOpenChange={setAddPartnerPopoverOpen}
+                        contentWidth="w-[280px]"
+                      />
                     </div>
                   )}
                 </div>
@@ -450,39 +481,16 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                             <TableCell>
                               {editingId === client.id ? (
                                 isAdmin ? (
-                                  <Popover open={editPartnerPopoverOpen} onOpenChange={setEditPartnerPopoverOpen}>
-                                    <PopoverTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="w-full justify-between font-normal h-8"
-                                      >
-                                        <span className="truncate text-xs">
-                                          {editForm.partnerIds.length === 0 
-                                            ? "Выберите"
-                                            : `Выбрано: ${editForm.partnerIds.length}`}
-                                        </span>
-                                        <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[220px] p-2">
-                                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                                        {partners.map((partner) => (
-                                          <div
-                                            key={partner.id}
-                                            className="flex items-center space-x-2 p-2 hover-elevate rounded-md cursor-pointer"
-                                            onClick={() => setEditForm({ ...editForm, partnerIds: togglePartner(editForm.partnerIds, partner.id) })}
-                                          >
-                                            <Checkbox
-                                              checked={editForm.partnerIds.includes(partner.id)}
-                                              onCheckedChange={() => setEditForm({ ...editForm, partnerIds: togglePartner(editForm.partnerIds, partner.id) })}
-                                            />
-                                            <span className="text-sm">{partner.name}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </PopoverContent>
-                                  </Popover>
+                                  <PartnerMultiSelect
+                                    partners={partners}
+                                    selected={editForm.partnerIds}
+                                    onToggle={(id) => setEditForm({ ...editForm, partnerIds: togglePartner(editForm.partnerIds, id) })}
+                                    open={editPartnerPopoverOpen}
+                                    onOpenChange={setEditPartnerPopoverOpen}
+                                    triggerClassName="h-8"
+                                    contentWidth="w-[220px]"
+                                    compact
+                                  />
                                 ) : (
                                   <span className="text-xs text-muted-foreground">Недоступно</span>
                                 )

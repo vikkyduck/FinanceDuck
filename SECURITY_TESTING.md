@@ -268,7 +268,6 @@ jobs:
 
 ## Related Documentation
 
-- [Cookie Authentication Migration](./COOKIE_AUTH_MIGRATION.md)
 - [Security Guidelines](./SECURITY.md)
 - [Lovable Security Features](https://docs.lovable.dev/features/security)
 

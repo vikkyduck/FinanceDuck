@@ -11,9 +11,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    console.log('[ProtectedRoute] Auth state:', { isLoading, isAuthenticated });
     if (!isLoading && !isAuthenticated) {
-      console.log('[ProtectedRoute] Not authenticated, redirecting to /auth');
       navigate("/auth");
     }
   }, [isLoading, isAuthenticated, navigate]);

@@ -36,10 +36,6 @@ export const useRealtimeSubscription = ({
   useEffect(() => {
     if (!enabled || !isVisible) return;
 
-    if (import.meta.env.DEV) {
-      console.log(`[Realtime] Polling ${table} on ${channelName}`);
-    }
-    
     const pollInterval = setInterval(() => {
       onUpdate();
     }, 120000);

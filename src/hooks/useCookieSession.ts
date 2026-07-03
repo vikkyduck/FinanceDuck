@@ -54,9 +54,6 @@ export function useCookieSession() {
       if (refreshed) {
         hasShownWarningRef.current = false;
         lastActivityRef.current = Date.now();
-        if (import.meta.env.DEV) {
-          console.log('Session auto-refreshed');
-        }
       }
     }
   }, [isAuthenticated, refreshSession, handleExpiredSession]);
@@ -75,10 +72,6 @@ export function useCookieSession() {
 
       // Refresh session on activity
       await refreshSession();
-      
-      if (import.meta.env.DEV) {
-        console.log('Session refreshed on activity');
-      }
     }, 1000); // Update at most once per second
   }, [isAuthenticated, refreshSession]);
 

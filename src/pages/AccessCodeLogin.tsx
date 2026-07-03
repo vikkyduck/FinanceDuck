@@ -59,7 +59,6 @@ const AccessCodeLogin = () => {
         return;
       }
 
-      console.log('[AccessCodeLogin] Login successful, navigating to /');
       toast({
         title: "Вход выполнен",
         description: "Добро пожаловать!",
@@ -67,7 +66,6 @@ const AccessCodeLogin = () => {
 
       // Small delay to ensure state is updated
       setTimeout(() => {
-        console.log('[AccessCodeLogin] Executing navigate("/")');
         navigate("/");
       }, 100);
     } catch (error) {

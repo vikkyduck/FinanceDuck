@@ -16,6 +16,7 @@ import { UserRole, InvoiceScheme } from "../shared/schema";
 const CLIENT_FINANCIAL_VISIBLE_SCHEMES: ReadonlySet<InvoiceScheme> = new Set([
   'agency_30',
   'agency_40',
+  'agency',
 ]);
 
 export function isClientFinancialVisible(scheme: unknown): boolean {

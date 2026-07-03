@@ -41,6 +41,7 @@ export function calculateInvoice(
   expensesPaidByPartner: number = 0,
   expensesPaidByAdmin: number = 0,
   plannedExpenses: number = 0,
+  agencyMarginRate: number = 0,
 ): InvoiceCalculations {
   const f = _calc(
     scheme,
@@ -50,6 +51,7 @@ export function calculateInvoice(
     expensesPaidByPartner,
     expensesPaidByAdmin,
     plannedExpenses,
+    agencyMarginRate,
   );
 
   return {
@@ -137,6 +139,7 @@ export function getSchemeLabel(
   commissionRate?: number,
 ): string {
   switch (scheme) {
+    case 'agency':          return commissionRate ? `Агентская ${commissionRate}%` : 'Агентская';
     case 'agency_30':       return 'Агентство 30%';
     case 'agency_40':       return 'Агентство 40%';
     case 'partner_10':      return 'Партнер 10%';

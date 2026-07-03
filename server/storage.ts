@@ -449,7 +449,7 @@ export class DatabaseStorage implements IStorage {
         const scheme = inv.scheme;
         const netProfit = parseNum(calc.netProfitAdmin);
         
-        if (scheme === 'agency_30' || scheme === 'agency_40') {
+        if (scheme === 'agency_30' || scheme === 'agency_40' || scheme === 'agency') {
           // Agency schemes: partner & admin get from margin
           totalPartnerCommission += parseNum(calc.partnerShareFromMargin);
           totalAdminShare += parseNum(calc.adminShareFromMargin);
@@ -793,7 +793,7 @@ export class DatabaseStorage implements IStorage {
     }[];
   }[]> {
     const conditions = [
-      inArray(invoices.scheme, ['agency_30', 'agency_40']),
+      inArray(invoices.scheme, ['agency_30', 'agency_40', 'agency']),
       eq(invoices.status, 'paid')
     ];
     

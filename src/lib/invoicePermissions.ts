@@ -1,7 +1,7 @@
 import { isAgencyScheme } from "./invoiceHelpers";
 
 export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
-export type InvoiceScheme = 'agency_30' | 'agency_40' | 'commission_based';
+export type InvoiceScheme = 'agency_30' | 'agency_40' | 'commission_based' | 'agency';
 
 export interface VisibleFields {
   // Basic info

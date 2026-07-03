@@ -10,7 +10,7 @@
  * в 6 файлах — теперь одна точка правды.
  */
 export function isAgencyScheme(scheme: string | null | undefined): boolean {
-  return scheme === "agency_30" || scheme === "agency_40";
+  return scheme === "agency_30" || scheme === "agency_40" || scheme === "agency";
 }
 
 /**

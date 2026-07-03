@@ -37,8 +37,9 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedPartner, setSelectedPartner] = useState("");
   const [selectedClient, setSelectedClient] = useState("");
-  const [scheme, setScheme] = useState<string>("agency_30");
+  const [scheme, setScheme] = useState<string>("agency");
   const [partnerCommissionRate, setPartnerCommissionRate] = useState("0");
+  const [agencyMarginRate, setAgencyMarginRate] = useState("30"); // комиссия агентства % (для схемы 'agency')
   const [clientBill, setClientBill] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [clientTitle, setClientTitle] = useState("");
@@ -106,38 +107,27 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     try {
       const { invoiceSchema } = await import('@/lib/validationSchemas');
       
+      // Две схемы: 'agency' (гибкая агентская — маржа% + партнёр%) и
+      // 'commission_based' («Клиентская» — клиент видит сумму, не видит траты).
       let dbScheme: InvoiceScheme;
-      let commissionRate: number | undefined;
-      
-      switch(scheme) {
-        case 'commission_based':
-          dbScheme = 'commission_based';
-          commissionRate = 0; // По умолчанию 0% - вся сумма идёт админу
-          break;
-        case 'partner_10':
-          dbScheme = 'partner_10';
-          commissionRate = 10;
-          break;
-        case 'partner_15':
-          dbScheme = 'partner_15';
-          commissionRate = 15;
-          break;
-        case 'custom':
-          dbScheme = 'commission_based';
-          const customRate = parseFloat(partnerCommissionRate);
-          if (isNaN(customRate) || customRate < 0 || customRate > 100) {
-            throw new Error("Некорректная комиссия партнера");
-          }
-          commissionRate = customRate;
-          break;
-        case 'agency_40':
-          dbScheme = 'agency_40';
-          commissionRate = undefined;
-          break;
-        default:
-          dbScheme = 'agency_30';
-          commissionRate = undefined;
+      let partnerRate: number;      // % партнёра (скрыт), в invoices.partnerCommissionRate
+      let marginRate = 0;           // % комиссии агентства (виден клиенту), только для 'agency'
+
+      if (scheme === 'agency') {
+        dbScheme = 'agency';
+        marginRate  = parseFloat(agencyMarginRate);
+        partnerRate = parseFloat(partnerCommissionRate) || 0;
+        if (isNaN(marginRate) || marginRate < 0 || marginRate > 100) throw new Error("Некорректная комиссия агентства (0–100%)");
+        if (partnerRate < 0 || partnerRate > 100) throw new Error("Некорректный процент партнёра (0–100%)");
+        if (partnerRate > marginRate) throw new Error("Процент партнёра не может превышать комиссию агентства");
+      } else {
+        dbScheme = 'commission_based';
+        partnerRate = parseFloat(partnerCommissionRate) || 0;
+        if (partnerRate < 0 || partnerRate > 100) throw new Error("Некорректный процент партнёра (0–100%)");
       }
+      // Ставка, которую БЭК читает из calculations.commissionRate (camelCase):
+      // для agency — маржа, для клиентской — процент партнёра.
+      const commissionRate = dbScheme === 'agency' ? marginRate : partnerRate;
       
       const trimmedInvoiceNumber = invoiceNumber.trim();
       if (!trimmedInvoiceNumber) {
@@ -160,30 +150,32 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         clientId: selectedClient,
         scheme: dbScheme,
         clientBill: billForValidation,
-        partnerCommissionRate: commissionRate?.toString() || '',
+        partnerCommissionRate: partnerRate.toString(),
         notes,
         paymentDate
       });
 
-      const calculations = calculateInvoice(dbScheme, validated.clientBill, commissionRate);
+      const calculations = calculateInvoice(dbScheme, validated.clientBill, partnerRate, 0, 0, 0, 0, marginRate);
+      // БЭК читает ставку из calculations.commissionRate (camelCase) — гарантируем её наличие.
+      const calculationsPayload = { ...calculations, commissionRate };
       const formattedPaymentDate = validated.paymentDate ? format(validated.paymentDate, 'yyyy-MM-dd') : undefined;
 
-      const isPartnerScheme = ['partner_10', 'partner_15', 'custom', 'commission_based'].includes(scheme);
-      const plannedExpensesValue = isPartnerScheme && plannedExpenses ? parseFloat(plannedExpenses) : undefined;
+      // plannedExpenses (резерв под расходы) — только для «Клиентской» (commission_based).
+      const plannedExpensesValue = dbScheme === 'commission_based' && plannedExpenses ? parseFloat(plannedExpenses) : undefined;
 
       await invoiceService.createInvoice({
         invoiceNumber: trimmedInvoiceNumber,
         clientId: validated.clientId,
         partnerId: validated.partnerId,
         scheme: dbScheme,
-        partnerCommissionRate: commissionRate,
+        partnerCommissionRate: partnerRate,
         status: 'draft',
         notes: validated.notes || undefined,
         clientTitle: clientTitle.trim() || undefined,
         paymentDate: formattedPaymentDate,
         hideFromAssistant: effectiveRole === 'admin' ? hideFromAssistant : effectiveRole === 'accountant' ? true : false,
         clientBill: validated.clientBill,
-        calculations: calculations,
+        calculations: calculationsPayload,
         plannedExpenses: plannedExpensesValue,
         serviceType,
         periodUnit: isPeriodic ? periodUnit : undefined,
@@ -213,8 +205,9 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     setCurrentStep(1);
     setSelectedPartner("");
     setSelectedClient("");
-    setScheme("agency_30");
-    setPartnerCommissionRate("10");
+    setScheme("agency");
+    setPartnerCommissionRate("0");
+    setAgencyMarginRate("30");
     setClientBill("");
     setInvoiceNumber("");
     setNotes("");
@@ -281,78 +274,60 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                       
                       <div className="space-y-3">
                         <SchemeCard
-                          value="agency_30"
-                          selected={scheme === "agency_30"}
-                          onSelect={() => setScheme("agency_30")}
+                          value="agency"
+                          selected={scheme === "agency"}
+                          onSelect={() => setScheme("agency")}
                           icon="building"
-                          title="Агентство 30%"
-                          description="Маржа 30%: партнёру 15%, админу 15%"
+                          title="Агентская"
+                          description="Клиент видит комиссию агентства и списания по своим деньгам. Проценты задаёте вы."
                         />
-                        
+
                         <SchemeCard
-                          value="agency_40"
-                          selected={scheme === "agency_40"}
-                          onSelect={() => setScheme("agency_40")}
-                          icon="building"
-                          title="Агентство 40%"
-                          description="Маржа 40%: партнёру 16%, админу 24%"
+                          value="commission_based"
+                          selected={scheme === "commission_based"}
+                          onSelect={() => setScheme("commission_based")}
+                          icon="handshake"
+                          title="Клиентская"
+                          description="Клиент видит сумму всего заказа, но не видит траты по нему."
                         />
-
-                        {(effectiveRole === 'assistant' || effectiveRole === 'accountant') && (
-                          <SchemeCard
-                            value="commission_based"
-                            selected={scheme === "commission_based"}
-                            onSelect={() => setScheme("commission_based")}
-                            icon="handshake"
-                            title="Партнерское соглашение"
-                            description="Выберите, если работа идет по партнерскому договору"
-                          />
-                        )}
-
-                        {effectiveRole === 'admin' && (
-                          <>
-                            <SchemeCard
-                              value="partner_10"
-                              selected={scheme === "partner_10"}
-                              onSelect={() => setScheme("partner_10")}
-                              icon="handshake"
-                              title="Партнерское 10%"
-                              description="Комиссия партнеру 10%"
-                              rate="10%"
-                            />
-                            <SchemeCard
-                              value="partner_15"
-                              selected={scheme === "partner_15"}
-                              onSelect={() => setScheme("partner_15")}
-                              icon="handshake"
-                              title="Партнерское 15%"
-                              description="Комиссия партнеру 15%"
-                              rate="15%"
-                            />
-                            <SchemeCard
-                              value="custom"
-                              selected={scheme === "custom"}
-                              onSelect={() => setScheme("custom")}
-                              icon="settings"
-                              title="Индивидуальная ставка"
-                              description="Установите свой процент комиссии"
-                            />
-                          </>
-                        )}
                       </div>
 
-                      {scheme === 'custom' && effectiveRole === 'admin' && (
+                      {scheme === 'agency' && (
+                        <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+                          <div className="space-y-2">
+                            <Label>Комиссия агентства (%) * <span className="text-xs text-muted-foreground">— видна клиенту</span></Label>
+                            <Input
+                              type="number"
+                              data-testid="input-agency-margin-rate"
+                              value={agencyMarginRate}
+                              onChange={(e) => setAgencyMarginRate(e.target.value)}
+                              min="0" max="100" step="0.1" required
+                              className="h-11"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Процент партнёра (%) <span className="text-xs text-muted-foreground">— скрыт от клиента, не больше комиссии</span></Label>
+                            <Input
+                              type="number"
+                              data-testid="input-agency-partner-rate"
+                              value={partnerCommissionRate}
+                              onChange={(e) => setPartnerCommissionRate(e.target.value)}
+                              min="0" max="100" step="0.1"
+                              className="h-11"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {scheme === 'commission_based' && (
                         <div className="space-y-2 p-4 bg-muted/50 rounded-lg">
-                          <Label>Процент партнера (%) *</Label>
+                          <Label>Процент партнёра (%) <span className="text-xs text-muted-foreground">— скрыт от клиента</span></Label>
                           <Input
                             type="number"
                             data-testid="input-custom-commission-rate"
                             value={partnerCommissionRate}
                             onChange={(e) => setPartnerCommissionRate(e.target.value)}
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            required
+                            min="0" max="100" step="0.1"
                             className="h-11"
                           />
                         </div>
@@ -461,7 +436,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                         </div>
                       )}
 
-                      {['partner_10', 'partner_15', 'custom', 'commission_based'].includes(scheme) && (
+                      {scheme === 'commission_based' && (
                         <div className="space-y-2 p-4 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg border border-blue-200/50 dark:border-blue-800/30">
                           <Label className="flex items-center gap-2">
                             Планируемые расходы проекта
@@ -559,7 +534,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
                 <InvoiceCalculator
                   scheme={scheme as any}
                   clientBill={parseFloat(clientBill) || 0}
-                  partnerCommissionRate={scheme === 'custom' ? parseFloat(partnerCommissionRate) : undefined}
+                  partnerCommissionRate={parseFloat(partnerCommissionRate) || undefined}
                 />
               )}
             </div>

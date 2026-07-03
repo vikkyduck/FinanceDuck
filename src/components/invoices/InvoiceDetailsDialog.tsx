@@ -1701,7 +1701,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                           <TableHead>Дата</TableHead>
                           <TableHead>Описание</TableHead>
                           {/* Клиенту по неагентским счетам суммы списаний не показываем. */}
-                          {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40') && (
+                          {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40' && invoice?.scheme !== 'agency') && (
                             <TableHead className="text-right">Сумма</TableHead>
                           )}
                           <TableHead className="w-24">Сообщения</TableHead>
@@ -1713,7 +1713,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                           <TableRow key={expense.id}>
                             <TableCell>{formatDate(expense.date)}</TableCell>
                             <TableCell>{expense.description}</TableCell>
-                            {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40') && (
+                            {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40' && invoice?.scheme !== 'agency') && (
                               <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
                             )}
                             <TableCell>

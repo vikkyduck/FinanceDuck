@@ -198,7 +198,11 @@ export const CriticalAlertsSection = () => {
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border ${severityColors[alert.severity]} hover:shadow-sm transition-all`}
+                    onClick={() => openInvoiceDetails(alert.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openInvoiceDetails(alert.id); } }}
+                    className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border ${severityColors[alert.severity]} hover:shadow-sm transition-all cursor-pointer`}
                     data-testid={`alert-${alert.type}-${alert.id}`}
                   >
                     <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -224,7 +228,7 @@ export const CriticalAlertsSection = () => {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={alert.action}
+                      onClick={(e) => { e.stopPropagation(); alert.action(); }}
                       className="shrink-0 self-end sm:self-auto"
                       data-testid={`button-action-${alert.id}`}
                     >

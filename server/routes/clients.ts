@@ -89,7 +89,12 @@ clientsRouter.get("/api/clients/:id", authMiddleware, async (req: AuthenticatedR
     const role = req.user?.role || "client";
     const client = await storage.getClient(id);
     if (!client) return res.status(404).json({ error: "Client not found" });
-    if (role === "partner" && client.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
+    // Авторизация партнёра — по членству в client_partners (любой из партнёров),
+    // а не по устаревшему одиночному partner_id.
+    if (role === "partner") {
+      const linked = await storage.getClientPartners(id);
+      if (!linked.some(p => p.id === req.user?.partnerId)) return res.status(403).json({ error: "Forbidden" });
+    }
     res.json(stripPartnerInfoFromClient(client, role));
   } catch (error) {
     console.error("Get client error:", error);
@@ -101,6 +106,11 @@ clientsRouter.post("/api/clients", authMiddleware, requireRole("admin", "assista
   try {
     const role = req.user?.role || "client";
     const client = await storage.createClient(pick(req.body, CLIENT_WRITABLE_FIELDS));
+    // Единый путь назначения партнёров: partnerIds (или легаси одиночный partnerId).
+    const partnerIds: string[] = Array.isArray(req.body.partnerIds)
+      ? req.body.partnerIds.filter(Boolean)
+      : (req.body.partnerId ? [req.body.partnerId] : []);
+    if (partnerIds.length) await storage.setClientPartners(client.id, partnerIds);
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_client", entityType: "client", entityId: client.id, description: `Создан клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
@@ -117,6 +127,10 @@ clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "as
     const role = req.user?.role || "client";
     const client = await storage.updateClient(id, pick(req.body, CLIENT_WRITABLE_FIELDS));
     if (!client) return res.status(404).json({ error: "Client not found" });
+    // Синхронизируем партнёров ТОЛЬКО если явно пришёл partnerIds (иначе связи не трогаем).
+    if (Array.isArray(req.body.partnerIds)) {
+      await storage.setClientPartners(id, req.body.partnerIds.filter(Boolean));
+    }
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_client", entityType: "client", entityId: id, description: `Обновлён клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
@@ -171,7 +185,10 @@ clientsRouter.get("/api/clients/:id/with-partner", authMiddleware, async (req: A
     if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
     const client = await storage.getClientWithPartner(id);
     if (!client) return res.status(404).json({ error: "Client not found" });
-    if (role === "partner" && client.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
+    if (role === "partner") {
+      const linked = await storage.getClientPartners(id);
+      if (!linked.some(p => p.id === req.user?.partnerId)) return res.status(403).json({ error: "Forbidden" });
+    }
     res.json(client);
   } catch (error) {
     console.error("Get client with partner error:", error);

@@ -111,20 +111,18 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
 
     setLoading(true);
     try {
-      const created = await invoiceService.createClient({
+      // Единый механизм: связь партнёров пишется через partnerIds (сервер сам
+      // синхронит client_partners + основной partner_id). Отдельный вызов не нужен.
+      await invoiceService.createClient({
         name: form.name.trim(),
         telegram: form.telegram.trim() || undefined,
         phone: form.phone.trim() || undefined,
-        partnerId: form.partnerIds.length === 1 ? form.partnerIds[0] : undefined,
+        partnerIds: form.partnerIds,
         tgChatId: form.tgChatId.trim() || undefined,
         tgBotToken: form.tgBotToken.trim() || undefined,
         contactPerson: form.contactPerson.trim() || null,
       });
-      
-      if (isAdmin && form.partnerIds.length > 0) {
-        await invoiceService.setClientPartners(created.id, form.partnerIds);
-      }
-      
+
       showSuccess("Успешно", "Клиент добавлен");
       setForm(emptyForm);
       setAddPartnerPopoverOpen(false);
@@ -185,20 +183,17 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
 
     setLoading(true);
     try {
+      // Единый механизм: partnerIds → сервер сам синхронит client_partners + partner_id.
       await invoiceService.updateClient(editingId, {
         name: editForm.name.trim(),
         telegram: editForm.telegram.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
-        partnerId: editForm.partnerIds.length === 1 ? editForm.partnerIds[0] : undefined,
+        partnerIds: editForm.partnerIds,
         tgChatId: editForm.tgChatId.trim() || null,
         tgBotToken: editForm.tgBotToken.trim() || null,
         contactPerson: editForm.contactPerson.trim() || null,
       });
-      
-      if (isAdmin) {
-        await invoiceService.setClientPartners(editingId, editForm.partnerIds);
-      }
-      
+
       showSuccess("Успешно", "Клиент обновлён");
       setEditingId(null);
       setEditForm(emptyForm);

@@ -1,7 +1,7 @@
 /**
  * clientRepo — clients, client-partner relations
  */
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   clients, partners, clientPartners, accessTokens, invoices,
   Client, Partner,
@@ -15,8 +15,12 @@ export type Db = typeof _db;
 
 export async function getClients(db: Db, partnerId?: string): Promise<Client[]> {
   if (partnerId) {
+    // Единый источник: клиенты, связанные с партнёром через client_partners
+    // (много-ко-многим), а не по устаревшему одиночному clients.partner_id.
+    const linked = db.select({ id: clientPartners.clientId })
+      .from(clientPartners).where(eq(clientPartners.partnerId, partnerId));
     return db.select().from(clients)
-      .where(eq(clients.partnerId, partnerId))
+      .where(inArray(clients.id, linked))
       .orderBy(clients.name);
   }
   return db.select().from(clients).orderBy(clients.name);
@@ -78,24 +82,25 @@ export async function getClientsWithPartners(
   );
 }
 
+/**
+ * ЕДИНЫЙ писатель связи клиент↔партнёр. client_partners — источник истины;
+ * clients.partner_id держим как «основной партнёр» (первый), синхронно, ВСЕГДА
+ * (в т.ч. при 2+ партнёрах — раньше поле оставалось устаревшим). Транзакция.
+ */
 export async function setClientPartners(
   db: Db, clientId: string, partnerIds: string[],
 ): Promise<void> {
-  await db.delete(clientPartners).where(eq(clientPartners.clientId, clientId));
-
-  if (partnerIds.length > 0) {
-    await db.insert(clientPartners).values(partnerIds.map(partnerId => ({ clientId, partnerId })));
-  }
-
-  if (partnerIds.length === 1) {
-    await db.update(clients)
-      .set({ partnerId: partnerIds[0], updatedAt: new Date() })
+  // dedupe на всякий случай
+  const ids = Array.from(new Set(partnerIds.filter(Boolean)));
+  await (db as any).transaction(async (tx: any) => {
+    await tx.delete(clientPartners).where(eq(clientPartners.clientId, clientId));
+    if (ids.length > 0) {
+      await tx.insert(clientPartners).values(ids.map(partnerId => ({ clientId, partnerId })));
+    }
+    await tx.update(clients)
+      .set({ partnerId: ids[0] ?? null, updatedAt: new Date() })
       .where(eq(clients.id, clientId));
-  } else if (partnerIds.length === 0) {
-    await db.update(clients)
-      .set({ partnerId: null, updatedAt: new Date() })
-      .where(eq(clients.id, clientId));
-  }
+  });
 }
 
 export async function deleteClient(

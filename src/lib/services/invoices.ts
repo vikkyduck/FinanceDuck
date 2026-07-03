@@ -375,6 +375,7 @@ export const invoiceService = {
     telegram?: string;
     phone?: string;
     partnerId?: string;
+    partnerIds?: string[];
     tgChatId?: string | null;
     tgBotToken?: string | null;
     contactPerson?: string | null;
@@ -398,6 +399,7 @@ export const invoiceService = {
     telegram?: string;
     phone?: string;
     partnerId?: string;
+    partnerIds?: string[];
     tgChatId?: string | null;
     tgBotToken?: string | null;
     contactPerson?: string | null;

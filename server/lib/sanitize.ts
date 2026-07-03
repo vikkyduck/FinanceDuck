@@ -30,9 +30,11 @@ export const INVOICE_WRITABLE_FIELDS = [
   "pricePerPeriod", "totalPeriods", "periodsUsed",
 ] as const;
 
-// Поля клиента. Исключены: id, createdAt, updatedAt.
+// Поля клиента. Исключены: id, createdAt, updatedAt. partnerId НЕ здесь —
+// связь клиент↔партнёр пишется ТОЛЬКО через setClientPartners (единый источник),
+// иначе partner_id и client_partners дрейфуют.
 export const CLIENT_WRITABLE_FIELDS = [
-  "name", "email", "phone", "telegram", "contactPerson", "partnerId",
+  "name", "email", "phone", "telegram", "contactPerson",
   "tgChatId", "tgBotToken",
 ] as const;
 

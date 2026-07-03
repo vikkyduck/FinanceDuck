@@ -1778,8 +1778,11 @@ export class DatabaseStorage implements IStorage {
         });
       }
 
-      // 3. Long sent invoices (>30 days without payment)
-      if (invoice.status === 'sent' && !invoice.actualPaymentDate && invoice.createdAt) {
+      // 3. Long sent invoices (>30 days without payment) — но НЕ уже-просроченные:
+      //    иначе один счёт попадёт и в overdue, и в long_sent (оба требуют
+      //    status='sent' && !actualPaymentDate) → задвоение карточки.
+      const alreadyOverdue = !!invoice.paymentDate && new Date(invoice.paymentDate) < today;
+      if (!alreadyOverdue && invoice.status === 'sent' && !invoice.actualPaymentDate && invoice.createdAt) {
         const createdAt = new Date(invoice.createdAt);
         if (createdAt < thirtyDaysAgo) {
           const daysWaiting = Math.floor((today.getTime() - createdAt.getTime()) / (24 * 60 * 60 * 1000));
@@ -1808,7 +1811,12 @@ export class DatabaseStorage implements IStorage {
       return (b.daysCount || 0) - (a.daysCount || 0);
     });
 
-    return alerts;
+    // Системная гарантия: НЕ более одного алерта на счёт. Sort уже поставил
+    // самый критичный выше, поэтому оставляем первый по каждому id. Иначе
+    // дубликаты с одинаковым invoice.id ломают React key (key={alert.id}) —
+    // отсюда и «задвоение», и «не пропадают после оплаты».
+    const seenIds = new Set<string>();
+    return alerts.filter(a => (seenIds.has(a.id) ? false : (seenIds.add(a.id), true)));
   }
 
   async getAlertCounts(role: string): Promise<{

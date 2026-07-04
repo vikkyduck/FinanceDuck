@@ -506,9 +506,10 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
       draftsTotal: number;
     };
     leverage: {
-      othersProfit: number;
-      vikaProfit: number;
-      ratio: number;
+      othersProfit: number;  // прибыль через ДРУГИХ партнёров (делегирование)
+      bvProfit: number;      // прибыль через актив БВ (управление активом владельца)
+      vikaProfit: number;    // прибыль от РУК самой Вики (самозанятость) — знаменатель
+      ratio: number;         // (others + БВ) / vika — плечо: чужими руками+актив / сама
     };
     recurringExpected: {
       monthlyAmount: number;
@@ -576,20 +577,28 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
           sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
         )),
 
-      // 4. Leverage — non-cancelled with effective date in month, split by Vika Utkina
+      // 4. Leverage — non-cancelled с effective date в месяце, ТРИ котла:
+      //    • bvProfit    — виртуальный партнёр «БВ_…» (актив, которым владелец
+      //                    управляет) → в ЧИСЛИТЕЛЬ (управление, не самозанятость);
+      //    • vikaProfit  — «Вика Уткина» лично (самозанятость) → ЗНАМЕНАТЕЛЬ;
+      //    • othersProfit— реальные другие партнёры (делегирование) → в числитель.
+      //    Раньше БВ склеивался с Викой (оба ловились по '%вика уткина%') и занижал
+      //    коэффициент — теперь БВ отделён (проверяем 'бв%' ПЕРВЫМ).
       db.select({
+        bvProfit: sql<string>`COALESCE(SUM(
+          CASE WHEN LOWER(${partners.name}) LIKE 'бв%'
+               THEN ${invoiceCalculations.netProfitAdmin}::numeric ELSE 0 END), 0)`,
         vikaProfit: sql<string>`COALESCE(SUM(
-          CASE WHEN LOWER(${partners.name}) LIKE '%вика уткина%'
+          CASE WHEN LOWER(${partners.name}) LIKE 'бв%' THEN 0
+               WHEN LOWER(${partners.name}) LIKE '%вика уткина%'
                  OR LOWER(${partners.name}) LIKE '%vika utkina%'
-               THEN ${invoiceCalculations.netProfitAdmin}::numeric
-               ELSE 0
-          END), 0)`,
+               THEN ${invoiceCalculations.netProfitAdmin}::numeric ELSE 0 END), 0)`,
         othersProfit: sql<string>`COALESCE(SUM(
-          CASE WHEN LOWER(${partners.name}) NOT LIKE '%вика уткина%'
-               AND (${partners.name} IS NULL OR LOWER(${partners.name}) NOT LIKE '%vika utkina%')
-               THEN ${invoiceCalculations.netProfitAdmin}::numeric
-               ELSE 0
-          END), 0)`,
+          CASE WHEN LOWER(${partners.name}) LIKE 'бв%' THEN 0
+               WHEN LOWER(${partners.name}) LIKE '%вика уткина%'
+                 OR LOWER(${partners.name}) LIKE '%vika utkina%' THEN 0
+               WHEN ${partners.name} IS NULL THEN 0
+               ELSE ${invoiceCalculations.netProfitAdmin}::numeric END), 0)`,
       })
         .from(invoices)
         .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
@@ -626,6 +635,7 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     const monthlyReceived   = parseNum(monthlyPaidRows[0]?.profit ?? '0');
     const monthlyExpected   = parseNum(monthlyExpectedRows[0]?.profit ?? '0');
     const monthlyVikaProfit   = parseNum(String(leverageRows[0]?.vikaProfit   ?? '0'));
+    const monthlyBvProfit     = parseNum(String((leverageRows[0] as any)?.bvProfit ?? '0'));
     const monthlyOthersProfit = parseNum(String(leverageRows[0]?.othersProfit ?? '0'));
     const draftsCount = parseInt(String(salesRows[0]?.draftsCount ?? '0'), 10);
     const draftsTotal = parseNum(String(salesRows[0]?.draftsTotal ?? '0'));
@@ -634,8 +644,12 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     // Net Profit Margin = (Net Profit / Revenue) * 100
     const netProfitMargin = yearlyRevenue > 0 ? (yearlyProfit / yearlyRevenue) * 100 : 0;
 
-    // Leverage ratio for selected month
-    const leverageRatio = monthlyVikaProfit > 0 ? monthlyOthersProfit / monthlyVikaProfit : 0;
+    // Плечо за месяц: (делегирование другим + управление активом БВ) / самозанятость.
+    // Знаменатель — только «Вика лично». Если Вика лично ничего не делала, а
+    // числитель есть — это максимальное плечо (владелец только управляет): ratio=0
+    // здесь означал бы «нет данных», поэтому фронт для vika=0 показывает «∞»/«—».
+    const leverageNumerator = monthlyOthersProfit + monthlyBvProfit;
+    const leverageRatio = monthlyVikaProfit > 0 ? leverageNumerator / monthlyVikaProfit : 0;
 
     // Available years — ensure current year is always present
     const yearsSet = new Set(availableYearsRows.map(r => r.yr).filter(Boolean));
@@ -673,6 +687,7 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
       },
       leverage: {
         othersProfit: monthlyOthersProfit,
+        bvProfit: monthlyBvProfit,
         vikaProfit: monthlyVikaProfit,
         ratio: leverageRatio,
       },

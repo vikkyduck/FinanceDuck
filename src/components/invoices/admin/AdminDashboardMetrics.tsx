@@ -47,6 +47,7 @@ interface DashboardStats {
   };
   leverage: {
     othersProfit: number;
+    bvProfit: number;
     vikaProfit: number;
     ratio: number;
   };
@@ -500,16 +501,18 @@ export const AdminDashboardMetrics = () => {
             </CardTitle>
             <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
               <Info className="h-3 w-3 shrink-0 mt-0.5" />
-              Прибыль других партнёров / Вика Уткина за {MONTH_NAMES[selectedMonth]}
+              (Другие партнёры + актив БВ) / Вика Уткина лично за {MONTH_NAMES[selectedMonth]}
             </p>
           </CardHeader>
           <CardContent className="space-y-2 sm:space-y-3">
             <div className="text-center">
               <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400" data-testid="text-efficiency-ratio">
-                {stats.leverage.ratio.toFixed(2)}
+                {stats.leverage.vikaProfit > 0
+                  ? ((stats.leverage.othersProfit + stats.leverage.bvProfit) / stats.leverage.vikaProfit).toFixed(2)
+                  : (stats.leverage.othersProfit + stats.leverage.bvProfit) > 0 ? '∞' : '—'}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {MONTH_NAMES[selectedMonth]} · Другие / Вика
+                {MONTH_NAMES[selectedMonth]} · (Другие + БВ) / Вика лично
               </p>
             </div>
             <div className="pt-2 border-t space-y-1 text-sm">
@@ -518,7 +521,11 @@ export const AdminDashboardMetrics = () => {
                 <span className="text-sm sm:text-base" data-testid="text-efficiency-others">{formatCurrency(stats.leverage.othersProfit)}</span>
               </div>
               <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-                <span className="text-muted-foreground">Вика Уткина</span>
+                <span className="text-muted-foreground">Актив БВ (управление)</span>
+                <span className="text-sm sm:text-base" data-testid="text-efficiency-bv">{formatCurrency(stats.leverage.bvProfit)}</span>
+              </div>
+              <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+                <span className="text-muted-foreground">Вика Уткина лично</span>
                 <span className="text-sm sm:text-base" data-testid="text-efficiency-vika">{formatCurrency(stats.leverage.vikaProfit)}</span>
               </div>
             </div>

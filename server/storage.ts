@@ -130,7 +130,7 @@ export interface IStorage {
   getAssistantActionLogs(filters: AssistantActionLogFilters): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }>;
   
   // Dashboard invoice details for expandable cards
-  getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts'): Promise<DashboardInvoiceDetail[]>;
+  getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts' | 'overdue' | 'drafts_no_date'): Promise<DashboardInvoiceDetail[]>;
   
   // Recurring invoices for month display
   getRecurringInvoicesForMonth(year: number, month: number): Promise<RecurringInvoiceForMonth[]>;
@@ -2682,10 +2682,11 @@ export class DatabaseStorage implements IStorage {
     return { data, availableYears };
   }
 
-  async getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts'): Promise<DashboardInvoiceDetail[]> {
+  async getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts' | 'overdue' | 'drafts_no_date'): Promise<DashboardInvoiceDetail[]> {
     const monthStart = new Date(year, month, 1);
     const monthEnd = new Date(year, month + 1, 0, 23, 59, 59);
-    
+    const today = new Date();
+
     const allInvoices = await db
       .select({
         invoice: invoices,
@@ -2759,9 +2760,38 @@ export class DatabaseStorage implements IStorage {
           status,
           paymentDate: null,
         });
+      } else if (category === 'overdue') {
+        // Долги к сбору: выставлен (sent), не оплачен, плановая дата оплаты
+        // ПРОШЛА. НЕ привязано к выбранному месяцу — это «сколько висит СЕЙЧАС».
+        if (status !== 'sent') continue;
+        if (row.invoice.actualPaymentDate) continue;
+        if (!row.invoice.paymentDate) continue;
+        if (new Date(row.invoice.paymentDate) >= today) continue;
+        result.push({
+          id: row.invoice.id,
+          invoiceNumber: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+          clientName: row.clientName,
+          netProfitAdmin,
+          clientBill,
+          status,
+          paymentDate: row.invoice.paymentDate.toString(),
+        });
+      } else if (category === 'drafts_no_date') {
+        // Черновики без даты оплаты — требуют действия (проставить дату). Все.
+        if (status !== 'draft') continue;
+        if (row.invoice.paymentDate) continue;
+        result.push({
+          id: row.invoice.id,
+          invoiceNumber: row.invoice.invoiceNumber || `INV-${row.invoice.id}`,
+          clientName: row.clientName,
+          netProfitAdmin,
+          clientBill,
+          status,
+          paymentDate: null,
+        });
       }
     }
-    
+
     // Sort by netProfitAdmin descending
     return result.sort((a, b) => b.netProfitAdmin - a.netProfitAdmin);
   }

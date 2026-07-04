@@ -9,7 +9,6 @@ import { ManagePartnersDialog } from "./assistant/ManagePartnersDialog";
 import { ManageClientsDialog } from "./assistant/ManageClientsDialog";
 import { ManageAccessCodesDialog } from "./admin/ManageAccessCodesDialog";
 import { ExportFiltersDialog } from "./admin/ExportFiltersDialog";
-import { CriticalAlertsSection } from "./admin/CriticalAlertsSection";
 import { AdminActionBar } from "./admin/AdminActionBar";
 import { TransferFundsDialog } from "./admin/TransferFundsDialog";
 import { AdminDashboardMetrics } from "./admin/AdminDashboardMetrics";
@@ -61,13 +60,9 @@ export const AdminDashboard = () => {
         onTransferred={() => invalidateAllDashboards()}
       />
 
-      {/* Dashboard Metrics - Cash Flow, Sales, Yearly Summary, Leverage */}
+      {/* Dashboard Metrics - Cash Flow, Sales, Yearly Summary, Leverage,
+          Долги к сбору, Черновики без даты оплаты */}
       <AdminDashboardMetrics />
-
-      {/* Critical Alerts Section */}
-      <div className="mb-6">
-        <CriticalAlertsSection />
-      </div>
 
       {/* Quick Stats Link */}
       <Card className="border-0 shadow-none bg-muted/30">

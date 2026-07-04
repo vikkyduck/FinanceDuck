@@ -70,10 +70,12 @@ interface DashboardInvoiceDetail {
   paymentDate: string | null;
 }
 
+type DashboardCategory = 'received' | 'expected' | 'drafts' | 'overdue' | 'drafts_no_date';
+
 interface InvoiceListProps {
   year: number;
   month: number;
-  category: 'received' | 'expected' | 'drafts';
+  category: DashboardCategory;
   isOpen: boolean;
 }
 
@@ -217,6 +219,74 @@ const MONTH_NAMES = [
 ];
 
 const formatCurrency = (amount: number) => formatMoney(amount);
+
+const wordScheta = (n: number) => n === 1 ? 'счёт' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'счёта' : 'счетов';
+
+/**
+ * Карточка «провал в список» для долгов/висяков. Сама тянет список по категории
+ * (не привязано к месяцу — «как сейчас»), показывает заголовком либо сумму
+ * чистой прибыли (долги), либо число счетов; разворачивается в кликабельный
+ * список (каждый счёт → /invoices/:id). Пустая — приглушённое «всё чисто».
+ */
+const DrillDownCard = ({
+  icon: Icon, title, subtitle, category, accentClass, showProfitSum,
+}: {
+  icon: typeof FileText;
+  title: string;
+  subtitle: string;
+  category: 'overdue' | 'drafts_no_date';
+  accentClass: string;
+  showProfitSum: boolean;
+}) => {
+  const [open, setOpen] = useState(false);
+  const { data: invoices = [], isLoading } = useQuery<DashboardInvoiceDetail[]>({
+    // year/month игнорируются бэком для этих категорий, но передаём для единого ключа
+    queryKey: ["/api/admin/dashboard-invoices", 0, 0, category],
+    queryFn: () => apiGet<DashboardInvoiceDetail[]>(`/admin/dashboard-invoices?year=0&month=0&category=${category}`),
+    staleTime: 30000,
+  });
+  const count = invoices.length;
+  const totalProfit = invoices.reduce((s, i) => s + i.netProfitAdmin, 0);
+  const empty = !isLoading && count === 0;
+
+  return (
+    <Card data-testid={`card-${category}`} className={empty ? "border-success/40" : "border-destructive/40"}>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Icon className={`h-4 w-4 ${empty ? "text-success" : accentClass}`} />
+          {title}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground flex items-start gap-1 mt-0.5">
+          <Info className="h-3 w-3 shrink-0 mt-0.5" />
+          {subtitle}
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="text-center">
+          <p className={`text-2xl sm:text-3xl font-bold ${empty ? "text-success" : accentClass}`} data-testid={`text-${category}-headline`}>
+            {isLoading ? "…" : showProfitSum ? formatCurrency(totalProfit) : count}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {empty ? "всё чисто" : `${count} ${wordScheta(count)}${showProfitSum ? " к сбору" : ""}`}
+          </p>
+        </div>
+        {count > 0 && (
+          <Collapsible open={open} onOpenChange={setOpen}>
+            <CollapsibleTrigger className="w-full" data-testid={`trigger-${category}`}>
+              <div className="flex items-center justify-center gap-1 hover-elevate p-1 rounded cursor-pointer text-sm text-muted-foreground">
+                <span>{open ? "Скрыть счета" : "Показать счета"}</span>
+                {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <InvoiceList year={0} month={0} category={category} isOpen={open} />
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 export const AdminDashboardMetrics = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -531,6 +601,26 @@ export const AdminDashboardMetrics = () => {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Долги к сбору + Черновики без даты оплаты (заменили «Требует внимания») */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <DrillDownCard
+          icon={DollarSign}
+          title="Долги к сбору"
+          subtitle="Просроченные счета (срок оплаты прошёл, не оплачены) — сумма чистой прибыли"
+          category="overdue"
+          accentClass="text-red-600 dark:text-red-400"
+          showProfitSum
+        />
+        <DrillDownCard
+          icon={FileText}
+          title="Черновики без даты оплаты"
+          subtitle="Заведены, но не проставлена плановая дата оплаты — требуют действия"
+          category="drafts_no_date"
+          accentClass="text-amber-600 dark:text-amber-400"
+          showProfitSum={false}
+        />
       </div>
 
       {/* Owner Shares Card - Full Width */}

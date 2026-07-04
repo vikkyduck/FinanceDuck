@@ -273,22 +273,14 @@ dashboardRouter.get("/api/admin/dashboard-stats", authMiddleware, requireRole("a
   }
 });
 
-dashboardRouter.get("/api/admin/critical-alerts", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
-  try {
-    res.json(await storage.getCriticalAlerts());
-  } catch (error) {
-    console.error("Get critical alerts error:", error);
-    res.status(500).json({ error: "Failed to get critical alerts" });
-  }
-});
-
 dashboardRouter.get("/api/admin/dashboard-invoices", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
     const month = req.query.month !== undefined ? parseInt(req.query.month as string) : new Date().getMonth();
-    const category = req.query.category as "received" | "expected" | "drafts";
-    if (!category || !["received", "expected", "drafts"].includes(category)) {
-      return res.status(400).json({ error: "Invalid category. Must be 'received', 'expected', or 'drafts'" });
+    const ALLOWED = ["received", "expected", "drafts", "overdue", "drafts_no_date"] as const;
+    const category = req.query.category as typeof ALLOWED[number];
+    if (!category || !ALLOWED.includes(category)) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${ALLOWED.join(", ")}` });
     }
     res.json(await storage.getDashboardInvoices(year, month, category));
   } catch (error) {

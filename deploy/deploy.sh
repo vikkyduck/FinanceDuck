@@ -7,8 +7,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
+# Адрес сервера НЕ зашит в код — задаётся окружением:
+#   SERVER_HOST=<ip-или-домен> SERVER_USER=root ./deploy/deploy.sh
 SERVER_USER="${SERVER_USER:-root}"
-SERVER_HOST="${SERVER_HOST:-5.129.198.180}"
+SERVER_HOST="${SERVER_HOST:?Задайте SERVER_HOST (IP или домен сервера)}"
 REMOTE_DIR="/opt/finance-duck"
 APP_USER="financeduck"
 
@@ -64,5 +66,5 @@ fi
 
 echo ""
 echo "✅ Деплой завершён."
-echo "   Открыть: https://fin-dohod.ru/"
+echo "   Открыть: https://$SERVER_HOST/ (или ваш домен)"
 echo "   Логи:    ssh $SERVER_USER@$SERVER_HOST 'journalctl -u finance-duck -f'"

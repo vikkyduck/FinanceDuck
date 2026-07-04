@@ -2,8 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # FinanceDuck — установка на чистый Ubuntu 22.04/24.04 VDS (Timeweb).
 # Запускать ОДИН РАЗ под root после первого подключения по SSH:
-#   curl -fsSL https://fin-dohod.ru/install.sh | bash
-# (или скопировать файл и выполнить локально: sudo bash deploy/install.sh)
+#   DOMAIN=<ваш-домен> sudo -E bash deploy/install.sh
 #
 # Что делает:
 #   1. Обновляет систему, ставит Node.js 20, Postgres 16, nginx, certbot
@@ -20,7 +19,8 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-DOMAIN="${DOMAIN:-fin-dohod.ru}"
+# Домен НЕ зашит в код — передаётся окружением: DOMAIN=<ваш-домен>
+DOMAIN="${DOMAIN:?Задайте DOMAIN (домен приложения)}"
 APP_USER="financeduck"
 APP_DIR="/opt/finance-duck"
 DATA_DIR="/var/finance-duck"

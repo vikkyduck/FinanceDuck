@@ -6,7 +6,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              Timeweb Cloud VDS (5.129.198.180)              │
+│              Timeweb Cloud VDS (<SERVER_IP>)              │
 │                                                             │
 │  ┌────────────┐    ┌──────────────┐    ┌────────────────┐  │
 │  │  Internet  │ ─► │   nginx 443  │ ─► │  Node.js :5000 │  │
@@ -29,7 +29,7 @@
 
 ```bash
 # С локальной машины, подключиться по SSH:
-ssh root@5.129.198.180
+ssh root@<SERVER_IP>
 
 # Скачать репозиторий
 git clone <repo-url> /tmp/finance-duck
@@ -49,10 +49,10 @@ bash /opt/finance-duck/deploy/install.sh
 
 ```bash
 # Задать пароль БД на сервере вручную (через psql):
-ssh root@5.129.198.180 'sudo -u postgres psql -c "ALTER ROLE finance_duck PASSWORD '\''ваш_пароль'\'';"'
+ssh root@<SERVER_IP> 'sudo -u postgres psql -c "ALTER ROLE finance_duck PASSWORD '\''ваш_пароль'\'';"'
 
 # Положить .env на сервер с этим паролем:
-ssh root@5.129.198.180 'cat > /opt/finance-duck/.env <<EOF
+ssh root@<SERVER_IP> 'cat > /opt/finance-duck/.env <<EOF
 NODE_ENV=production
 PORT=5000
 DATABASE_URL=postgres://finance_duck:ваш_пароль@127.0.0.1:5432/finance_duck
@@ -60,17 +60,17 @@ BACKUP_DIR=/var/finance-duck/backups
 EOF'
 
 # Запустить деплой
-SERVER_HOST=5.129.198.180 SERVER_USER=root ./deploy/deploy.sh
+SERVER_HOST=<SERVER_IP> SERVER_USER=root ./deploy/deploy.sh
 ```
 
 ### 3. SSL и DNS
 
-DNS: в панели регистратора домена `fin-dohod.ru` направить A-запись на `5.129.198.180`. На Timeweb это делается в «Домены и SSL → Настройки DNS».
+DNS: в панели регистратора домена `<ваш-домен>` направить A-запись на `<SERVER_IP>`. На Timeweb это делается в «Домены и SSL → Настройки DNS».
 
 После того как DNS обновится (5-30 минут):
 
 ```bash
-ssh root@5.129.198.180 'certbot --nginx -d fin-dohod.ru -d www.fin-dohod.ru'
+ssh root@<SERVER_IP> 'certbot --nginx -d <ваш-домен> -d www.<ваш-домен>'
 ```
 
 ### 4. Миграция данных с Replit
@@ -79,7 +79,7 @@ ssh root@5.129.198.180 'certbot --nginx -d fin-dohod.ru -d www.fin-dohod.ru'
 
 ```bash
 # Импорт бэкапа через UI:
-# https://fin-dohod.ru → войти как admin → Бэкапы → Загрузить файл
+# https://<ваш-домен> → войти как admin → Бэкапы → Загрузить файл
 # (бэкап с Replit сохраняется в том же JSON-формате)
 ```
 

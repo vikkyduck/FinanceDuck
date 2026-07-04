@@ -17,11 +17,11 @@ app.use(helmet({ contentSecurityPolicy: false }));
 // CORS-allowlist (defense-in-depth). Приложение same-origin — обычную работу
 // это НЕ затрагивает (для same-origin браузер CORS не применяет). Allowlist
 // лишь отсекает попытки чужих сайтов дёргать API из браузера с куками.
-const ALLOWED_ORIGINS = new Set([
-  "https://fin-dohod.ru",
-  "http://localhost:5000",
-  "http://localhost:5173",
-]);
+// Прод-домен задаётся через CORS_ORIGINS в .env (через запятую), а не в коде.
+const ALLOWED_ORIGINS = new Set(
+  (process.env.CORS_ORIGINS || "http://localhost:5000,http://localhost:5173")
+    .split(",").map(s => s.trim()).filter(Boolean),
+);
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && ALLOWED_ORIGINS.has(origin)) {

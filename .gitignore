@@ -44,3 +44,4 @@ storage/
 backups/
 dist-server
 attached_assets
+scripts/.export-audit.list

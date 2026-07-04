@@ -20,6 +20,12 @@ function isExpired(token: { expiresAt?: Date | null }): boolean {
   return !!token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now();
 }
 
+// Абсолютный потолок жизни сессии: даже при непрерывной активности сессия живёт
+// не дольше этого срока от момента создания (скользящее окно 30 мин продлевает
+// только В ПРЕДЕЛАХ потолка). Ограничивает время жизни украденной сессии.
+const ABSOLUTE_SESSION_MS = 12 * 60 * 60 * 1000; // 12 часов
+const absoluteCutoff = () => new Date(Date.now() - ABSOLUTE_SESSION_MS);
+
 /**
  * Разовая идемпотентная миграция всех кодов «в сейф». Вызывается на старте.
  * Ничего не делает, если крипта выключена; трогает только строки, которые
@@ -109,6 +115,7 @@ export async function validateSession(
       eq(userSessions.sessionId, sessionId),
       eq(userSessions.revoked, false),
       gte(userSessions.expiresAt, new Date()),
+      gte(userSessions.createdAt, absoluteCutoff()), // абсолютный потолок жизни сессии
     ))
     .limit(1);
 
@@ -138,6 +145,7 @@ export async function refreshSession(db: Db, sessionId: string): Promise<Date | 
       eq(userSessions.sessionId, sessionId),
       eq(userSessions.revoked, false),
       gte(userSessions.expiresAt, new Date()),
+      gte(userSessions.createdAt, absoluteCutoff()), // абсолютный потолок жизни сессии
     ))
     .returning();
   return result.length > 0 ? newExpiresAt : null;

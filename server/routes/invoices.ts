@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
 import { stripSensitiveFieldsForRole, stripSensitiveFieldsFromList, isClientFinancialVisible, isClientUsageVisible } from "../permissions";
 import { pick, INVOICE_WRITABLE_FIELDS, EXPENSE_WRITABLE_FIELDS } from "../lib/sanitize";
+import { validateBody, invoiceMoneySchema, expenseCreateSchema, expenseUpdateSchema } from "../lib/validate";
 
 export const invoicesRouter = Router();
 
@@ -36,6 +37,8 @@ invoicesRouter.get("/api/invoices/:id", authMiddleware, async (req: Authenticate
 invoicesRouter.post("/api/invoices", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role || "client";
+    const vErr = validateBody(invoiceMoneySchema, req.body);
+    if (vErr) return res.status(400).json({ error: vErr });
     const { calculations } = req.body || {};
     const invoiceData = pick(req.body, INVOICE_WRITABLE_FIELDS);
     const invoice = await storage.createInvoice({ ...invoiceData, createdBy: req.user!.token.id }, calculations || {});
@@ -105,6 +108,8 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
   try {
     const { id } = req.params;
     const role = req.user?.role || "client";
+    const vErr = validateBody(invoiceMoneySchema, req.body);
+    if (vErr) return res.status(400).json({ error: vErr });
     const { calculations } = req.body || {};
     const invoiceData = pick(req.body, INVOICE_WRITABLE_FIELDS);
     if (role === "accountant") {
@@ -254,6 +259,8 @@ invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("a
   try {
     const { id } = req.params;
     const role = req.user?.role || "client";
+    const vErr = validateBody(expenseCreateSchema, req.body);
+    if (vErr) return res.status(400).json({ error: vErr });
     if (role === "accountant") {
       const inv = await storage.getInvoice(id);
       if (!inv || !inv.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
@@ -310,6 +317,8 @@ invoicesRouter.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "
   try {
     const { id } = req.params;
     const role = req.user?.role || "client";
+    const vErr = validateBody(expenseUpdateSchema, req.body);
+    if (vErr) return res.status(400).json({ error: vErr });
     const expense = await storage.updateInvoiceExpense(id, pick(req.body, EXPENSE_WRITABLE_FIELDS));
     if (!expense) return res.status(404).json({ error: "Expense not found" });
     if (role === "assistant" || role === "admin" || role === "accountant") {

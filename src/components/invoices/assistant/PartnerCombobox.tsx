@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { invoiceService, PartnerListItem } from "@/lib/services/invoices";
 import { useDebounce } from "use-debounce";
+import { HighlightMatch } from "@/components/ui/highlight-match";
 
 interface PartnerComboboxProps {
   value: string;
@@ -111,17 +112,7 @@ export const PartnerCombobox = ({
                     />
                     <div className="flex-1">
                       <p className="font-medium">
-                        {search && (
-                          <span
-                            dangerouslySetInnerHTML={{
-                              __html: partner.name.replace(
-                                new RegExp(search, "gi"),
-                                (match) => `<mark class="bg-primary/20">${match}</mark>`
-                              ),
-                            }}
-                          />
-                        )}
-                        {!search && partner.name}
+                        <HighlightMatch text={partner.name} query={search} />
                       </p>
                     </div>
                   </div>

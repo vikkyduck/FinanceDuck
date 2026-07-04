@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { invoiceService, ClientListItem } from "@/lib/services/invoices";
 import { useDebounce } from "use-debounce";
+import { HighlightMatch } from "@/components/ui/highlight-match";
 
 interface ClientComboboxProps {
   value: string;
@@ -106,17 +107,7 @@ export const ClientCombobox = ({
                     />
                     <div className="flex-1">
                       <p className="font-medium">
-                        {search && (
-                          <span
-                            dangerouslySetInnerHTML={{
-                              __html: client.name.replace(
-                                new RegExp(search, "gi"),
-                                (match) => `<mark class="bg-primary/20">${match}</mark>`
-                              ),
-                            }}
-                          />
-                        )}
-                        {!search && client.name}
+                        <HighlightMatch text={client.name} query={search} />
                       </p>
                     </div>
                   </div>

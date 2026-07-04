@@ -12,8 +12,11 @@ SERVER_HOST="${SERVER_HOST:-5.129.198.180}"
 REMOTE_DIR="/opt/finance-duck"
 APP_USER="financeduck"
 
-echo "==> [1/6] Local build"
+echo "==> [1/6] Тесты + локальная сборка"
 npm ci
+# Барьер: тесты-инварианты денег и пр. Падение = деплой НЕ идёт (set -e),
+# плохой денежный код физически не уезжает на прод.
+npx vitest run
 npm run build
 
 echo "==> [2/6] Sync code to $SERVER_USER@$SERVER_HOST:$REMOTE_DIR"

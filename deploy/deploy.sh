@@ -12,11 +12,11 @@ SERVER_HOST="${SERVER_HOST:-5.129.198.180}"
 REMOTE_DIR="/opt/finance-duck"
 APP_USER="financeduck"
 
-echo "==> [1/5] Local build"
+echo "==> [1/6] Local build"
 npm ci
 npm run build
 
-echo "==> [2/5] Sync code to $SERVER_USER@$SERVER_HOST:$REMOTE_DIR"
+echo "==> [2/6] Sync code to $SERVER_USER@$SERVER_HOST:$REMOTE_DIR"
 rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude '.git' \
@@ -28,14 +28,14 @@ rsync -avz --delete \
   --exclude '.local' \
   ./ "$SERVER_USER@$SERVER_HOST:$REMOTE_DIR/"
 
-echo "==> [3/5] Install production deps on server"
+echo "==> [3/6] Install production deps on server"
 ssh "$SERVER_USER@$SERVER_HOST" "
   cd $REMOTE_DIR
   npm ci --omit=dev
   chown -R $APP_USER:$APP_USER $REMOTE_DIR
 "
 
-echo "==> [4/5] Run database migrations"
+echo "==> [4/6] Run database migrations"
 ssh "$SERVER_USER@$SERVER_HOST" "
   cd $REMOTE_DIR
   if [[ -f .env ]]; then
@@ -45,8 +45,19 @@ ssh "$SERVER_USER@$SERVER_HOST" "
   fi
 "
 
-echo "==> [5/5] Restart service"
+echo "==> [5/6] Restart service"
 ssh "$SERVER_USER@$SERVER_HOST" "systemctl restart finance-duck && systemctl status finance-duck --no-pager -l | head -20"
+
+echo "==> [6/6] Проверка целостности денег (read-only, ничего не меняет)"
+# Аудит запускается ПОСЛЕ рестарта; расхождение не откатывает деплой, а громко
+# сигналит, что надо разобраться (напр. если правка кода тихо сдвинула расчёт).
+AUDIT_RC=0
+ssh "$SERVER_USER@$SERVER_HOST" "cd $REMOTE_DIR && bash scripts/audit-money.sh" || AUDIT_RC=$?
+if [[ $AUDIT_RC -ne 0 ]]; then
+  echo ""
+  echo "   ⚠️⚠️⚠️  АУДИТ ДЕНЕГ НАШЁЛ РАСХОЖДЕНИЯ (код $AUDIT_RC) — разберись по выводу выше!"
+  echo "   Повторить вручную: ssh $SERVER_USER@$SERVER_HOST 'cd $REMOTE_DIR && bash scripts/audit-money.sh'"
+fi
 
 echo ""
 echo "✅ Деплой завершён."

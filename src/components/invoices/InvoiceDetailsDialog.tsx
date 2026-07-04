@@ -48,10 +48,71 @@ interface InvoiceDetailsDialogProps {
   userRole?: UserRole;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Типы на ГРАНИЦЕ. Сырой ответ API (camelCase) нормализуется в этот snake_case
+// объект ОДИН раз в fetchInvoiceDetails; дальше весь компонент читает только его.
+// Раньше объект был `any` — опечатка в имени поля молча давала undefined→0→
+// неверное число. Теперь tsc ловит ПЕРЕПУТАННОЕ ПОЛЕ сразу (это и есть сеть).
+//
+// Money — намеренно свободный тип (`any`) для числовых/денежных полей: они
+// приходят из БД строками (numeric) и местами используются в арифметике
+// напрямую. Оставляем ЗНАЧЕНИЕ свободным, чтобы НЕ трогать денежную математику
+// (низкий риск, без клик-теста), — но ИМЯ поля tsc всё равно проверяет.
+// Ужесточить значения (+ Number()-коэрсинг) можно отдельным шагом.
+// ─────────────────────────────────────────────────────────────────────────────
+type Money = any;
+// scheme оставлен свободным (Money): точная типизация вскрывает, что дочерние
+// компоненты (InvoiceWaterfallChart) и invoicePermissions объявляют БОЛЕЕ УЗКИЙ
+// набор схем (без 'agency') — это отдельная нестыковка, чинить не здесь. Имя
+// поля 'scheme' при этом всё равно защищено интерфейсом.
+interface InvoiceCalcView {
+  client_bill?: Money;
+  commission_rate?: Money;
+  commission_amount?: Money;
+  amount_to_admin?: Money;
+  partner_transfer_due?: Money;
+  agency_margin?: Money;
+  partner_share_from_margin?: Money;
+  admin_share_from_margin?: Money;
+  client_base_after_margin?: Money;
+  client_spent?: Money;
+  executor_expenses_total?: Money;
+  net_profit_admin?: Money;
+  admin_share_50?: Money;
+  cat_share_50?: Money;
+  client_remaining?: Money;
+}
+
+interface InvoiceDetailsView {
+  id: string;
+  invoice_number?: string | null;
+  client_id?: string | null;
+  partner_id?: string | null;
+  scheme: Money;
+  status: string;
+  payment_date?: string | null;
+  actual_payment_date?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  hidden_from_assistant?: boolean | null;
+  planned_expenses?: Money;
+  clients?: { name: string } | null;
+  partners?: { name: string } | null;
+  client_bill?: Money;
+  partner_commission_rate?: Money;
+  client_title?: string | null;
+  service_type?: string | null;
+  period_unit?: string | null;
+  price_per_period?: Money;
+  total_periods?: Money;
+  periods_used?: Money;
+  invoice_calculations: InvoiceCalcView | null;
+}
+
 export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = false, userRole = 'client' }: InvoiceDetailsDialogProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [invoice, setInvoice] = useState<any>(null);
+  const [invoice, setInvoice] = useState<InvoiceDetailsView | null>(null);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [addExpenseOpen, setAddExpenseOpen] = useState(false);
   const [editExpenseOpen, setEditExpenseOpen] = useState(false);
@@ -185,7 +246,7 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
         apiGet<any[]>(`/invoices/${invoiceId}/expenses`).catch(() => [])
       ]);
 
-      const mappedInvoice = {
+      const mappedInvoice: InvoiceDetailsView = {
         id: invoiceData.id,
         invoice_number: invoiceData.invoiceNumber,
         client_id: invoiceData.clientId,

@@ -13,7 +13,8 @@ import { toast } from "sonner";
 import { PartnersTableSkeleton } from "../InvoicesSkeleton";
 import { handleValidationError, showSuccess } from "@/lib/errorHandler";
 import { useRateLimit } from "@/hooks/useRateLimit";
-import { invoiceService, PartnerListItem, ClientListItem } from "@/lib/services/invoices";
+import { invoiceService, PartnerListItem, ClientListItem, PartnerLeverageRole } from "@/lib/services/invoices";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 
 interface ManagePartnersDialogProps {
@@ -26,9 +27,22 @@ interface PartnerFormData {
   telegram: string;
   phone: string;
   email: string;
+  leverageRole: PartnerLeverageRole;
 }
 
-const emptyForm: PartnerFormData = { name: "", telegram: "", phone: "", email: "" };
+const emptyForm: PartnerFormData = { name: "", telegram: "", phone: "", email: "", leverageRole: "external" };
+
+// Подписи ролей коэффициента эффективности (кто есть кто в метрике плеча).
+const LEVERAGE_ROLE_LABELS: Record<PartnerLeverageRole, string> = {
+  external: "Обычный партнёр",
+  managed_asset: "Актив под управлением",
+  owner: "Владелец лично",
+};
+// Короткий бейдж в списке — только для не-дефолтных ролей.
+const LEVERAGE_ROLE_BADGES: Partial<Record<PartnerLeverageRole, string>> = {
+  managed_asset: "актив",
+  owner: "владелец",
+};
 
 export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialogProps) => {
   const { role } = useAuth();
@@ -108,6 +122,8 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
         telegram: form.telegram.trim() || undefined,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
+        // Роль метрики может задавать только админ (сервер иначе вырежет).
+        ...(isAdmin ? { leverageRole: form.leverageRole } : {}),
       });
       showSuccess("Успешно", "Партнер добавлен");
       setForm(emptyForm);
@@ -126,6 +142,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
       telegram: partner.telegram || "",
       phone: partner.phone || "",
       email: partner.email || "",
+      leverageRole: partner.leverageRole || "external",
     });
   };
 
@@ -149,6 +166,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
         telegram: editForm.telegram.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
         email: editForm.email.trim() || undefined,
+        ...(isAdmin ? { leverageRole: editForm.leverageRole } : {}),
       });
       showSuccess("Успешно", "Партнер обновлён");
       setEditingId(null);
@@ -267,6 +285,27 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
                       data-testid="input-partner-email"
                     />
                   </div>
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <Label>Роль в коэффициенте эффективности</Label>
+                      <Select
+                        value={form.leverageRole}
+                        onValueChange={(v) => setForm({ ...form, leverageRole: v as PartnerLeverageRole })}
+                      >
+                        <SelectTrigger data-testid="select-partner-leverage-role">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(LEVERAGE_ROLE_LABELS) as PartnerLeverageRole[]).map((r) => (
+                            <SelectItem key={r} value={r}>{LEVERAGE_ROLE_LABELS[r]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        «Актив под управлением» и «Владелец лично» — для виртуальных партнёров владельца; метрика делит прибыль на эти котлы.
+                      </p>
+                    </div>
+                  )}
                   <Button onClick={handleAdd} disabled={loading} className="w-full" data-testid="button-add-partner">
                     {loading ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -310,15 +349,38 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
                             >
                               <TableCell>
                                 {editingId === partner.id ? (
-                                  <Input
-                                    value={editForm.name}
-                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                    className="h-8"
-                                    onClick={(e) => e.stopPropagation()}
-                                    data-testid="input-edit-partner-name"
-                                  />
+                                  <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+                                    <Input
+                                      value={editForm.name}
+                                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                      className="h-8"
+                                      data-testid="input-edit-partner-name"
+                                    />
+                                    {isAdmin && (
+                                      <Select
+                                        value={editForm.leverageRole}
+                                        onValueChange={(v) => setEditForm({ ...editForm, leverageRole: v as PartnerLeverageRole })}
+                                      >
+                                        <SelectTrigger className="h-7 text-xs" data-testid="select-edit-partner-leverage-role">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {(Object.keys(LEVERAGE_ROLE_LABELS) as PartnerLeverageRole[]).map((r) => (
+                                            <SelectItem key={r} value={r}>{LEVERAGE_ROLE_LABELS[r]}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
                                 ) : (
-                                  <span className="font-medium">{partner.name}</span>
+                                  <span className="font-medium inline-flex items-center gap-1.5">
+                                    {partner.name}
+                                    {isAdmin && LEVERAGE_ROLE_BADGES[partner.leverageRole] && (
+                                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0" title={LEVERAGE_ROLE_LABELS[partner.leverageRole]}>
+                                        {LEVERAGE_ROLE_BADGES[partner.leverageRole]}
+                                      </Badge>
+                                    )}
+                                  </span>
                                 )}
                               </TableCell>
                               <TableCell>

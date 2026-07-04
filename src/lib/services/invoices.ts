@@ -20,12 +20,18 @@ export interface ClientWithPartners extends ClientListItem {
   partners: PartnerListItem[];
 }
 
+// Роль партнёра в коэффициенте эффективности (владельческая метрика):
+// external — обычный партнёр, managed_asset — актив под управлением владельца,
+// owner — личная работа владельца. Задаётся админом в «Управлении партнёрами».
+export type PartnerLeverageRole = 'external' | 'managed_asset' | 'owner';
+
 export interface PartnerListItem {
   id: string;
   name: string;
   telegram: string | null;
   phone: string | null;
   email: string | null;
+  leverageRole: PartnerLeverageRole;
   createdAt?: string;
 }
 
@@ -328,6 +334,7 @@ export const invoiceService = {
       telegram: partner.telegram || null,
       phone: partner.phone || null,
       email: partner.email || null,
+      leverageRole: partner.leverageRole || 'external',
       createdAt: partner.createdAt,
     }));
   },
@@ -365,6 +372,7 @@ export const invoiceService = {
         telegram: data.partner.telegram || null,
         phone: data.partner.phone || null,
         email: data.partner.email || null,
+        leverageRole: data.partner.leverageRole || 'external',
         createdAt: data.partner.createdAt,
       } : undefined,
     };
@@ -435,6 +443,7 @@ export const invoiceService = {
       telegram: partner.telegram || null,
       phone: partner.phone || null,
       email: partner.email || null,
+      leverageRole: partner.leverageRole || 'external',
       createdAt: partner.createdAt,
     }));
   },
@@ -447,6 +456,7 @@ export const invoiceService = {
       telegram: partner.telegram || null,
       phone: partner.phone || null,
       email: partner.email || null,
+      leverageRole: partner.leverageRole || 'external',
       createdAt: partner.createdAt,
     }));
   },
@@ -479,6 +489,7 @@ export const invoiceService = {
     telegram?: string;
     phone?: string;
     email?: string;
+    leverageRole?: PartnerLeverageRole;
   }): Promise<PartnerListItem> {
     const data = await apiPost<any>("/partners", partner);
     return {
@@ -487,6 +498,7 @@ export const invoiceService = {
       telegram: data.telegram || null,
       phone: data.phone || null,
       email: data.email || null,
+      leverageRole: data.leverageRole || 'external',
       createdAt: data.createdAt,
     };
   },
@@ -496,6 +508,7 @@ export const invoiceService = {
     telegram?: string;
     phone?: string;
     email?: string;
+    leverageRole?: PartnerLeverageRole;
   }): Promise<PartnerListItem> {
     const data = await apiPatch<any>(`/partners/${id}`, updates);
     return {
@@ -504,6 +517,7 @@ export const invoiceService = {
       telegram: data.telegram || null,
       phone: data.phone || null,
       email: data.email || null,
+      leverageRole: data.leverageRole || 'external',
       createdAt: data.createdAt,
     };
   },

@@ -43,3 +43,12 @@ export const CLIENT_WRITABLE_FIELDS = [
 export const EXPENSE_WRITABLE_FIELDS = [
   "description", "amount", "paidByAdmin", "date",
 ] as const;
+
+// Поля партнёра. leverageRole дополнительно ограничен: значение из
+// LEVERAGE_ROLES и менять может только админ (см. routes/partners.ts).
+export const PARTNER_WRITABLE_FIELDS = [
+  "name", "email", "phone", "telegram", "commissionRate", "leverageRole",
+] as const;
+
+// Роли партнёра для коэффициента эффективности (см. shared/schema.ts).
+export const LEVERAGE_ROLES = ["external", "managed_asset", "owner"] as const;

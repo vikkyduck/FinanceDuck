@@ -2,8 +2,27 @@ import { Router, Response } from "express";
 import { storage } from "../storage";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
+import { pick, PARTNER_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
 
 export const partnersRouter = Router();
+
+/**
+ * Санитизация тела партнёра: whitelist полей (анти-mass-assignment, раньше
+ * req.body шёл сырым) + правила для leverageRole: значение только из
+ * LEVERAGE_ROLES, менять её может ТОЛЬКО админ (роль влияет на владельческую
+ * метрику — ассистенту/бухгалтеру её трогать незачем).
+ */
+function sanitizePartnerBody(req: AuthenticatedRequest): { ok: true; data: any } | { ok: false; error: string } {
+  const data = pick(req.body, PARTNER_WRITABLE_FIELDS);
+  if ("leverageRole" in data) {
+    if (req.user?.role !== "admin") {
+      delete data.leverageRole; // молча вырезаем, как и остальной whitelist
+    } else if (!LEVERAGE_ROLES.includes(data.leverageRole)) {
+      return { ok: false, error: `leverageRole must be one of: ${LEVERAGE_ROLES.join(", ")}` };
+    }
+  }
+  return { ok: true, data };
+}
 
 partnersRouter.get("/api/partners", authMiddleware, requireRole("admin", "assistant", "accountant"), async (_req: AuthenticatedRequest, res: Response) => {
   try {
@@ -30,7 +49,9 @@ partnersRouter.get("/api/partners/:id", authMiddleware, async (req: Authenticate
 partnersRouter.post("/api/partners", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role || "client";
-    const partner = await storage.createPartner(req.body);
+    const body = sanitizePartnerBody(req);
+    if (!body.ok) return res.status(400).json({ error: body.error });
+    const partner = await storage.createPartner(body.data);
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_partner", entityType: "partner", entityId: partner.id, description: `Создан партнёр: ${partner.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
@@ -45,7 +66,9 @@ partnersRouter.patch("/api/partners/:id", authMiddleware, requireRole("admin", "
   try {
     const { id } = req.params;
     const role = req.user?.role || "client";
-    const partner = await storage.updatePartner(id, req.body);
+    const body = sanitizePartnerBody(req);
+    if (!body.ok) return res.status(400).json({ error: body.error });
+    const partner = await storage.updatePartner(id, body.data);
     if (!partner) return res.status(404).json({ error: "Partner not found" });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_partner", entityType: "partner", entityId: id, description: `Обновлён партнёр: ${partner.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });

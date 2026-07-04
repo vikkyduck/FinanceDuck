@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, seedPartnerAndClient, type TestDb } from "../test/testDb";
 import { createInvoice } from "./invoiceRepo";
+import { partners } from "../../shared/schema";
 import {
   getPartnerDebtSummaries,
   getPartnerSchemeDoNotSpendData,
@@ -96,5 +97,30 @@ describe("dashboardRepo — вынесенные методы: с оплачен
   it("getClientOverviewBuckets держит форму", async () => {
     const r = await getClientOverviewBuckets(asDb(), clientId, "2026-01-01", "2026-12-31");
     expect(r.agency).toBeDefined();
+  });
+});
+
+describe("Коэффициент эффективности — котлы по partners.leverage_role", () => {
+  it("owner/managed_asset/external разносятся по своим котлам, ratio=(others+managed)/owner", async () => {
+    // Посеянный партнёр — 'external' по умолчанию; добавляем owner и managed.
+    const [ownerP]   = await db.insert(partners).values({ name: "P-owner",   leverageRole: "owner" }).returning();
+    const [managedP] = await db.insert(partners).values({ name: "P-managed", leverageRole: "managed_asset" }).returning();
+
+    const mk = (num: string, pid: string, bill: string) => createInvoice(asDb(), {
+      invoiceNumber: num, clientId, partnerId: pid,
+      scheme: "commission_based" as const,
+      createdBy: "00000000-0000-0000-0000-000000000001",
+      status: "paid", paymentDate: "2026-03-15",
+    } as any, { clientBill: bill });
+
+    await mk("LEV-1", ownerP.id,   "1000"); // владелец лично → знаменатель
+    await mk("LEV-2", managedP.id, "2000"); // актив под управлением → числитель
+    await mk("LEV-3", partnerId,   "3000"); // обычный партнёр → числитель
+
+    const stats = await getAdminDashboardStats(asDb(), noRecurring, 2026, 2); // март
+    expect(stats.leverage.ownerProfit).toBeCloseTo(1000, 2);
+    expect(stats.leverage.managedProfit).toBeCloseTo(2000, 2);
+    expect(stats.leverage.othersProfit).toBeCloseTo(3000, 2);
+    expect(stats.leverage.ratio).toBeCloseTo(5, 2); // (3000+2000)/1000
   });
 });

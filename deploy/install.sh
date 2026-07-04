@@ -77,7 +77,9 @@ fi
 
 echo "==> Установка nginx-конфига"
 if [[ -f "$APP_DIR/deploy/nginx.conf" ]]; then
-  install -m 644 "$APP_DIR/deploy/nginx.conf" /etc/nginx/sites-available/finance-duck
+  # nginx.conf — шаблон: домен подставляется из $DOMAIN при установке
+  sed "s/DOMAIN_PLACEHOLDER/$DOMAIN/g" "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/finance-duck
+  chmod 644 /etc/nginx/sites-available/finance-duck
   ln -sf /etc/nginx/sites-available/finance-duck /etc/nginx/sites-enabled/finance-duck
   rm -f /etc/nginx/sites-enabled/default
   nginx -t

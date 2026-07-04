@@ -18,8 +18,8 @@ export const partners = pgTable("partners", {
   //   'external'      — обычный партнёр (делегирование) → числитель;
   //   'managed_asset' — виртуальный партнёр-актив под управлением владельца → числитель;
   //   'owner'         — личная работа владельца (самозанятость) → знаменатель.
-  // Раньше роль угадывалась по имени ('%вика уткина%'/'бв%') — хрупко и
-  // зашивало личные данные в код.
+  // Раньше роль угадывалась по подстрокам имени — хрупко и зашивало
+  // личные данные владельца в код.
   leverageRole: text("leverage_role").notNull().default("external"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

@@ -661,31 +661,12 @@ export async function recalculateAllInvoices(db: DB): Promise<{ updated: number;
         .where(eq(invoiceCalculations.invoiceId, invoice.id)).limit(1);
       if (!existing) continue;
 
-      const expenses              = await _getInvoiceExpenses(db, invoice.id);
-      const totalExpenses         = expenses.reduce((s, e) => s + parseNum(e.amount), 0);
-      const expensesPaidByPartner = expenses.filter(e => e.paidByAdmin !== true).reduce((s, e) => s + parseNum(e.amount), 0);
-      const expensesPaidByAdmin   = expenses.filter(e => e.paidByAdmin === true).reduce((s, e) => s + parseNum(e.amount), 0);
-
-      const clientBill     = parseNum(existing.clientBill);
-      const commissionRate = existing.commissionRate ? parseNum(existing.commissionRate) : undefined;
-      const plannedExp     = parseNum(invoice.plannedExpenses);
-
-      const periodicBill = derivePeriodicClientBill(invoice);
-      let computed = calculateInvoiceServer(
-        invoice.scheme as InvoiceScheme,
-        periodicBill ?? clientBill,
-        commissionRate,
-        totalExpenses,
-        expensesPaidByPartner,
-        expensesPaidByAdmin,
-        plannedExp,
-      );
-      computed = applyPeriodicOverrides(invoice, computed);
-
-      await db.update(invoiceCalculations)
-        .set({ ...computed, updatedAt: new Date() })
-        .where(eq(invoiceCalculations.invoiceId, invoice.id));
-
+      // Делегируем ЕДИНОЙ канонической логике пересчёта (recalcInvoice →
+      // _recalculateInvoiceExpenses): она правильно обрабатывает гибкую схему
+      // 'agency' (маржа/партнёр) и применяет поправку на переносы бюджета.
+      // Раньше bulk-пересчёт дублировал логику и расходился с пер-инвойсным:
+      // обнулял маржу agency и стирал остаток по переносам.
+      await recalcInvoice(db, invoice.id);
       updated++;
     } catch (err) {
       console.error(`[recalculateAllInvoices] Error for invoice ${invoice.id}:`, err);

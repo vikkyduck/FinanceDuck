@@ -19,5 +19,9 @@ export default defineConfig({
     // чтобы модуль db.ts импортировался без ошибки.
     env: { DATABASE_URL: "postgres://vitest-unused" },
     testTimeout: 20000,
+    // Каждый тест-файл поднимает свою PGlite (WASM Postgres). Параллельный
+    // запуск многих файлов исчерпывает ресурсы и даёт флапы. Гоняем файлы
+    // ПОСЛЕДОВАТЕЛЬНО — детерминизм важнее скорости (сюита в барьере деплоя).
+    fileParallelism: false,
   },
 });

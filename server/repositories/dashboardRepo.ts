@@ -506,10 +506,10 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
       draftsTotal: number;
     };
     leverage: {
-      othersProfit: number;  // прибыль через ДРУГИХ партнёров (делегирование)
-      bvProfit: number;      // прибыль через актив БВ (управление активом владельца)
-      vikaProfit: number;    // прибыль от РУК самой Вики (самозанятость) — знаменатель
-      ratio: number;         // (others + БВ) / vika — плечо: чужими руками+актив / сама
+      othersProfit: number;   // прибыль через внешних партнёров (делегирование)
+      managedProfit: number;  // прибыль через активы под управлением владельца
+      ownerProfit: number;    // прибыль от личной работы владельца — знаменатель
+      ratio: number;          // (others + managed) / owner — плечо владельца
     };
     recurringExpected: {
       monthlyAmount: number;
@@ -577,28 +577,22 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
           sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
         )),
 
-      // 4. Leverage — non-cancelled с effective date в месяце, ТРИ котла:
-      //    • bvProfit    — виртуальный партнёр «БВ_…» (актив, которым владелец
-      //                    управляет) → в ЧИСЛИТЕЛЬ (управление, не самозанятость);
-      //    • vikaProfit  — «Вика Уткина» лично (самозанятость) → ЗНАМЕНАТЕЛЬ;
-      //    • othersProfit— реальные другие партнёры (делегирование) → в числитель.
-      //    Раньше БВ склеивался с Викой (оба ловились по '%вика уткина%') и занижал
-      //    коэффициент — теперь БВ отделён (проверяем 'бв%' ПЕРВЫМ).
+      // 4. Leverage — non-cancelled с effective date в месяце, ТРИ котла по
+      //    partners.leverage_role (НЕ по имени — имена людей коду знать незачем):
+      //    • managedProfit — 'managed_asset' (актив под управлением) → ЧИСЛИТЕЛЬ;
+      //    • ownerProfit   — 'owner' (личная работа владельца)       → ЗНАМЕНАТЕЛЬ;
+      //    • othersProfit  — 'external' (обычные партнёры)           → числитель.
+      //    Счета без партнёра никуда не считаются (как и раньше).
       db.select({
-        bvProfit: sql<string>`COALESCE(SUM(
-          CASE WHEN LOWER(${partners.name}) LIKE 'бв%'
+        managedProfit: sql<string>`COALESCE(SUM(
+          CASE WHEN ${partners.leverageRole} = 'managed_asset'
                THEN ${invoiceCalculations.netProfitAdmin}::numeric ELSE 0 END), 0)`,
-        vikaProfit: sql<string>`COALESCE(SUM(
-          CASE WHEN LOWER(${partners.name}) LIKE 'бв%' THEN 0
-               WHEN LOWER(${partners.name}) LIKE '%вика уткина%'
-                 OR LOWER(${partners.name}) LIKE '%vika utkina%'
+        ownerProfit: sql<string>`COALESCE(SUM(
+          CASE WHEN ${partners.leverageRole} = 'owner'
                THEN ${invoiceCalculations.netProfitAdmin}::numeric ELSE 0 END), 0)`,
         othersProfit: sql<string>`COALESCE(SUM(
-          CASE WHEN LOWER(${partners.name}) LIKE 'бв%' THEN 0
-               WHEN LOWER(${partners.name}) LIKE '%вика уткина%'
-                 OR LOWER(${partners.name}) LIKE '%vika utkina%' THEN 0
-               WHEN ${partners.name} IS NULL THEN 0
-               ELSE ${invoiceCalculations.netProfitAdmin}::numeric END), 0)`,
+          CASE WHEN ${partners.id} IS NOT NULL AND ${partners.leverageRole} = 'external'
+               THEN ${invoiceCalculations.netProfitAdmin}::numeric ELSE 0 END), 0)`,
       })
         .from(invoices)
         .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
@@ -634,9 +628,9 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     const yearlyProfit      = parseNum(yearlyRows[0]?.profit      ?? '0');
     const monthlyReceived   = parseNum(monthlyPaidRows[0]?.profit ?? '0');
     const monthlyExpected   = parseNum(monthlyExpectedRows[0]?.profit ?? '0');
-    const monthlyVikaProfit   = parseNum(String(leverageRows[0]?.vikaProfit   ?? '0'));
-    const monthlyBvProfit     = parseNum(String((leverageRows[0] as any)?.bvProfit ?? '0'));
-    const monthlyOthersProfit = parseNum(String(leverageRows[0]?.othersProfit ?? '0'));
+    const monthlyOwnerProfit   = parseNum(String(leverageRows[0]?.ownerProfit   ?? '0'));
+    const monthlyManagedProfit = parseNum(String(leverageRows[0]?.managedProfit ?? '0'));
+    const monthlyOthersProfit  = parseNum(String(leverageRows[0]?.othersProfit  ?? '0'));
     const draftsCount = parseInt(String(salesRows[0]?.draftsCount ?? '0'), 10);
     const draftsTotal = parseNum(String(salesRows[0]?.draftsTotal ?? '0'));
     const monthlyProfit = monthlyReceived;
@@ -644,12 +638,12 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     // Net Profit Margin = (Net Profit / Revenue) * 100
     const netProfitMargin = yearlyRevenue > 0 ? (yearlyProfit / yearlyRevenue) * 100 : 0;
 
-    // Плечо за месяц: (делегирование другим + управление активом БВ) / самозанятость.
-    // Знаменатель — только «Вика лично». Если Вика лично ничего не делала, а
-    // числитель есть — это максимальное плечо (владелец только управляет): ratio=0
-    // здесь означал бы «нет данных», поэтому фронт для vika=0 показывает «∞»/«—».
-    const leverageNumerator = monthlyOthersProfit + monthlyBvProfit;
-    const leverageRatio = monthlyVikaProfit > 0 ? leverageNumerator / monthlyVikaProfit : 0;
+    // Плечо за месяц: (делегирование + активы под управлением) / личная работа.
+    // Если владелец лично ничего не делал, а числитель есть — это максимальное
+    // плечо (только управляет): ratio=0 здесь означал бы «нет данных», поэтому
+    // фронт для owner=0 показывает «∞»/«—».
+    const leverageNumerator = monthlyOthersProfit + monthlyManagedProfit;
+    const leverageRatio = monthlyOwnerProfit > 0 ? leverageNumerator / monthlyOwnerProfit : 0;
 
     // Available years — ensure current year is always present
     const yearsSet = new Set(availableYearsRows.map(r => r.yr).filter(Boolean));
@@ -687,8 +681,8 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
       },
       leverage: {
         othersProfit: monthlyOthersProfit,
-        bvProfit: monthlyBvProfit,
-        vikaProfit: monthlyVikaProfit,
+        managedProfit: monthlyManagedProfit,
+        ownerProfit: monthlyOwnerProfit,
         ratio: leverageRatio,
       },
       recurringExpected: recurringStats,

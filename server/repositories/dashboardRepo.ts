@@ -3,11 +3,11 @@
  * storage.ts (там они были инлайн). Все принимают db параметром — тестируются
  * против PGlite (см. server/test/testDb.ts).
  */
-import { eq, and, sql, inArray, desc, isNull } from "drizzle-orm";
+import { eq, and, sql, inArray, desc, isNull, isNotNull } from "drizzle-orm";
 import { db as _db } from "../db";
 import { invoices, invoiceCalculations, invoiceExpenses, partnerPayments, signedActs, partners, clients, accessTokens, recurringInvoices } from "../../shared/schema";
 import { parseNum } from "../../shared/financialEngine";
-import type { MonthlyData, PartnerHeroMetricsData } from "../storage";
+import type { MonthlyData, PartnerHeroMetricsData, DashboardInvoiceDetail } from "../storage";
 
 type DB = typeof _db;
 
@@ -1380,3 +1380,71 @@ export async function getPartnerDebtDetails(db: DB, partnerId: string): Promise<
       payments: paymentDetails,
     };
   }
+
+export async function getDashboardInvoices(db: DB, year: number, month: number, category: 'received' | 'expected' | 'drafts' | 'overdue' | 'drafts_no_date'): Promise<DashboardInvoiceDetail[]> {
+  // Провал-списки дашборда. Раньше метод грузил ВСЕ счета и фильтровал в JS —
+  // при росте базы каждый клик по карточке = полная выборка. Теперь фильтр в
+  // WHERE; семантика категорий 1:1 с getAdminDashboardStats (эффективная дата =
+  // paymentDate, иначе DATE(createdAt)).
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const monthStartStr = `${year}-${pad(month + 1)}-01`;
+  const monthEndStr   = `${year}-${pad(month + 1)}-${pad(lastDay)}`;
+  const effectiveDate = sql`COALESCE(${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
+  const inMonth = sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`;
+
+  let where;
+  switch (category) {
+    case 'received': // оплаченные месяца
+      where = and(eq(invoices.status, 'paid'), inMonth); break;
+    case 'expected': // ожидаемые месяца (не оплачены, не отменены)
+      where = and(sql`${invoices.status} NOT IN ('paid', 'cancelled')`, inMonth); break;
+    case 'drafts':   // продажи месяца: неотменённые, нерекуррентные, созданы в месяце
+      where = and(
+        sql`${invoices.status} != 'cancelled'`,
+        isNull(invoices.recurringInvoiceId),
+        sql`DATE(${invoices.createdAt}) BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`,
+      ); break;
+    case 'overdue':  // долги к сбору «как сейчас» (месяц игнорируется)
+      where = and(
+        eq(invoices.status, 'sent'),
+        isNull(invoices.actualPaymentDate),
+        isNotNull(invoices.paymentDate),
+        sql`${invoices.paymentDate} < CURRENT_DATE`,
+      ); break;
+    case 'drafts_no_date': // черновики без плановой даты (месяц игнорируется)
+      where = and(eq(invoices.status, 'draft'), isNull(invoices.paymentDate)); break;
+  }
+
+  const rows = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      status: invoices.status,
+      paymentDate: invoices.paymentDate,
+      createdAt: invoices.createdAt,
+      clientName: clients.name,
+      netProfitAdmin: invoiceCalculations.netProfitAdmin,
+      clientBill: invoiceCalculations.clientBill,
+    })
+    .from(invoices)
+    // innerJoin = прежнее `if (!row.calculations) continue`
+    .innerJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+    .leftJoin(clients, eq(invoices.clientId, clients.id))
+    .where(where);
+
+  const useEffective = category === 'received' || category === 'expected';
+  return rows
+    .map((r) => ({
+      id: r.id,
+      invoiceNumber: r.invoiceNumber || `INV-${r.id}`,
+      clientName: r.clientName,
+      netProfitAdmin: parseNum(r.netProfitAdmin),
+      clientBill: parseNum(r.clientBill),
+      status: r.status,
+      paymentDate: category === 'drafts' || category === 'drafts_no_date'
+        ? null
+        : (useEffective ? (r.paymentDate ?? r.createdAt)?.toString() ?? null : r.paymentDate?.toString() ?? null),
+    }))
+    .sort((a, b) => b.netProfitAdmin - a.netProfitAdmin);
+}

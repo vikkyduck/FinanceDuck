@@ -52,3 +52,8 @@ export const PARTNER_WRITABLE_FIELDS = [
 
 // Роли партнёра для коэффициента эффективности (см. shared/schema.ts).
 export const LEVERAGE_ROLES = ["external", "managed_asset", "owner"] as const;
+
+// Поля платежа партнёра. createdBy навязывается роутом; исключены id, createdAt.
+export const PARTNER_PAYMENT_WRITABLE_FIELDS = [
+  "partnerId", "invoiceId", "amount", "paymentDate", "notes",
+] as const;

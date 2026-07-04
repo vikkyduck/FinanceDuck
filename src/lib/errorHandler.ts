@@ -16,7 +16,7 @@ type ApiErrorLike = { code?: string; message?: string } | Error | null;
  * Поддерживает Postgres SQLSTATE-коды (на случай прямых SQL ошибок),
  * а также обычные Error-объекты.
  */
-export function handleSupabaseError(
+export function handleApiError(
   error: ApiErrorLike,
   context: ErrorContext
 ): void {
@@ -114,7 +114,7 @@ export async function withErrorHandling<T>(
       if (error.message.includes("fetch") || error.message.includes("network")) {
         handleNetworkError(error, context);
       } else {
-        handleSupabaseError(error, context);
+        handleApiError(error, context);
       }
     }
     return null;
@@ -132,7 +132,7 @@ export async function safeQuery<T>(
     const { data, error } = await queryFn();
 
     if (error) {
-      handleSupabaseError(error, context);
+      handleApiError(error, context);
       return null;
     }
 

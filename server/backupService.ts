@@ -14,7 +14,9 @@ import {
 } from "../shared/schema";
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/var/finance-duck/backups";
-const MAX_AUTO_BACKUPS = 7;
+// 30 ночных копий (~месяц). Было 7: «тихая» порча данных, не замеченная за
+// неделю, переживала все чистые копии. Дампы маленькие — диск не страдает.
+const MAX_AUTO_BACKUPS = 30;
 
 export interface BackupInfo {
   id: string;

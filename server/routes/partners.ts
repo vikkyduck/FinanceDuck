@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { storage } from "../storage";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
-import { pick, PARTNER_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
+import { pick, PARTNER_WRITABLE_FIELDS, PARTNER_PAYMENT_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
 
 export const partnersRouter = Router();
 
@@ -121,7 +121,7 @@ partnersRouter.get("/api/partner-payments", authMiddleware, async (req: Authenti
 
 partnersRouter.post("/api/partner-payments", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const payment = await storage.createPartnerPayment({ ...req.body, createdBy: req.user!.token.id });
+    const payment = await storage.createPartnerPayment({ ...pick(req.body, PARTNER_PAYMENT_WRITABLE_FIELDS), createdBy: req.user!.token.id });
     res.status(201).json(payment);
   } catch (error) {
     console.error("Create payment error:", error);

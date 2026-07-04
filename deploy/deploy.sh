@@ -44,7 +44,15 @@ echo "==> [4/6] Run database migrations"
 ssh "$SERVER_USER@$SERVER_HOST" "
   cd $REMOTE_DIR
   if [[ -f .env ]]; then
-    sudo -u $APP_USER bash -c 'set -a; source .env; set +a; npm run db:push -- --force || npm run db:push'
+    # БЕЗ --force: безопасные изменения применяются сами, а на деструктивных
+    # (DROP/TRUNCATE) drizzle спросит подтверждение — stdin закрыт, поэтому
+    # команда УПАДЁТ и оборвёт деплой (set -e). Раньше --force молча применял
+    # любой дрифт схемы, включая потенциальный DROP COLUMN с потерей данных.
+    sudo -u $APP_USER bash -c 'set -a; source .env; set +a; npm run db:push < /dev/null' || {
+      echo '❌ db:push требует подтверждения (деструктивное изменение схемы?).'
+      echo '   Разберись вручную: ssh на сервер, npm run db:push интерактивно.'
+      exit 1
+    }
   else
     echo '⚠️  .env not found on server — пропускаю миграцию. Создайте .env и запустите вручную.'
   fi

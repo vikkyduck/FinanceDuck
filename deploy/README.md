@@ -109,3 +109,13 @@ sudo -u postgres psql -c "SELECT pg_size_pretty(pg_database_size('finance_duck')
 # Ручной бэкап БД (pg_dump)
 sudo -u postgres pg_dump finance_duck | gzip > /var/finance-duck/backups/pgdump-$(date +%F).sql.gz
 ```
+
+## Операционная защита (2026-07)
+
+- **db:push без --force**: деструктивный дрифт схемы роняет деплой (stdin закрыт),
+  а не применяется молча. Конвенция: schema-изменения — ручной ALTER + drizzle-kit generate.
+- **Алерт о падении**: systemd `OnFailure` → Telegram (`/usr/local/bin/finance-duck-alert.sh`).
+  Требует `TG_ALERT_CHAT_ID=<chat_id>` в `/opt/finance-duck/.env` (без него молчит).
+- **Оффсайт-бэкапы**: машина администратора ежедневно (09:30) забирает
+  `/var/finance-duck/backups` к себе (launchd `com.financeduck.backup-pull`,
+  скрипт `~/FinanceDuckBackups/pull.sh`). Локальный ретеншн на сервере — 30 копий.

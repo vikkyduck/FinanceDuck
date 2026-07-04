@@ -43,3 +43,4 @@ dist-ssr
 storage/
 backups/
 dist-server
+attached_assets

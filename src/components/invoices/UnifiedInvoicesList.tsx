@@ -590,6 +590,7 @@ export const UnifiedInvoicesList = ({
                       <TableHead className="text-xs sm:text-sm font-semibold">Расходы</TableHead>
                       <TableHead className="text-xs sm:text-sm font-semibold">Прибыль</TableHead>
                       <TableHead className="text-xs sm:text-sm font-semibold">Долг партнёра</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Остаток</TableHead>
                     </>
                   )}
                   <TableHead className="text-xs sm:text-sm font-semibold">Статус</TableHead>
@@ -598,7 +599,7 @@ export const UnifiedInvoicesList = ({
                   )}
                   <TableHead className="text-xs sm:text-sm font-semibold">План. дата</TableHead>
                   <TableHead className="text-xs sm:text-sm font-semibold">Оплачен</TableHead>
-                  <TableHead></TableHead>
+                  {enableDelete && <TableHead></TableHead>}
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -672,6 +673,7 @@ export const UnifiedInvoicesList = ({
                           <TableCell className="text-muted-foreground">{formatCurrency(executorExpenses)}</TableCell>
                           <TableCell className="font-semibold text-primary">{formatCurrency(netProfit)}</TableCell>
                           <TableCell className="font-semibold text-destructive">{formatCurrency(debtToAdmin)}</TableCell>
+                          <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
                         </>
                       );
                     })()}
@@ -679,7 +681,7 @@ export const UnifiedInvoicesList = ({
                       <InvoiceProgressBadge status={invoice.status} />
                     </TableCell>
                     {(role === 'admin' || role === 'assistant') && (
-                      <TableCell className="text-muted-foreground max-w-[200px] truncate">
+                      <TableCell className="text-muted-foreground text-xs min-w-[180px] max-w-[320px] whitespace-normal break-words align-top py-2">
                         {invoice.notes || "—"}
                       </TableCell>
                     )}
@@ -695,41 +697,27 @@ export const UnifiedInvoicesList = ({
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                    {enableDelete && (
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleViewDetails(invoice.id);
+                            confirmDeleteInvoice(invoice.id, invoice.invoice_number);
                           }}
-                          disabled={isOpeningDetails}
-                          className="gap-2"
+                          disabled={deletingInvoiceId === invoice.id}
+                          className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          aria-label="Удалить счёт"
                         >
-                          <Eye className="h-4 w-4" />
-                          Открыть
+                          {deletingInvoiceId === invoice.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
                         </Button>
-                        {enableDelete && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              confirmDeleteInvoice(invoice.id, invoice.invoice_number);
-                            }}
-                            disabled={deletingInvoiceId === invoice.id}
-                            className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          >
-                            {deletingInvoiceId === invoice.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -873,13 +861,13 @@ export const UnifiedInvoicesList = ({
                   //   periodic (любая схема)  → оплачено / цена / использовано / осталось
                   //   остальное (commission_based one_time, partner_10/15) → только сумма + статус
                   (() => {
-                    const isAgencyScheme = isAgencyScheme(invoice.scheme);
+                    const isAgencyDeal = isAgencyScheme(invoice.scheme);
                     const isPeriodic = invoice.service_type === 'periodic';
                     const bill = Number(invoice.client_bill || 0);
                     return (
                       <div className="space-y-3">
                         <div className="flex justify-between text-lg font-bold group-hover:text-primary transition-colors">
-                          <span>{isAgencyScheme ? 'Всего оплачено:' : 'Сумма счёта:'}</span>
+                          <span>{isAgencyDeal ? 'Всего оплачено:' : 'Сумма счёта:'}</span>
                           <span>{formatCurrency(bill)}</span>
                         </div>
 
@@ -898,7 +886,7 @@ export const UnifiedInvoicesList = ({
                           );
                         })()}
 
-                        {isAgencyScheme && !isPeriodic && (() => {
+                        {isAgencyDeal && !isPeriodic && (() => {
                           const marginRate = invoice.scheme === 'agency_40' ? 40 : 30;
                           const commissionAmount = Number(invoice.agency_margin || (bill * marginRate / 100));
                           const available = Number(invoice.client_base_after_margin || (bill - commissionAmount));

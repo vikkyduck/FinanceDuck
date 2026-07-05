@@ -558,12 +558,12 @@ export const UnifiedInvoicesList = ({
         )}
         
         <div className="overflow-x-auto -mx-4 sm:mx-0">
-          <div className="min-w-[800px] px-4 sm:px-0">
-            <Table>
+          <div className="px-4 sm:px-0">
+            <Table className="w-full table-fixed">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b">
                   {enableDelete && (
-                    <TableHead className="w-[50px]">
+                    <TableHead className="w-[40px]">
                       <Checkbox
                         checked={selectedInvoices.length === invoices.length && invoices.length > 0}
                         onCheckedChange={toggleSelectAll}
@@ -571,35 +571,32 @@ export const UnifiedInvoicesList = ({
                       />
                     </TableHead>
                   )}
-                  <TableHead className="text-xs sm:text-sm font-semibold">Номер</TableHead>
+                  <TableHead className="w-[64px] text-xs sm:text-sm font-semibold">Номер</TableHead>
                   <TableHead className="text-xs sm:text-sm font-semibold">Клиент</TableHead>
                   {(role === 'admin' || role === 'assistant') && (
                     <TableHead className="text-xs sm:text-sm font-semibold">Партнёр</TableHead>
                   )}
-                  <TableHead className="text-xs sm:text-sm font-semibold">Сумма</TableHead>
+                  <TableHead className="w-[120px] text-xs sm:text-sm font-semibold">Сумма</TableHead>
                   {role === 'partner' && (
                     <>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Расходы</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Моя доля</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Доля админа</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Остаток</TableHead>
+                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Расходы</TableHead>
+                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Моя доля</TableHead>
+                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Доля админа</TableHead>
+                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Остаток</TableHead>
                     </>
                   )}
                   {role === 'admin' && (
                     <>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Расходы</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Прибыль</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Долг партнёра</TableHead>
-                      <TableHead className="text-xs sm:text-sm font-semibold">Остаток</TableHead>
+                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Расходы</TableHead>
+                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Прибыль</TableHead>
+                      <TableHead className="w-[110px] text-xs sm:text-sm font-semibold">Остаток</TableHead>
                     </>
                   )}
-                  <TableHead className="text-xs sm:text-sm font-semibold">Статус</TableHead>
+                  <TableHead className="w-[116px] text-xs sm:text-sm font-semibold">Статус</TableHead>
                   {(role === 'admin' || role === 'assistant') && (
                     <TableHead className="text-xs sm:text-sm font-semibold">Комментарий</TableHead>
                   )}
-                  <TableHead className="text-xs sm:text-sm font-semibold">План. дата</TableHead>
-                  <TableHead className="text-xs sm:text-sm font-semibold">Оплачен</TableHead>
-                  {enableDelete && <TableHead></TableHead>}
+                  <TableHead className="w-[64px] text-xs sm:text-sm font-semibold">Оплачен</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -636,7 +633,7 @@ export const UnifiedInvoicesList = ({
                       <TableCell className="text-muted-foreground">{invoice.partner_name || "—"}</TableCell>
                     )}
                     <TableCell>
-                      <div className="text-2xl font-semibold">{formatCurrency(invoice.client_bill || 0)}</div>
+                      <div className="text-base font-semibold whitespace-nowrap">{formatCurrency(invoice.client_bill || 0)}</div>
                       {invoice.service_type === 'periodic' && Number(invoice.total_periods || 0) > 0 && (
                         <div className="text-[11px] text-muted-foreground mt-0.5">
                           {formatCurrency(Number(invoice.price_per_period || 0))} × {Number(invoice.total_periods || 0)} {invoice.period_unit === 'day' ? 'дн' : 'мес'} · использовано {Number(invoice.periods_used || 0)}/{Number(invoice.total_periods || 0)}
@@ -661,33 +658,21 @@ export const UnifiedInvoicesList = ({
                         <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
                       </>
                     )}
-                    {role === 'admin' && (() => {
-                      const executorExpenses = invoice.executor_expenses_total || 0;
-                      const netProfit = invoice.net_profit_admin || 0;
-                      // Use stored partnerTransferDue as single source of truth
-                      const storedDebt = Number(invoice.partner_transfer_due) || 0;
-                      const debtToAdmin = Math.max(0, storedDebt);
-                      
-                      return (
-                        <>
-                          <TableCell className="text-muted-foreground">{formatCurrency(executorExpenses)}</TableCell>
-                          <TableCell className="font-semibold text-primary">{formatCurrency(netProfit)}</TableCell>
-                          <TableCell className="font-semibold text-destructive">{formatCurrency(debtToAdmin)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
-                        </>
-                      );
-                    })()}
+                    {role === 'admin' && (
+                      <>
+                        <TableCell className="text-muted-foreground">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
+                        <TableCell className="font-semibold text-primary">{formatCurrency(invoice.net_profit_admin || 0)}</TableCell>
+                        <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
+                      </>
+                    )}
                     <TableCell>
                       <InvoiceProgressBadge status={invoice.status} />
                     </TableCell>
                     {(role === 'admin' || role === 'assistant') && (
-                      <TableCell className="text-muted-foreground text-xs min-w-[180px] max-w-[320px] whitespace-normal break-words align-top py-2">
+                      <TableCell className="text-muted-foreground text-xs whitespace-normal break-words align-top py-2">
                         {invoice.notes || "—"}
                       </TableCell>
                     )}
-                    <TableCell className="text-muted-foreground">
-                      {invoice.payment_date ? formatDate(invoice.payment_date) : "—"}
-                    </TableCell>
                     <TableCell className="text-center">
                       {invoice.actual_payment_date && (
                         <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
@@ -697,27 +682,6 @@ export const UnifiedInvoicesList = ({
                         </div>
                       )}
                     </TableCell>
-                    {enableDelete && (
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            confirmDeleteInvoice(invoice.id, invoice.invoice_number);
-                          }}
-                          disabled={deletingInvoiceId === invoice.id}
-                          className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          aria-label="Удалить счёт"
-                        >
-                          {deletingInvoiceId === invoice.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TableCell>
-                    )}
                   </TableRow>
                 );
               })}

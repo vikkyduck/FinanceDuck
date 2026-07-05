@@ -559,7 +559,7 @@ export const UnifiedInvoicesList = ({
         
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <div className="px-4 sm:px-0">
-            <Table className="w-full table-fixed">
+            <Table className="w-full">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b">
                   {enableDelete && (
@@ -571,32 +571,32 @@ export const UnifiedInvoicesList = ({
                       />
                     </TableHead>
                   )}
-                  <TableHead className="w-[64px] text-xs sm:text-sm font-semibold">Номер</TableHead>
+                  <TableHead className="text-xs sm:text-sm font-semibold whitespace-nowrap">Номер</TableHead>
                   <TableHead className="text-xs sm:text-sm font-semibold">Клиент</TableHead>
                   {(role === 'admin' || role === 'assistant') && (
-                    <TableHead className="text-xs sm:text-sm font-semibold">Партнёр</TableHead>
+                    <TableHead className="hidden xl:table-cell text-xs sm:text-sm font-semibold">Партнёр</TableHead>
                   )}
-                  <TableHead className="w-[120px] text-xs sm:text-sm font-semibold">Сумма</TableHead>
+                  <TableHead className="text-xs sm:text-sm font-semibold">Сумма</TableHead>
                   {role === 'partner' && (
                     <>
-                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Расходы</TableHead>
-                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Моя доля</TableHead>
-                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Доля админа</TableHead>
-                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Остаток</TableHead>
+                      <TableHead className="hidden lg:table-cell text-xs sm:text-sm font-semibold">Расходы</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Моя доля</TableHead>
+                      <TableHead className="hidden xl:table-cell text-xs sm:text-sm font-semibold">Доля админа</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Остаток</TableHead>
                     </>
                   )}
                   {role === 'admin' && (
                     <>
-                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Расходы</TableHead>
-                      <TableHead className="w-[100px] text-xs sm:text-sm font-semibold">Прибыль</TableHead>
-                      <TableHead className="w-[110px] text-xs sm:text-sm font-semibold">Остаток</TableHead>
+                      <TableHead className="hidden lg:table-cell text-xs sm:text-sm font-semibold">Расходы</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Прибыль</TableHead>
+                      <TableHead className="text-xs sm:text-sm font-semibold">Остаток</TableHead>
                     </>
                   )}
-                  <TableHead className="w-[116px] text-xs sm:text-sm font-semibold">Статус</TableHead>
+                  <TableHead className="text-xs sm:text-sm font-semibold">Статус</TableHead>
                   {(role === 'admin' || role === 'assistant') && (
                     <TableHead className="text-xs sm:text-sm font-semibold">Комментарий</TableHead>
                   )}
-                  <TableHead className="w-[64px] text-xs sm:text-sm font-semibold">Оплачен</TableHead>
+                  <TableHead className="hidden lg:table-cell text-xs sm:text-sm font-semibold text-center">Оплачен</TableHead>
                 </TableRow>
               </TableHeader>
             <TableBody>
@@ -605,7 +605,7 @@ export const UnifiedInvoicesList = ({
                   <TableRow 
                     key={invoice.id} 
                     ref={setRef(index)}
-                    className={`h-16 hover:bg-muted/30 transition-colors cursor-pointer ${invoice.hidden_from_assistant ? 'opacity-50' : ''}`}
+                    className={`hover:bg-muted/30 transition-colors cursor-pointer ${invoice.hidden_from_assistant ? 'opacity-50' : ''}`}
                     onClick={() => !isOpeningDetails && handleViewDetails(invoice.id)}
                   >
                     {enableDelete && (
@@ -617,8 +617,8 @@ export const UnifiedInvoicesList = ({
                         />
                       </TableCell>
                     )}
-                    <TableCell className="font-medium text-base">
-                      <div className="flex items-center gap-2">
+                    <TableCell className="font-medium text-sm whitespace-nowrap align-top py-3">
+                      <div className="flex items-center gap-1.5">
                         {invoice.invoice_number}
                         {invoice.hidden_from_assistant && (
                           <Badge variant="secondary" className="gap-1 text-xs">
@@ -628,11 +628,11 @@ export const UnifiedInvoicesList = ({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{invoice.client_name}</TableCell>
+                    <TableCell className="text-muted-foreground align-top py-3 break-words">{invoice.client_name}</TableCell>
                     {(role === 'admin' || role === 'assistant') && (
-                      <TableCell className="text-muted-foreground">{invoice.partner_name || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-muted-foreground align-top py-3 break-words">{invoice.partner_name || "—"}</TableCell>
                     )}
-                    <TableCell>
+                    <TableCell className="align-top py-3">
                       <div className="text-base font-semibold whitespace-nowrap">{formatCurrency(invoice.client_bill || 0)}</div>
                       {invoice.service_type === 'periodic' && Number(invoice.total_periods || 0) > 0 && (
                         <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -642,38 +642,38 @@ export const UnifiedInvoicesList = ({
                     </TableCell>
                     {role === 'partner' && (
                       <>
-                        <TableCell className="text-muted-foreground">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
-                        <TableCell className="font-semibold text-primary">
+                        <TableCell className="hidden lg:table-cell text-muted-foreground whitespace-nowrap align-top py-3">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
+                        <TableCell className="font-semibold text-primary whitespace-nowrap align-top py-3">
                           {(isAgencyScheme(invoice.scheme))
                             ? formatCurrency(invoice.partner_share_from_margin || 0)
                             : formatCurrency(invoice.commission_amount || 0)
                           }
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="hidden xl:table-cell text-muted-foreground whitespace-nowrap align-top py-3">
                           {(isAgencyScheme(invoice.scheme))
                             ? formatCurrency(invoice.admin_share_from_margin || 0)
                             : '—'
                           }
                         </TableCell>
-                        <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
+                        <TableCell className="font-medium whitespace-nowrap align-top py-3">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
                       </>
                     )}
                     {role === 'admin' && (
                       <>
-                        <TableCell className="text-muted-foreground">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
-                        <TableCell className="font-semibold text-primary">{formatCurrency(invoice.net_profit_admin || 0)}</TableCell>
-                        <TableCell className="font-medium">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-muted-foreground whitespace-nowrap align-top py-3">{formatCurrency(invoice.executor_expenses_total || 0)}</TableCell>
+                        <TableCell className="font-semibold text-primary whitespace-nowrap align-top py-3">{formatCurrency(invoice.net_profit_admin || 0)}</TableCell>
+                        <TableCell className="font-medium whitespace-nowrap align-top py-3">{formatCurrency(invoice.client_remaining || 0)}</TableCell>
                       </>
                     )}
-                    <TableCell>
+                    <TableCell className="align-top py-3">
                       <InvoiceProgressBadge status={invoice.status} />
                     </TableCell>
                     {(role === 'admin' || role === 'assistant') && (
-                      <TableCell className="text-muted-foreground text-xs whitespace-normal break-words align-top py-2">
+                      <TableCell className="text-muted-foreground text-xs whitespace-normal break-words align-top py-3 max-w-[280px]">
                         {invoice.notes || "—"}
                       </TableCell>
                     )}
-                    <TableCell className="text-center">
+                    <TableCell className="hidden lg:table-cell text-center align-top py-3">
                       {invoice.actual_payment_date && (
                         <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
                           <svg className="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">

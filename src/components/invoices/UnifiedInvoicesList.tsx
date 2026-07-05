@@ -559,7 +559,9 @@ export const UnifiedInvoicesList = ({
         
         <div className="overflow-x-auto -mx-4 sm:mx-0">
           <div className="px-4 sm:px-0">
-            <Table className="w-full">
+            {/* [&_th]:px-2 [&_td]:px-2 — уплотнили боковые отступы (16px→8px),
+                чтобы 10 колонок влезали без горизонтального скролла. */}
+            <Table className="w-full [&_th]:px-2 [&_td]:px-2">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b">
                   {enableDelete && (
@@ -669,7 +671,7 @@ export const UnifiedInvoicesList = ({
                       <InvoiceProgressBadge status={invoice.status} />
                     </TableCell>
                     {(role === 'admin' || role === 'assistant') && (
-                      <TableCell className="text-muted-foreground text-xs whitespace-normal break-words align-top py-3 max-w-[280px]">
+                      <TableCell className="text-muted-foreground text-xs whitespace-normal break-words align-top py-3 max-w-[200px]">
                         {invoice.notes || "—"}
                       </TableCell>
                     )}

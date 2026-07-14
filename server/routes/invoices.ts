@@ -4,6 +4,7 @@ import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware
 import { stripSensitiveFieldsForRole, stripSensitiveFieldsFromList, isClientFinancialVisible, isClientUsageVisible } from "../permissions";
 import { pick, INVOICE_WRITABLE_FIELDS, EXPENSE_WRITABLE_FIELDS } from "../lib/sanitize";
 import { validateBody, invoiceMoneySchema, expenseCreateSchema, expenseUpdateSchema } from "../lib/validate";
+import { constrainInvoiceWrite, findAuthorizedInvoice } from "../invoiceAccess";
 
 export const invoicesRouter = Router();
 
@@ -23,11 +24,11 @@ invoicesRouter.get("/api/invoices", authMiddleware, async (req: AuthenticatedReq
 
 invoicesRouter.get("/api/invoices/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
-    const invoice = await storage.getInvoiceForRole(id, role as any, req.user?.partnerId, req.user?.clientId);
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const invoice = await findAuthorizedInvoice(storage, actor, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    res.json(stripSensitiveFieldsForRole(invoice, role));
+    res.json(stripSensitiveFieldsForRole(invoice, actor.role));
   } catch (error) {
     console.error("Get invoice error:", error);
     res.status(500).json({ error: "Failed to get invoice" });
@@ -40,7 +41,11 @@ invoicesRouter.post("/api/invoices", authMiddleware, requireRole("admin", "assis
     const vErr = validateBody(invoiceMoneySchema, req.body);
     if (vErr) return res.status(400).json({ error: vErr });
     const { calculations } = req.body || {};
-    const invoiceData = pick(req.body, INVOICE_WRITABLE_FIELDS);
+    const invoiceData = constrainInvoiceWrite(
+      role,
+      pick(req.body, INVOICE_WRITABLE_FIELDS),
+      "create",
+    );
     const invoice = await storage.createInvoice({ ...invoiceData, createdBy: req.user!.token.id }, calculations || {});
     const fullInvoice = await storage.getInvoice(invoice.id);
     const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
@@ -106,16 +111,20 @@ invoicesRouter.post("/api/invoices", authMiddleware, requireRole("admin", "assis
 
 invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
+    const existing = await findAuthorizedInvoice(storage, actor, id);
+    if (!existing) return res.status(404).json({ error: "Invoice not found" });
+
     const vErr = validateBody(invoiceMoneySchema, req.body);
     if (vErr) return res.status(400).json({ error: vErr });
     const { calculations } = req.body || {};
-    const invoiceData = pick(req.body, INVOICE_WRITABLE_FIELDS);
-    if (role === "accountant") {
-      const existing = await storage.getInvoice(id);
-      if (!existing || !existing.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
-    }
+    const invoiceData = constrainInvoiceWrite(
+      role,
+      pick(req.body, INVOICE_WRITABLE_FIELDS),
+      "update",
+    );
 
     // Валидация периодических полей: 1 ≤ totalPeriods, 0 ≤ pricePerPeriod,
     // 0 ≤ periodsUsed ≤ totalPeriods. Проверяем по эффективному состоянию
@@ -127,8 +136,6 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
       invoiceData.totalPeriods !== undefined ||
       invoiceData.periodsUsed !== undefined;
     if (periodicTouched) {
-      const existing = await storage.getInvoice(id);
-      if (!existing) return res.status(404).json({ error: "Invoice not found" });
       const eff = {
         serviceType:    invoiceData.serviceType    ?? existing.serviceType,
         pricePerPeriod: invoiceData.pricePerPeriod ?? existing.pricePerPeriod,
@@ -152,7 +159,7 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
     if (calculations || invoiceData.plannedExpenses !== undefined || periodicTouched) {
       await storage.updateInvoiceCalculations(id, calculations || {});
     }
-    const fullInvoice = await storage.getInvoice(id);
+    const fullInvoice = await findAuthorizedInvoice(storage, actor, id);
     const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
     if (role === "assistant" || role === "admin" || role === "accountant") {
       const client = fullInvoice?.clientId ? await storage.getClient(fullInvoice.clientId) : null;
@@ -160,6 +167,40 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
       const invoiceNumber = fullInvoice?.invoiceNumber;
       const displayName = invoiceNumber || client?.name || partner?.name || fullInvoice?.description || id;
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_invoice", entityType: "invoice", entityId: id, description: `Обновлён счёт: ${displayName}`, details: JSON.stringify({ invoiceNumber, clientName: client?.name, partnerName: partner?.name, description: fullInvoice?.description, status: fullInvoice?.status, ...invoiceData }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+    }
+    // Fire-and-forget: уведомление клиенту в чат при ПЕРЕХОДЕ счёта в «оплачен».
+    // Раньше отметка оплаты ничего не слала (в отличие от создания/расхода/
+    // переноса). Партнёр на адресата не влияет — пишем в чат КЛИЕНТА.
+    if (existing.status !== 'paid' && fullInvoice?.status === 'paid' && fullInvoice?.clientId) {
+      (async () => {
+        try {
+          const { resolveTelegramTarget, sendTelegramMessage, escapeHtml, publicUrl } = await import("../lib/telegram");
+          const client = await storage.getClient(fullInvoice.clientId!);
+          const target = resolveTelegramTarget(client as any);
+          if (!target) return;
+          const label = fullInvoice.clientTitle || fullInvoice.invoiceNumber || id;
+          // Сумма — как в уведомлении о новом счёте: агентским показываем базу
+          // без комиссии агентства, остальным — сумму счёта.
+          const displayAmount = isClientFinancialVisible(fullInvoice.scheme)
+            ? (Number(fullInvoice.calculations?.clientBaseAfterMargin) || Number(fullInvoice.clientBill) || 0)
+            : (Number(fullInvoice.clientBill) || 0);
+          const amountStr = new Intl.NumberFormat("ru-RU", {
+            style: "currency", currency: "RUB", minimumFractionDigits: 0, maximumFractionDigits: 2,
+          }).format(displayAmount);
+          const link = publicUrl(`/invoices/${id}`);
+          const linkPart = link ? `\n<a href="${escapeHtml(link)}">Открыть счёт →</a>` : "";
+          const contactSuffix = (client as any)?.contactPerson
+            ? ` (${escapeHtml((client as any).contactPerson)})`
+            : "";
+          const html =
+            `✅ <b>Оплата получена</b> · ${escapeHtml(label)}${contactSuffix}\n` +
+            `Сумма: <b>${escapeHtml(amountStr)}</b>` +
+            linkPart;
+          await sendTelegramMessage(target, html);
+        } catch (e) {
+          console.error("[telegram] payment notify failed:", (e as Error).message);
+        }
+      })().catch(() => {});
     }
     res.json(filtered);
   } catch (error) {
@@ -169,10 +210,12 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
 });
 
 // Закрыть один период периодического счёта: periodsUsed += 1, не больше totalPeriods.
-invoicesRouter.post("/api/invoices/:id/close-period", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+invoicesRouter.post("/api/invoices/:id/close-period", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const existing = await storage.getInvoice(id);
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
+    const existing = await findAuthorizedInvoice(storage, actor, id);
     if (!existing) return res.status(404).json({ error: "Invoice not found" });
     if (existing.serviceType !== 'periodic') {
       return res.status(400).json({ error: "Счёт не периодический" });
@@ -184,9 +227,8 @@ invoicesRouter.post("/api/invoices/:id/close-period", authMiddleware, requireRol
     }
     await storage.updateInvoice(id, { periodsUsed: used + 1 });
     await storage.updateInvoiceCalculations(id, {});
-    const fullInvoice = await storage.getInvoice(id);
-    const role = req.user?.role || "admin";
-    if (role === "assistant" || role === "admin") {
+    const fullInvoice = await findAuthorizedInvoice(storage, actor, id);
+    if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({
         accessTokenId: req.user!.token.id,
         actionType: "update_invoice",
@@ -227,12 +269,13 @@ invoicesRouter.delete("/api/invoices/:id", authMiddleware, requireRole("admin"),
 
 invoicesRouter.get("/api/invoices/:id/expenses", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role === "client") {
-      const invoice = await storage.getInvoice(req.params.id);
-      if (!invoice || invoice.clientId !== req.user.clientId) {
-        return res.status(404).json({ error: "Invoice not found" });
-      }
-      const expenses = await storage.getInvoiceExpenses(req.params.id);
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const invoice = await findAuthorizedInvoice(storage, actor, id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+    const expenses = await storage.getInvoiceExpenses(id);
+    if (actor.role === "client") {
       // Агентские 30/40 — клиент видит расходы целиком (вместе с суммами).
       if (isClientFinancialVisible(invoice.scheme)) {
         return res.json(expenses);
@@ -248,7 +291,7 @@ invoicesRouter.get("/api/invoices/:id/expenses", authMiddleware, async (req: Aut
         createdAt: e.createdAt,
       })));
     }
-    res.json(await storage.getInvoiceExpenses(req.params.id));
+    res.json(expenses);
   } catch (error) {
     console.error("Get expenses error:", error);
     res.status(500).json({ error: "Failed to get expenses" });
@@ -257,14 +300,14 @@ invoicesRouter.get("/api/invoices/:id/expenses", authMiddleware, async (req: Aut
 
 invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
+    const invoice = await findAuthorizedInvoice(storage, actor, id);
+    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
     const vErr = validateBody(expenseCreateSchema, req.body);
     if (vErr) return res.status(400).json({ error: vErr });
-    if (role === "accountant") {
-      const inv = await storage.getInvoice(id);
-      if (!inv || !inv.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
-    }
     const expense = await storage.createInvoiceExpense({ ...pick(req.body, EXPENSE_WRITABLE_FIELDS), invoiceId: id, createdBy: req.user!.token.id });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_expense", entityType: "expense", entityId: expense.id, description: `Создан расход: ${req.body.description || expense.id}`, details: JSON.stringify({ invoiceId: id, amount: req.body.amount, paidByPartner: req.body.paidByPartner }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
@@ -276,20 +319,19 @@ invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("a
     // раскрываем описание расхода (там имя/оклад исполнителя — внутреннее).
     (async () => {
       try {
-        const inv = await storage.getInvoice(id);
-        if (!inv || !isClientUsageVisible(inv)) return;
+        if (!isClientUsageVisible(invoice)) return;
         const { resolveTelegramTarget, sendTelegramMessage, escapeHtml, publicUrl } = await import("../lib/telegram");
-        const client = inv.clientId ? await storage.getClient(inv.clientId) : null;
+        const client = invoice.clientId ? await storage.getClient(invoice.clientId) : null;
         const target = resolveTelegramTarget(client as any);
         if (!target) return;
-        const isPeriodic = inv.serviceType === "periodic";
-        const invoiceLabel = inv.clientTitle || inv.invoiceNumber || id;
+        const isPeriodic = invoice.serviceType === "periodic";
+        const invoiceLabel = invoice.clientTitle || invoice.invoiceNumber || id;
         // Клиентская сумма: для периодических — ставка за период, иначе — сама трата.
-        const clientAmount = isPeriodic ? (Number(inv.pricePerPeriod) || 0) : (Number(expense.amount) || 0);
+        const clientAmount = isPeriodic ? (Number(invoice.pricePerPeriod) || 0) : (Number(expense.amount) || 0);
         const amountStr = new Intl.NumberFormat("ru-RU", {
           style: "currency", currency: "RUB", minimumFractionDigits: 0, maximumFractionDigits: 2,
         }).format(clientAmount);
-        const unitLabel = ({ month: "месяц", day: "день", hour: "час" } as Record<string, string>)[String(inv.periodUnit)] || "период";
+        const unitLabel = ({ month: "месяц", day: "день", hour: "час" } as Record<string, string>)[String(invoice.periodUnit)] || "период";
         // Для периодических — нейтральная клиентская подпись (без исполнителя).
         const lineDesc = isPeriodic ? `Списание за ${unitLabel}` : (expense.description || "—");
         const link = publicUrl(`/invoices/${id}`);
@@ -315,8 +357,15 @@ invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("a
 
 invoicesRouter.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
+    const existingExpense = await storage.getInvoiceExpense(id);
+    if (!existingExpense) return res.status(404).json({ error: "Expense not found" });
+    if (!await findAuthorizedInvoice(storage, actor, existingExpense.invoiceId)) {
+      return res.status(404).json({ error: "Expense not found" });
+    }
+
     const vErr = validateBody(expenseUpdateSchema, req.body);
     if (vErr) return res.status(400).json({ error: vErr });
     const expense = await storage.updateInvoiceExpense(id, pick(req.body, EXPENSE_WRITABLE_FIELDS));
@@ -333,10 +382,17 @@ invoicesRouter.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "
 
 invoicesRouter.delete("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
+    const expense = await storage.getInvoiceExpense(id);
+    if (!expense) return res.status(404).json({ error: "Expense not found" });
+    if (!await findAuthorizedInvoice(storage, actor, expense.invoiceId)) {
+      return res.status(404).json({ error: "Expense not found" });
+    }
+
     if (role === "assistant" || role === "admin" || role === "accountant") {
-      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "delete_expense", entityType: "expense", entityId: id, description: `Удалён расход: ${id}`, details: null, ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "delete_expense", entityType: "expense", entityId: id, description: `Удалён расход: ${expense.description || id}`, details: JSON.stringify({ invoiceId: expense.invoiceId }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
     await storage.deleteInvoiceExpense(id);
     res.json({ success: true });
@@ -416,15 +472,10 @@ invoicesRouter.post("/api/invoices/transfer", authMiddleware, requireRole("admin
 
 invoicesRouter.get("/api/invoices/:id/transfers", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const role = req.user?.role || "client";
-    const inv = await storage.getInvoice(req.params.id);
+    const id = String(req.params.id);
+    const inv = await findAuthorizedInvoice(storage, req.user!, id);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "client") {
-      if (inv.clientId !== req.user?.clientId) return res.status(403).json({ error: "Forbidden" });
-    } else if (role === "partner") {
-      if (inv.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
-    }
-    res.json(await storage.getInvoiceTransfers(req.params.id));
+    res.json(await storage.getInvoiceTransfers(id));
   } catch (error) {
     console.error("Get transfers error:", error);
     res.status(500).json({ error: "Не удалось получить переносы" });
@@ -463,12 +514,10 @@ invoicesRouter.delete("/api/documents/:id", authMiddleware, requireRole("admin",
 
 invoicesRouter.patch("/api/invoices/:id/closing-document", authMiddleware, requireRole("admin", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { closingDocumentUrl } = req.body;
-    const role = req.user?.role || "client";
-    const invoice = await storage.getInvoice(id);
+    const invoice = await findAuthorizedInvoice(storage, req.user!, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "accountant" && !invoice.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
     const updated = await storage.updateInvoice(id, { closingDocumentUrl });
     await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_invoice", entityType: "invoice", entityId: id, description: `${closingDocumentUrl ? "Прикреплён" : "Удалён"} закрывающий документ: ${invoice.invoiceNumber || id}`, details: JSON.stringify({ closingDocumentUrl, invoiceNumber: invoice.invoiceNumber }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     res.json(updated);

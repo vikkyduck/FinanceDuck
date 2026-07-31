@@ -7,7 +7,7 @@ export interface ClientListItem {
   phone: string | null;
   contactPerson: string | null;
   tgChatId: string | null;
-  tgBotToken: string | null;
+  hasTgBotToken: boolean;
   partnerId: string | null;
   createdAt?: string;
 }
@@ -320,7 +320,7 @@ export const invoiceService = {
       phone: client.phone || null,
       contactPerson: client.contactPerson || null,
       tgChatId: client.tgChatId || null,
-      tgBotToken: client.tgBotToken || null,
+      hasTgBotToken: client.hasTgBotToken === true,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
     }));
@@ -348,7 +348,7 @@ export const invoiceService = {
       phone: client.phone || null,
       contactPerson: client.contactPerson || null,
       tgChatId: client.tgChatId || null,
-      tgBotToken: client.tgBotToken || null,
+      hasTgBotToken: client.hasTgBotToken === true,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
     }));
@@ -363,7 +363,7 @@ export const invoiceService = {
       phone: data.phone || null,
       contactPerson: data.contactPerson || null,
       tgChatId: data.tgChatId || null,
-      tgBotToken: data.tgBotToken || null,
+      hasTgBotToken: data.hasTgBotToken === true,
       partnerId: data.partnerId || null,
       createdAt: data.createdAt,
       partner: data.partner ? {
@@ -396,7 +396,7 @@ export const invoiceService = {
       phone: data.phone || null,
       contactPerson: data.contactPerson || null,
       tgChatId: data.tgChatId || null,
-      tgBotToken: data.tgBotToken || null,
+      hasTgBotToken: data.hasTgBotToken === true,
       partnerId: data.partnerId || null,
       createdAt: data.createdAt,
     };
@@ -420,7 +420,7 @@ export const invoiceService = {
       phone: data.phone || null,
       contactPerson: data.contactPerson || null,
       tgChatId: data.tgChatId || null,
-      tgBotToken: data.tgBotToken || null,
+      hasTgBotToken: data.hasTgBotToken === true,
       partnerId: data.partnerId || null,
       createdAt: data.createdAt,
     };
@@ -470,7 +470,7 @@ export const invoiceService = {
       phone: client.phone || null,
       contactPerson: client.contactPerson || null,
       tgChatId: client.tgChatId || null,
-      tgBotToken: client.tgBotToken || null,
+      hasTgBotToken: client.hasTgBotToken === true,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
       partners: (client.partners || []).map((p: any) => ({

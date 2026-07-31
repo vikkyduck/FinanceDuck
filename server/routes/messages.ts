@@ -1,9 +1,11 @@
 import { Router, Response } from "express";
 import { db } from "../db";
-import { and, desc, eq, inArray, isNull, isNotNull, or, sql } from "drizzle-orm";
-import { invoiceMessages, invoices, invoiceExpenses, clients } from "../../shared/schema";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { invoiceMessages, invoiceExpenses, clients } from "../../shared/schema";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
 import { resolveTelegramTarget, sendTelegramMessage, escapeHtml, publicUrl } from "../lib/telegram";
+import { storage } from "../storage";
+import { findAuthorizedInvoice, resolveMessageInvoiceScope } from "../invoiceAccess";
 
 // «Сторона» треда: клиент — одна, admin+assistant — другая. Мы храним
 // read_at симметрично, и помечаем «прочитано» с противоположной стороны.
@@ -23,19 +25,15 @@ export const messagesRouter = Router();
  */
 messagesRouter.get("/api/messages/threads", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const role = req.user?.role || "client";
-    const clientId = req.user?.clientId;
+    const actor = req.user!;
+    const scope = resolveMessageInvoiceScope(actor);
+    if (!scope) return res.status(403).json({ error: "Forbidden" });
 
-    // Узкий срез по доступным счетам (для client — только свои).
-    let invoiceFilter;
-    if (role === "client") {
-      if (!clientId) return res.status(403).json({ error: "Клиент не идентифицирован" });
-      invoiceFilter = eq(invoices.clientId, clientId);
-    } else if (role === "admin" || role === "assistant") {
-      invoiceFilter = undefined;
-    } else {
-      return res.status(403).json({ error: "Forbidden" });
-    }
+    const accessWhere = scope.kind === "client"
+      ? sql`WHERE i.client_id = ${scope.clientId}`
+      : scope.kind === "assistant"
+        ? sql`WHERE COALESCE(i.hide_from_assistant, FALSE) = FALSE`
+        : sql``;
 
     // Группировка тредов по (invoice_id, expense_id).
     // Берём для каждого треда последнее сообщение через distinct on.
@@ -70,7 +68,7 @@ messagesRouter.get("/api/messages/threads", authMiddleware, async (req: Authenti
         JOIN invoices i ON i.id = im.invoice_id
         JOIN clients  c ON c.id = i.client_id
         LEFT JOIN invoice_expenses ie ON ie.id = im.expense_id
-       ${role === "client" ? sql`WHERE i.client_id = ${clientId}` : sql``}
+       ${accessWhere}
        GROUP BY im.invoice_id, im.expense_id, i.invoice_number, i.client_id, c.name, ie.description, ie.amount
        ORDER BY MAX(im.created_at) DESC
     `);
@@ -85,20 +83,16 @@ messagesRouter.get("/api/messages/threads", authMiddleware, async (req: Authenti
 /** Сообщения одного треда (по invoiceId + опционально expenseId). */
 messagesRouter.get("/api/messages", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const role = req.user?.role || "client";
+    const actor = req.user!;
+    if (!resolveMessageInvoiceScope(actor)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const invoiceId = String(req.query.invoiceId || "");
     const expenseId = req.query.expenseId ? String(req.query.expenseId) : null;
     if (!invoiceId) return res.status(400).json({ error: "invoiceId обязателен" });
 
-    // Проверка доступа: client видит только свои счета.
-    const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
-    if (!inv) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "client") {
-      if (!req.user?.clientId || inv.clientId !== req.user.clientId) {
-        return res.status(404).json({ error: "Invoice not found" });
-      }
-    } else if (role !== "admin" && role !== "assistant") {
-      return res.status(403).json({ error: "Forbidden" });
+    if (!await findAuthorizedInvoice(storage, actor, invoiceId)) {
+      return res.status(404).json({ error: "Invoice not found" });
     }
 
     const whereExp = expenseId
@@ -131,10 +125,7 @@ messagesRouter.post("/api/messages/mark-read", authMiddleware, requireRole("clie
     const expenseId: string | null = req.body?.expenseId ?? null;
     if (!invoiceId || typeof invoiceId !== "string") return res.status(400).json({ error: "invoiceId обязателен" });
 
-    // Доступ: клиент может пометить только свои счета.
-    const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
-    if (!inv) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "client" && (!req.user?.clientId || inv.clientId !== req.user.clientId)) {
+    if (!await findAuthorizedInvoice(storage, req.user!, invoiceId)) {
       return res.status(404).json({ error: "Invoice not found" });
     }
 
@@ -163,15 +154,21 @@ messagesRouter.post("/api/messages/mark-read", authMiddleware, requireRole("clie
  */
 messagesRouter.get("/api/messages/unread-summary", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const role = req.user?.role;
+    const actor = req.user!;
+    const role = actor.role;
     const side = sideOfRole(role);
     if (!side) return res.json({ totalUnread: 0, byInvoice: {} });
 
+    const scope = resolveMessageInvoiceScope(actor);
+    if (!scope) return res.json({ totalUnread: 0, byInvoice: {} });
+
     // Для клиента непрочитано = сообщения other-side, где clientReadAt IS NULL,
     // и счёт принадлежит ему. Для staff — staffReadAt IS NULL.
-    const filterAccess = role === 'client'
-      ? sql`AND i.client_id = ${req.user!.clientId}`
-      : sql``;
+    const filterAccess = scope.kind === 'client'
+      ? sql`AND i.client_id = ${scope.clientId}`
+      : scope.kind === 'assistant'
+        ? sql`AND COALESCE(i.hide_from_assistant, FALSE) = FALSE`
+        : sql``;
     const readField = side === 'client' ? sql`im.client_read_at` : sql`im.staff_read_at`;
     const senderFilter = side === 'client'
       ? sql`im.author_role IN ('admin','assistant')`
@@ -225,13 +222,8 @@ messagesRouter.post("/api/messages", authMiddleware, requireRole("client", "admi
     if (!text) return res.status(400).json({ error: "Сообщение не может быть пустым" });
     if (text.length > 4000) return res.status(400).json({ error: "Сообщение слишком длинное" });
 
-    const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    const inv = await findAuthorizedInvoice(storage, req.user!, invoiceId);
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "client") {
-      if (!req.user?.clientId || inv.clientId !== req.user.clientId) {
-        return res.status(404).json({ error: "Invoice not found" });
-      }
-    }
 
     let expIdSafe: string | null = null;
     if (expenseId) {

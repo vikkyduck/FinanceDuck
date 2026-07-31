@@ -34,7 +34,7 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
     workbook.created = new Date();
 
     const invoices = await storage.getInvoices(role);
-    const allClients = await storage.getClients();
+    const allClients = await storage.getClients({ kind: "all" });
     const clientMap = new Map(allClients.map(c => [c.id, c.name]));
 
     const sheet = workbook.addWorksheet("Счета");

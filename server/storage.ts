@@ -22,6 +22,7 @@ import * as planningRepo from "./repositories/planningRepo";
 import * as reportsRepo from "./repositories/reportsRepo";
 import * as searchRepo from "./repositories/searchRepo";
 import { calculateInvoiceServer } from "./repositories/invoiceRepo";
+import type { ClientCollectionScope } from "./tenantAccess";
 
 
 export interface IStorage {
@@ -38,11 +39,11 @@ export interface IStorage {
   deletePartner(id: string): Promise<{ success: boolean; error?: string }>;
   getPartnerClients(partnerId: string): Promise<Client[]>;
   
-  getClients(partnerId?: string): Promise<Client[]>;
+  getClients(scope: ClientCollectionScope): Promise<Client[]>;
   getClient(id: string): Promise<Client | null>;
   getClientWithPartner(id: string): Promise<(Client & { partner?: Partner }) | null>;
   getClientPartners(clientId: string): Promise<Partner[]>;
-  getClientsWithPartners(): Promise<(Client & { partners: Partner[] })[]>;
+  getClientsWithPartners(scope: ClientCollectionScope): Promise<(Client & { partners: Partner[] })[]>;
   setClientPartners(clientId: string, partnerIds: string[]): Promise<void>;
   createClient(client: InsertClient): Promise<Client>;
   updateClient(id: string, client: Partial<InsertClient>): Promise<Client | null>;
@@ -59,6 +60,7 @@ export interface IStorage {
   deleteInvoice(id: string): Promise<void>;
   
   getInvoiceExpenses(invoiceId: string): Promise<InvoiceExpense[]>;
+  getInvoiceExpense(id: string): Promise<InvoiceExpense | null>;
   getAllExpenses(): Promise<InvoiceExpense[]>;
   createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense>;
   updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null>;
@@ -344,13 +346,13 @@ export class DatabaseStorage implements IStorage {
   async deletePartner(id: string) { return partnerRepo.deletePartner(db, id); }
   async getPartnerClients(partnerId: string) { return partnerRepo.getPartnerClients(db, partnerId); }
 
-  async getClients(partnerId?: string) { return clientRepo.getClients(db, partnerId); }
+  async getClients(scope: ClientCollectionScope) { return clientRepo.getClients(db, scope); }
   async getClient(id: string) { return clientRepo.getClient(db, id); }
   async createClient(client: InsertClient) { return clientRepo.createClient(db, client); }
   async updateClient(id: string, client: Partial<InsertClient>) { return clientRepo.updateClient(db, id, client); }
   async getClientWithPartner(id: string) { return clientRepo.getClientWithPartner(db, id); }
   async getClientPartners(clientId: string) { return clientRepo.getClientPartners(db, clientId); }
-  async getClientsWithPartners() { return clientRepo.getClientsWithPartners(db); }
+  async getClientsWithPartners(scope: ClientCollectionScope) { return clientRepo.getClientsWithPartners(db, scope); }
   async setClientPartners(clientId: string, partnerIds: string[]) { return clientRepo.setClientPartners(db, clientId, partnerIds); }
   async deleteClient(id: string) { return clientRepo.deleteClient(db, id); }
 
@@ -362,6 +364,7 @@ export class DatabaseStorage implements IStorage {
   async updateInvoice(id: string, invoice: Partial<InsertInvoice>) { return invoiceRepo.updateInvoice(db, id, invoice); }
   async updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.updateInvoiceCalculations(db, invoiceId, calculations); }
   async getInvoiceExpenses(invoiceId: string) { return invoiceRepo.getInvoiceExpenses(db, invoiceId); }
+  async getInvoiceExpense(id: string) { return invoiceRepo.getInvoiceExpense(db, id); }
   async getAllExpenses() { return invoiceRepo.getAllExpenses(db); }
   async createInvoiceExpense(expense: InsertInvoiceExpense) { return invoiceRepo.createInvoiceExpense(db, expense); }
   async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>) { return invoiceRepo.updateInvoiceExpense(db, id, updates); }

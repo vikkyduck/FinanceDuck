@@ -35,7 +35,7 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
     const { exportTypes = ["invoices"], dateFrom, dateTo, actualDateFrom, actualDateTo, statuses = [], partnerIds = [] } = req.body;
 
     const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients();
+    const allClients = await storage.getClients({ kind: "all" });
     const allPartners = await storage.getPartners();
     const allExpenses = await storage.getAllExpenses();
 
@@ -228,7 +228,7 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
     }
 
     const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients();
+    const allClients = await storage.getClients({ kind: "all" });
 
     let invoices = allInvoices;
     if (invoiceId)      invoices = allInvoices.filter(inv => inv.id === invoiceId);
@@ -456,7 +456,7 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
     }
 
     const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients();
+    const allClients = await storage.getClients({ kind: "all" });
     let invoices = allInvoices;
     if (invoiceId)      invoices = allInvoices.filter(inv => inv.id === invoiceId);
     else if (clientId)  invoices = allInvoices.filter(inv => inv.clientId === clientId);
@@ -722,7 +722,7 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
     workbook.created = new Date();
 
     const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients();
+    const allClients = await storage.getClients({ kind: "all" });
 
     let invoices = allInvoices;
     if (invoiceId) {

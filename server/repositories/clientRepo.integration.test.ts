@@ -56,19 +56,29 @@ describe("setClientPartners — единый писатель", () => {
   });
 });
 
-describe("getClients(partnerId) — по client_partners (много-ко-многим)", () => {
+describe("getClients(scope) — tenant scope обязателен", () => {
   it("партнёр видит клиента, где он ВТОРИЧНЫЙ партнёр", async () => {
     await setClientPartners(asDb(), c1, [p1, p2]); // c1 → p1(осн.) + p2(вторичный)
-    const forP2 = await getClients(asDb(), p2);
+    const forP2 = await getClients(asDb(), { kind: "partner", partnerId: p2 });
     expect(forP2.map(c => c.id)).toContain(c1);
   });
   it("не возвращает несвязанных клиентов", async () => {
     await setClientPartners(asDb(), c1, [p1]);
-    const forP1 = await getClients(asDb(), p1);
+    const forP1 = await getClients(asDb(), { kind: "partner", partnerId: p1 });
     expect(forP1.map(c => c.id)).toEqual([c1]); // c2 не связан
   });
-  it("без partnerId — все клиенты", async () => {
-    const all = await getClients(asDb());
+  it("все клиенты доступны только через явный scope all", async () => {
+    const all = await getClients(asDb(), { kind: "all" });
     expect(all.length).toBe(2);
+  });
+
+  it("client scope возвращает только собственную запись", async () => {
+    const own = await getClients(asDb(), { kind: "client", clientId: c1 });
+    expect(own.map(c => c.id)).toEqual([c1]);
+  });
+
+  it("неизвестный runtime scope падает закрыто, а не возвращает всех", async () => {
+    await expect(getClients(asDb(), { kind: "invalid" } as never))
+      .rejects.toThrow("Unsupported client collection scope");
   });
 });

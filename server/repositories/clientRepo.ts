@@ -8,22 +8,38 @@ import {
   InsertClient,
 } from "../../shared/schema";
 import type { db as _db } from "../db";
+import type { ClientCollectionScope } from "../tenantAccess";
 
 export type Db = typeof _db;
 
 // ─── Clients ──────────────────────────────────────────────────────────────────
 
-export async function getClients(db: Db, partnerId?: string): Promise<Client[]> {
-  if (partnerId) {
+export async function getClients(
+  db: Db,
+  scope: ClientCollectionScope,
+): Promise<Client[]> {
+  if (scope.kind === "partner") {
     // Единый источник: клиенты, связанные с партнёром через client_partners
     // (много-ко-многим), а не по устаревшему одиночному clients.partner_id.
     const linked = db.select({ id: clientPartners.clientId })
-      .from(clientPartners).where(eq(clientPartners.partnerId, partnerId));
+      .from(clientPartners).where(eq(clientPartners.partnerId, scope.partnerId));
     return db.select().from(clients)
       .where(inArray(clients.id, linked))
       .orderBy(clients.name);
   }
-  return db.select().from(clients).orderBy(clients.name);
+
+  if (scope.kind === "client") {
+    return db.select().from(clients)
+      .where(eq(clients.id, scope.clientId))
+      .orderBy(clients.name);
+  }
+
+  if (scope.kind === "all") {
+    return db.select().from(clients).orderBy(clients.name);
+  }
+
+  const exhaustiveCheck: never = scope;
+  throw new Error(`Unsupported client collection scope: ${JSON.stringify(exhaustiveCheck)}`);
 }
 
 export async function getClient(db: Db, id: string): Promise<Client | null> {
@@ -72,10 +88,11 @@ export async function getClientPartners(db: Db, clientId: string): Promise<Partn
 
 export async function getClientsWithPartners(
   db: Db,
+  scope: ClientCollectionScope,
 ): Promise<(Client & { partners: Partner[] })[]> {
-  const allClients = await db.select().from(clients).orderBy(clients.name);
+  const scopedClients = await getClients(db, scope);
   return Promise.all(
-    allClients.map(async client => ({
+    scopedClients.map(async client => ({
       ...client,
       partners: await getClientPartners(db, client.id),
     })),

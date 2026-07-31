@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { storage } from "../storage";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { findAuthorizedInvoice } from "../invoiceAccess";
 
 export const actsRouter = Router();
 
@@ -78,15 +79,12 @@ actsRouter.get("/api/assistant/stats", authMiddleware, requireRole("admin", "ass
 // Signed Acts
 actsRouter.get("/api/invoices/:id/acts", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
     const actType = req.query.type as string | undefined;
-    const invoice = await storage.getInvoice(id);
+    const invoice = await findAuthorizedInvoice(storage, actor, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "assistant" && invoice.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
-    if (role === "accountant" && !invoice.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
-    if (role === "partner" && invoice.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
-    if (role === "client" && invoice.clientId !== req.user?.clientId) return res.status(403).json({ error: "Forbidden" });
     let acts = await storage.getSignedActsByInvoice(id, actType as any);
     if (role === "partner" || role === "client") acts = acts.filter(a => a.actType === "company");
     res.json(acts.map(({ fileData, ...rest }) => rest));
@@ -95,11 +93,10 @@ actsRouter.get("/api/invoices/:id/acts", authMiddleware, async (req: Authenticat
 
 actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { actType, fileName, fileData, mimeType, isLink, url } = req.body;
-    const invoice = await storage.getInvoice(id);
+    const invoice = await findAuthorizedInvoice(storage, req.user!, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    if (req.user?.role === "accountant" && !invoice.hideFromAssistant) return res.status(403).json({ error: "Forbidden" });
     if (isLink) { if (!url) return res.status(400).json({ error: "URL is required for link-type acts" }); }
     else { if (!fileData || !mimeType) return res.status(400).json({ error: "File data and mime type are required for file uploads" }); }
     const act = await storage.createSignedAct({ invoiceId: id, actType, fileName, fileData: isLink ? null : fileData, mimeType: isLink ? null : mimeType, isLink: isLink || false, url: isLink ? url : null, uploadedBy: req.user!.token.id });
@@ -118,25 +115,27 @@ actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "
 
 actsRouter.get("/api/acts/:id/download", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
+    const role = actor.role;
     const act = await storage.getSignedAct(id);
     if (!act) return res.status(404).json({ error: "Act not found" });
-    if ((role === "partner" || role === "client") && act.actType === "executor") return res.status(403).json({ error: "Forbidden" });
-    const invoice = await storage.getInvoice(act.invoiceId);
-    if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    if (role === "partner" && invoice.partnerId !== req.user?.partnerId) return res.status(403).json({ error: "Forbidden" });
-    if (role === "client" && invoice.clientId !== req.user?.clientId) return res.status(403).json({ error: "Forbidden" });
+    const invoice = await findAuthorizedInvoice(storage, actor, act.invoiceId);
+    if (!invoice) return res.status(404).json({ error: "Act not found" });
+    if ((role === "partner" || role === "client") && act.actType === "executor") {
+      return res.status(404).json({ error: "Act not found" });
+    }
     res.json({ fileName: act.fileName, fileData: act.fileData, mimeType: act.mimeType });
   } catch (error) { console.error("Download act error:", error); res.status(500).json({ error: "Failed to download act" }); }
 });
 
 actsRouter.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const act = await storage.getSignedAct(id);
     if (!act) return res.status(404).json({ error: "Act not found" });
-    const invoice = await storage.getInvoice(act.invoiceId);
+    const invoice = await findAuthorizedInvoice(storage, req.user!, act.invoiceId);
+    if (!invoice) return res.status(404).json({ error: "Act not found" });
     const client = invoice?.clientId ? await storage.getClient(invoice.clientId) : null;
     const partner = invoice?.partnerId ? await storage.getPartner(invoice.partnerId) : null;
     const invoiceNumber = invoice?.invoiceNumber;

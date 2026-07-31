@@ -507,6 +507,12 @@ export async function getInvoiceExpenses(db: DB, invoiceId: string): Promise<Inv
   return _getInvoiceExpenses(db, invoiceId);
 }
 
+export async function getInvoiceExpense(db: DB, id: string): Promise<InvoiceExpense | null> {
+  const [expense] = await db.select().from(invoiceExpenses)
+    .where(eq(invoiceExpenses.id, id)).limit(1);
+  return expense ?? null;
+}
+
 export async function getAllExpenses(db: DB): Promise<InvoiceExpense[]> {
   return db.select().from(invoiceExpenses).orderBy(desc(invoiceExpenses.date));
 }

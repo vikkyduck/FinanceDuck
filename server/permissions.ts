@@ -143,6 +143,90 @@ export const ASSISTANT_ALLOWED_CALCULATION_FIELDS = ROLE_CALCULATION_PERMISSIONS
 // Projection helpers
 // ---------------------------------------------------------------------------
 
+const CLIENT_BASE_FIELDS = [
+  'id', 'name', 'email', 'phone', 'telegram', 'contactPerson',
+  'createdAt', 'updatedAt',
+] as const;
+
+const PARTNER_BASE_FIELDS = [
+  'id', 'name', 'createdAt', 'updatedAt',
+] as const;
+
+const PARTNER_INTERNAL_FIELDS = [
+  'email', 'phone', 'telegram', 'commissionRate', 'leverageRole',
+] as const;
+
+const CLIENT_SETTINGS_ROLES: ReadonlySet<UserRole> = new Set([
+  'admin', 'assistant', 'accountant',
+]);
+
+function copyAllowedFields(
+  source: object,
+  fields: readonly string[],
+): Record<string, unknown> {
+  const record = source as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (field in record) result[field] = record[field];
+  }
+  return result;
+}
+
+/**
+ * Positive allowlist для клиента. `tgBotToken` намеренно отсутствует во всех
+ * ролях: обычный read API сообщает только факт наличия секрета.
+ */
+export function projectClientForRole(
+  client: object,
+  role: UserRole,
+): Record<string, unknown> {
+  const record = client as Record<string, unknown>;
+  const result = copyAllowedFields(client, CLIENT_BASE_FIELDS);
+
+  if (CLIENT_SETTINGS_ROLES.has(role)) {
+    if ('tgChatId' in record) result.tgChatId = record.tgChatId;
+    result.hasTgBotToken = typeof record.tgBotToken === 'string'
+      && record.tgBotToken.trim().length > 0;
+  }
+
+  // Assistant/accountant исторически не имеют доступа к структуре связей.
+  if (role === 'admin' && 'partnerId' in record) {
+    result.partnerId = record.partnerId;
+  }
+
+  return result;
+}
+
+export function projectClientsForRole(
+  clients: object[],
+  role: UserRole,
+): Record<string, unknown>[] {
+  return clients.map(client => projectClientForRole(client, role));
+}
+
+/**
+ * Client получает только публичную идентичность своего связанного партнёра.
+ * Остальные роли получают внутренние поля лишь после object-level проверки
+ * маршрута.
+ */
+export function projectPartnerForRole(
+  partner: object,
+  role: UserRole,
+): Record<string, unknown> {
+  const result = copyAllowedFields(partner, PARTNER_BASE_FIELDS);
+  if (role !== 'client') {
+    Object.assign(result, copyAllowedFields(partner, PARTNER_INTERNAL_FIELDS));
+  }
+  return result;
+}
+
+export function projectPartnersForRole(
+  partners: object[],
+  role: UserRole,
+): Record<string, unknown>[] {
+  return partners.map(partner => projectPartnerForRole(partner, role));
+}
+
 /**
  * Returns only the invoice fields the given role is permitted to see,
  * including nested `calculations`, `partner`, and `client` objects.
@@ -185,7 +269,7 @@ export function projectInvoiceForRole(
 
   if (invoice.partner) {
     if (role === 'admin') {
-      result.partner = invoice.partner;
+      result.partner = projectPartnerForRole(invoice.partner, role);
     } else if (role === 'partner') {
       result.partner = { id: invoice.partner.id, name: invoice.partner.name };
     }
@@ -194,7 +278,7 @@ export function projectInvoiceForRole(
   if (invoice.client) {
     result.client = (role === 'assistant' || role === 'accountant')
       ? { id: invoice.client.id, name: invoice.client.name }
-      : invoice.client;
+      : projectClientForRole(invoice.client, role);
   }
 
   return result;
@@ -228,24 +312,4 @@ export function projectStatsForRole(
     if (field in stats) result[field] = stats[field];
   }
   return result;
-}
-
-export function stripPartnerInfoFromClient<T extends Record<string, any>>(
-  client: T,
-  role: UserRole,
-): T {
-  if (role !== 'assistant' && role !== 'accountant') return client;
-  const { partnerId, partner, ...rest } = client;
-  return rest as T;
-}
-
-export function stripPartnerInfoFromClients<T extends Record<string, any>>(
-  clients: T[],
-  role: UserRole,
-): T[] {
-  if (role !== 'assistant' && role !== 'accountant') return clients;
-  return clients.map(client => {
-    const { partnerId, partner, ...rest } = client;
-    return rest as T;
-  });
 }

@@ -32,10 +32,11 @@ interface ClientFormData {
   partnerIds: string[];
   tgChatId: string;
   tgBotToken: string;
+  removeTgBotToken: boolean;
   contactPerson: string;
 }
 
-const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerIds: [], tgChatId: "", tgBotToken: "", contactPerson: "" };
+const emptyForm: ClientFormData = { name: "", telegram: "", phone: "", partnerIds: [], tgChatId: "", tgBotToken: "", removeTgBotToken: false, contactPerson: "" };
 
 // Мультиселект партнёров на cmdk: встроенный поиск + CommandList корректно
 // скроллится внутри Dialog (обычный overflow-div внутри Popover в
@@ -203,9 +204,11 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
       telegram: client.telegram || "",
       phone: client.phone || "",
       partnerIds: client.partners.map(p => p.id),
-      tgChatId: (client as any).tgChatId || "",
-      tgBotToken: (client as any).tgBotToken || "",
-      contactPerson: (client as any).contactPerson || "",
+      tgChatId: client.tgChatId || "",
+      // Секрет никогда не приходит из read API. Пусто = оставить как есть.
+      tgBotToken: "",
+      removeTgBotToken: false,
+      contactPerson: client.contactPerson || "",
     });
   };
 
@@ -223,10 +226,15 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
     try {
       // Save changes first so server has current settings.
       if (editingId === clientId) {
+        const tokenUpdate = editForm.removeTgBotToken
+          ? { tgBotToken: null }
+          : (editForm.tgBotToken.trim()
+            ? { tgBotToken: editForm.tgBotToken.trim() }
+            : {});
         await invoiceService.updateClient(clientId, {
           tgChatId: editForm.tgChatId.trim() || null,
-          tgBotToken: editForm.tgBotToken.trim() || null,
-        } as any);
+          ...tokenUpdate,
+        });
       }
       await apiPost(`/clients/${clientId}/telegram-test`, {});
       showSuccess("Telegram", "Тестовое сообщение отправлено");
@@ -245,6 +253,11 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
 
     setLoading(true);
     try {
+      const tokenUpdate = editForm.removeTgBotToken
+        ? { tgBotToken: null }
+        : (editForm.tgBotToken.trim()
+          ? { tgBotToken: editForm.tgBotToken.trim() }
+          : {});
       // Единый механизм: partnerIds → сервер сам синхронит client_partners + partner_id.
       await invoiceService.updateClient(editingId, {
         name: editForm.name.trim(),
@@ -252,7 +265,7 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
         phone: editForm.phone.trim() || undefined,
         partnerIds: editForm.partnerIds,
         tgChatId: editForm.tgChatId.trim() || null,
-        tgBotToken: editForm.tgBotToken.trim() || null,
+        ...tokenUpdate,
         contactPerson: editForm.contactPerson.trim() || null,
       });
 
@@ -395,6 +408,8 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                       TG Bot Token
                     </Label>
                     <Input
+                      type="password"
+                      autoComplete="new-password"
                       value={form.tgBotToken}
                       onChange={(e) => setForm({ ...form, tgBotToken: e.target.value })}
                       placeholder="опционально — иначе общий бот"
@@ -533,12 +548,31 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                                     data-testid="input-edit-client-tg-chat-id"
                                   />
                                   <Input
+                                    type="password"
+                                    autoComplete="new-password"
                                     value={editForm.tgBotToken}
                                     onChange={(e) => setEditForm({ ...editForm, tgBotToken: e.target.value })}
-                                    placeholder="TG Bot Token (опц.)"
+                                    placeholder={client.hasTgBotToken ? "Новый токен (пусто — не менять)" : "TG Bot Token (опц.)"}
                                     className="h-7 text-xs"
+                                    disabled={editForm.removeTgBotToken}
                                     data-testid="input-edit-client-tg-bot-token"
                                   />
+                                  {client.hasTgBotToken && (
+                                    <div className="flex items-center gap-2 px-1">
+                                      <Checkbox
+                                        checked={editForm.removeTgBotToken}
+                                        onCheckedChange={(checked) => setEditForm({
+                                          ...editForm,
+                                          removeTgBotToken: checked === true,
+                                          tgBotToken: checked === true ? "" : editForm.tgBotToken,
+                                        })}
+                                        data-testid="checkbox-remove-client-tg-bot-token"
+                                      />
+                                      <span className="text-[10px] text-muted-foreground">
+                                        Токен сохранён; удалить и использовать общего бота
+                                      </span>
+                                    </div>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="outline"

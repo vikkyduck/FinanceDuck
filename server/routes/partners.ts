@@ -4,6 +4,13 @@ import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware
 import { parseNum } from "../../shared/financialEngine";
 import { pick, PARTNER_WRITABLE_FIELDS, PARTNER_PAYMENT_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
 import { validateBody, partnerPaymentSchema } from "../lib/validate";
+import {
+  projectClientForRole,
+  projectClientsForRole,
+  projectPartnerForRole,
+  projectPartnersForRole,
+} from "../permissions";
+import { canReadPartner, canReadPartnerClients } from "../tenantAccess";
 
 export const partnersRouter = Router();
 
@@ -25,9 +32,10 @@ function sanitizePartnerBody(req: AuthenticatedRequest): { ok: true; data: any }
   return { ok: true, data };
 }
 
-partnersRouter.get("/api/partners", authMiddleware, requireRole("admin", "assistant", "accountant"), async (_req: AuthenticatedRequest, res: Response) => {
+partnersRouter.get("/api/partners", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    res.json(await storage.getPartners());
+    const partners = await storage.getPartners();
+    res.json(projectPartnersForRole(partners, req.user!.role));
   } catch (error) {
     console.error("Get partners error:", error);
     res.status(500).json({ error: "Failed to get partners" });
@@ -36,11 +44,19 @@ partnersRouter.get("/api/partners", authMiddleware, requireRole("admin", "assist
 
 partnersRouter.get("/api/partners/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    if (req.user?.role === "partner" && req.user.partnerId !== id) return res.status(403).json({ error: "Forbidden" });
+    const id = String(req.params.id);
+    const actor = req.user!;
     const partner = await storage.getPartner(id);
     if (!partner) return res.status(404).json({ error: "Partner not found" });
-    res.json(partner);
+
+    const ownClientPartnerIds = actor.role === "client" && actor.clientId
+      ? (await storage.getClientPartners(actor.clientId)).map(item => item.id)
+      : [];
+    if (!canReadPartner(actor, id, ownClientPartnerIds)) {
+      return res.status(404).json({ error: "Partner not found" });
+    }
+
+    res.json(projectPartnerForRole(partner, actor.role));
   } catch (error) {
     console.error("Get partner error:", error);
     res.status(500).json({ error: "Failed to get partner" });
@@ -51,12 +67,12 @@ partnersRouter.post("/api/partners", authMiddleware, requireRole("admin", "assis
   try {
     const role = req.user?.role || "client";
     const body = sanitizePartnerBody(req);
-    if (!body.ok) return res.status(400).json({ error: body.error });
+    if (body.ok === false) return res.status(400).json({ error: body.error });
     const partner = await storage.createPartner(body.data);
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_partner", entityType: "partner", entityId: partner.id, description: `Создан партнёр: ${partner.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
-    res.status(201).json(partner);
+    res.status(201).json(projectPartnerForRole(partner, role));
   } catch (error) {
     console.error("Create partner error:", error);
     res.status(500).json({ error: "Failed to create partner" });
@@ -65,16 +81,16 @@ partnersRouter.post("/api/partners", authMiddleware, requireRole("admin", "assis
 
 partnersRouter.patch("/api/partners/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const role = req.user?.role || "client";
     const body = sanitizePartnerBody(req);
-    if (!body.ok) return res.status(400).json({ error: body.error });
+    if (body.ok === false) return res.status(400).json({ error: body.error });
     const partner = await storage.updatePartner(id, body.data);
     if (!partner) return res.status(404).json({ error: "Partner not found" });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_partner", entityType: "partner", entityId: id, description: `Обновлён партнёр: ${partner.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
-    res.json(partner);
+    res.json(projectPartnerForRole(partner, role));
   } catch (error) {
     console.error("Update partner error:", error);
     res.status(500).json({ error: "Failed to update partner" });
@@ -83,7 +99,7 @@ partnersRouter.patch("/api/partners/:id", authMiddleware, requireRole("admin", "
 
 partnersRouter.delete("/api/partners/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const result = await storage.deletePartner(id);
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true });
@@ -95,11 +111,30 @@ partnersRouter.delete("/api/partners/:id", authMiddleware, requireRole("admin"),
 
 partnersRouter.get("/api/partners/:id/clients", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role;
-    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
-    if (role === "partner" && req.user?.partnerId !== id) return res.status(403).json({ error: "Forbidden" });
-    res.json(await storage.getPartnerClients(id));
+    const id = String(req.params.id);
+    const actor = req.user!;
+    if (actor.role === "assistant" || actor.role === "accountant") {
+      return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    }
+
+    const partner = await storage.getPartner(id);
+    if (!partner) return res.status(404).json({ error: "Partner not found" });
+
+    const ownClientPartners = actor.role === "client" && actor.clientId
+      ? await storage.getClientPartners(actor.clientId)
+      : [];
+    const ownClientPartnerIds = ownClientPartners.map(item => item.id);
+    if (!canReadPartnerClients(actor, id, ownClientPartnerIds)) {
+      return res.status(404).json({ error: "Partner not found" });
+    }
+
+    if (actor.role === "client") {
+      const ownClient = actor.clientId ? await storage.getClient(actor.clientId) : null;
+      return res.json(ownClient ? [projectClientForRole(ownClient, actor.role)] : []);
+    }
+
+    const clients = await storage.getPartnerClients(id);
+    res.json(projectClientsForRole(clients, actor.role));
   } catch (error) {
     console.error("Get partner clients error:", error);
     res.status(500).json({ error: "Failed to get partner clients" });

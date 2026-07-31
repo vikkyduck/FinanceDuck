@@ -2,17 +2,41 @@ import { Router, Response } from "express";
 import { storage } from "../storage";
 import { UserRole } from "../../shared/schema";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
-import { stripPartnerInfoFromClient, stripPartnerInfoFromClients } from "../permissions";
+import {
+  projectClientForRole,
+  projectClientsForRole,
+  projectPartnerForRole,
+  projectPartnersForRole,
+} from "../permissions";
 import { pick, CLIENT_WRITABLE_FIELDS } from "../lib/sanitize";
+import {
+  canListClientRelationships,
+  canReadClient,
+  canReadClientRelationships,
+  filterRelationshipPartnerIds,
+  resolveClientCollectionScope,
+} from "../tenantAccess";
 
 export const clientsRouter = Router();
 
+function auditSafeClientBody(body: unknown): string {
+  const safe = body && typeof body === "object"
+    ? { ...(body as Record<string, unknown>) }
+    : {};
+  if (Object.prototype.hasOwnProperty.call(safe, "tgBotToken")) {
+    safe.tgBotToken = safe.tgBotToken ? "[REDACTED]" : safe.tgBotToken;
+  }
+  return JSON.stringify(safe);
+}
+
 clientsRouter.get("/api/clients", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const role = req.user?.role || "client";
-    const partnerId = role === "partner" ? req.user?.partnerId : undefined;
-    const result = await storage.getClients(partnerId);
-    res.json(stripPartnerInfoFromClients(result, role));
+    const actor = req.user!;
+    const scope = resolveClientCollectionScope(actor);
+    if (!scope) return res.status(403).json({ error: "Forbidden" });
+
+    const result = await storage.getClients(scope);
+    res.json(projectClientsForRole(result, actor.role));
   } catch (error) {
     console.error("Get clients error:", error);
     res.status(500).json({ error: "Failed to get clients" });
@@ -21,7 +45,7 @@ clientsRouter.get("/api/clients", authMiddleware, async (req: AuthenticatedReque
 
 clientsRouter.get("/api/closing-docs-status", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const clients = await storage.getClients();
+    const clients = await storage.getClients({ kind: "all" });
     const allInvoices = await storage.getInvoices("admin" as UserRole);
     const hiddenInvoices = allInvoices.filter(inv => inv.hideFromAssistant);
 
@@ -51,7 +75,7 @@ clientsRouter.get("/api/closing-docs-status", authMiddleware, requireRole("admin
 clientsRouter.get("/api/clients/acts-status", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = (req.user?.role as UserRole) || "client";
-    const clients = await storage.getClients();
+    const clients = await storage.getClients({ kind: "all" });
     const allInvoices = await storage.getInvoices(role);
     const paidInvoices = allInvoices.filter(inv => inv.status === "paid");
 
@@ -85,17 +109,21 @@ clientsRouter.get("/api/clients/acts-status", authMiddleware, requireRole("admin
 
 clientsRouter.get("/api/clients/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
+    const id = String(req.params.id);
+    const actor = req.user!;
     const client = await storage.getClient(id);
     if (!client) return res.status(404).json({ error: "Client not found" });
-    // Авторизация партнёра — по членству в client_partners (любой из партнёров),
-    // а не по устаревшему одиночному partner_id.
-    if (role === "partner") {
-      const linked = await storage.getClientPartners(id);
-      if (!linked.some(p => p.id === req.user?.partnerId)) return res.status(403).json({ error: "Forbidden" });
+
+    // Авторизация партнёра — по членству в client_partners (любой из
+    // партнёров), а не по устаревшему одиночному partner_id.
+    const linkedPartnerIds = actor.role === "partner"
+      ? (await storage.getClientPartners(id)).map(partner => partner.id)
+      : [];
+    if (!canReadClient(actor, id, linkedPartnerIds)) {
+      return res.status(404).json({ error: "Client not found" });
     }
-    res.json(stripPartnerInfoFromClient(client, role));
+
+    res.json(projectClientForRole(client, actor.role));
   } catch (error) {
     console.error("Get client error:", error);
     res.status(500).json({ error: "Failed to get client" });
@@ -112,9 +140,9 @@ clientsRouter.post("/api/clients", authMiddleware, requireRole("admin", "assista
       : (req.body.partnerId ? [req.body.partnerId] : []);
     if (partnerIds.length) await storage.setClientPartners(client.id, partnerIds);
     if (role === "assistant" || role === "admin" || role === "accountant") {
-      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_client", entityType: "client", entityId: client.id, description: `Создан клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_client", entityType: "client", entityId: client.id, description: `Создан клиент: ${client.name}`, details: auditSafeClientBody(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
-    res.status(201).json(stripPartnerInfoFromClient(client, role));
+    res.status(201).json(projectClientForRole(client, role));
   } catch (error) {
     console.error("Create client error:", error);
     res.status(500).json({ error: "Failed to create client" });
@@ -123,7 +151,7 @@ clientsRouter.post("/api/clients", authMiddleware, requireRole("admin", "assista
 
 clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const role = req.user?.role || "client";
     const client = await storage.updateClient(id, pick(req.body, CLIENT_WRITABLE_FIELDS));
     if (!client) return res.status(404).json({ error: "Client not found" });
@@ -132,9 +160,9 @@ clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "as
       await storage.setClientPartners(id, req.body.partnerIds.filter(Boolean));
     }
     if (role === "assistant" || role === "admin" || role === "accountant") {
-      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_client", entityType: "client", entityId: id, description: `Обновлён клиент: ${client.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_client", entityType: "client", entityId: id, description: `Обновлён клиент: ${client.name}`, details: auditSafeClientBody(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
-    res.json(stripPartnerInfoFromClient(client, role));
+    res.json(projectClientForRole(client, role));
   } catch (error) {
     console.error("Update client error:", error);
     res.status(500).json({ error: "Failed to update client" });
@@ -146,7 +174,7 @@ clientsRouter.patch("/api/clients/:id", authMiddleware, requireRole("admin", "as
 clientsRouter.post("/api/clients/:id/telegram-test", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { resolveTelegramTarget, sendTelegramMessage, escapeHtml } = await import("../lib/telegram");
-    const client = await storage.getClient(req.params.id);
+    const client = await storage.getClient(String(req.params.id));
     if (!client) return res.status(404).json({ error: "Client not found" });
     const target = resolveTelegramTarget(client as any);
     if (!target) {
@@ -168,7 +196,7 @@ clientsRouter.post("/api/clients/:id/telegram-test", authMiddleware, requireRole
 
 clientsRouter.delete("/api/clients/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const result = await storage.deleteClient(id);
     if (!result.success) return res.status(400).json({ error: result.error });
     res.json({ success: true });
@@ -180,16 +208,27 @@ clientsRouter.delete("/api/clients/:id", authMiddleware, requireRole("admin"), a
 
 clientsRouter.get("/api/clients/:id/with-partner", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
-    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    const id = String(req.params.id);
+    const actor = req.user!;
+    if (!canListClientRelationships(actor)) {
+      return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    }
+
     const client = await storage.getClientWithPartner(id);
     if (!client) return res.status(404).json({ error: "Client not found" });
-    if (role === "partner") {
-      const linked = await storage.getClientPartners(id);
-      if (!linked.some(p => p.id === req.user?.partnerId)) return res.status(403).json({ error: "Forbidden" });
+
+    const linkedPartners = await storage.getClientPartners(id);
+    const linkedPartnerIds = linkedPartners.map(partner => partner.id);
+    if (!canReadClientRelationships(actor, id, linkedPartnerIds)) {
+      return res.status(404).json({ error: "Client not found" });
     }
-    res.json(client);
+
+    const result = projectClientForRole(client, actor.role);
+    const visiblePartnerIds = new Set(filterRelationshipPartnerIds(actor, linkedPartnerIds));
+    if (client.partner && visiblePartnerIds.has(client.partner.id)) {
+      result.partner = projectPartnerForRole(client.partner, actor.role);
+    }
+    res.json(result);
   } catch (error) {
     console.error("Get client with partner error:", error);
     res.status(500).json({ error: "Failed to get client" });
@@ -198,11 +237,23 @@ clientsRouter.get("/api/clients/:id/with-partner", authMiddleware, async (req: A
 
 clientsRouter.get("/api/clients/:id/partners", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const role = req.user?.role || "client";
-    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    const id = String(req.params.id);
+    const actor = req.user!;
+    if (!canListClientRelationships(actor)) {
+      return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    }
+
+    const client = await storage.getClient(id);
+    if (!client) return res.status(404).json({ error: "Client not found" });
     const partners = await storage.getClientPartners(id);
-    res.json(partners);
+    const linkedPartnerIds = partners.map(partner => partner.id);
+    if (!canReadClientRelationships(actor, id, linkedPartnerIds)) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    const visiblePartnerIds = new Set(filterRelationshipPartnerIds(actor, linkedPartnerIds));
+    const visiblePartners = partners.filter(partner => visiblePartnerIds.has(partner.id));
+    res.json(projectPartnersForRole(visiblePartners, actor.role));
   } catch (error) {
     console.error("Get client partners error:", error);
     res.status(500).json({ error: "Failed to get client partners" });
@@ -211,12 +262,12 @@ clientsRouter.get("/api/clients/:id/partners", authMiddleware, async (req: Authe
 
 clientsRouter.put("/api/clients/:id/partners", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { partnerIds } = req.body;
     if (!Array.isArray(partnerIds)) return res.status(400).json({ error: "partnerIds must be an array" });
     await storage.setClientPartners(id, partnerIds);
     const updatedPartners = await storage.getClientPartners(id);
-    res.json(updatedPartners);
+    res.json(projectPartnersForRole(updatedPartners, "admin"));
   } catch (error) {
     console.error("Set client partners error:", error);
     res.status(500).json({ error: "Failed to set client partners" });
@@ -225,10 +276,24 @@ clientsRouter.put("/api/clients/:id/partners", authMiddleware, requireRole("admi
 
 clientsRouter.get("/api/clients-with-partners", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const role = req.user?.role || "client";
-    if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
-    const clients = await storage.getClientsWithPartners();
-    res.json(clients);
+    const actor = req.user!;
+    if (!canListClientRelationships(actor)) {
+      return res.status(403).json({ error: "Forbidden: cannot view partner-client relationships" });
+    }
+    const scope = resolveClientCollectionScope(actor);
+    if (!scope) return res.status(403).json({ error: "Forbidden" });
+
+    const clients = await storage.getClientsWithPartners(scope);
+    const result = clients.map(client => {
+      const linkedPartnerIds = client.partners.map(partner => partner.id);
+      const visiblePartnerIds = new Set(filterRelationshipPartnerIds(actor, linkedPartnerIds));
+      const visiblePartners = client.partners.filter(partner => visiblePartnerIds.has(partner.id));
+      return {
+        ...projectClientForRole(client, actor.role),
+        partners: projectPartnersForRole(visiblePartners, actor.role),
+      };
+    });
+    res.json(result);
   } catch (error) {
     console.error("Get clients with partners error:", error);
     res.status(500).json({ error: "Failed to get clients" });

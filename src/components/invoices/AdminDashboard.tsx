@@ -64,8 +64,8 @@ export const AdminDashboard = () => {
           Долги к сбору, Черновики без даты оплаты */}
       <AdminDashboardMetrics />
 
-      {/* Quick Stats Link */}
-      <Card className="border-0 shadow-none bg-muted/30">
+      {/* Quick Stats Link — обычное стекло кабинета, без глушения материала */}
+      <Card>
         <CardContent className="py-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <div>

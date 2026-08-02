@@ -99,7 +99,7 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
             <p className="text-xs sm:text-sm text-muted-foreground font-medium mb-1 sm:mb-2">
               Переведено от клиентов в {selectedYear}
             </p>
-            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold text-foreground">
               {formatMoney(stats.total)}
             </h2>
           </div>

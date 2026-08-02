@@ -69,8 +69,6 @@ const StatsPage = () => {
     <DashboardLayout>
       {/* Hero Header with Gradient */}
       <div className="relative -mx-4 sm:-mx-8 -mt-8 sm:-mt-12 mb-6 sm:mb-12 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/10" />
-        <div className="absolute top-0 right-0 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-primary/5 rounded-full blur-3xl" />
         
         <div className="relative px-4 sm:px-8 pt-8 sm:pt-16 pb-6 sm:pb-12">
           <div className="animate-fade-in space-y-2 sm:space-y-4">
@@ -80,7 +78,7 @@ const StatsPage = () => {
             </div>
             
             <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight">
-              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              <span className="text-foreground">
                 Аналитика
               </span>
             </h1>
@@ -97,7 +95,7 @@ const StatsPage = () => {
           <TabsList className="glass-strong border border-primary/10 shadow-lg p-1 sm:p-1.5 gap-1 h-auto w-full sm:w-auto grid grid-cols-3 sm:inline-flex">
             <TabsTrigger 
               value="overview"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
               data-testid="tab-overview"
             >
               <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -106,7 +104,7 @@ const StatsPage = () => {
             </TabsTrigger>
             <TabsTrigger 
               value="invoices"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
               data-testid="tab-invoices"
             >
               <Receipt className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -115,7 +113,7 @@ const StatsPage = () => {
             </TabsTrigger>
             <TabsTrigger 
               value="sales"
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary-deep data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md px-2 sm:px-6 py-2 sm:py-3 text-xs sm:text-sm font-medium gap-1 sm:gap-2"
             >
               <ShoppingCart className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Продажи</span>

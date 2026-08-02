@@ -719,18 +719,78 @@ All colors MUST be HSL.
      Тинт плотный: под текстом и таблицами материал обязан оставаться
      читаемым; сцена-фон при этом мягко просвечивает по краям. */
   .bv-glass-card {
+    position: relative;
+    isolation: isolate;
     background: rgba(252, 251, 248, .72);
     -webkit-backdrop-filter: blur(3px) saturate(1.65) brightness(1.02);
     backdrop-filter: blur(3px) saturate(1.65) brightness(1.02);
     box-shadow:
       inset 0 1.5px 1px rgba(255, 255, 255, .88),
       inset 0 -1.5px 1px rgba(29, 31, 35, .06),
+      inset 1.5px 0 1px rgba(255, 255, 255, .4),
+      inset -1.5px 0 1px rgba(29, 31, 35, .04),
       0 6px 18px rgba(29, 31, 35, .06), 0 2px 6px rgba(29, 31, 35, .04);
+  }
+  /* Слой 03 «Линза»: кромка преломляет сцену внутрь (фильтр #bv-lens лежит
+     в DashboardLayout). Центр остаётся честным — маска пускает преломление
+     только по краю. Тёмная карточка живёт без линзы: у неё своя ::before-
+     фактура (графитовая пыль), и спорить с ней нельзя. */
+  .bv-glass-card:not(.bv-dark-card)::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    z-index: 0; pointer-events: none;
+    -webkit-mask: radial-gradient(125% 125% at 50% 50%, transparent 40%, #000 82%);
+    mask: radial-gradient(125% 125% at 50% 50%, transparent 40%, #000 82%);
+  }
+  @supports (backdrop-filter: url(#bv-lens)) {
+    .bv-glass-card:not(.bv-dark-card)::before {
+      -webkit-backdrop-filter: url(#bv-lens);
+      backdrop-filter: url(#bv-lens);
+    }
+  }
+  /* Safari: фильтр на подложке не работает — запасная кромка гнёт свет
+     насыщенностью и контрастом (брендбук, раздел 7) */
+  @supports not (backdrop-filter: url(#bv-lens)) {
+    .bv-glass-card:not(.bv-dark-card)::before {
+      inset: -1px; transform: scale(1.012); opacity: .75; padding: 12px;
+      -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+      mask-composite: exclude;
+      -webkit-backdrop-filter: blur(3px) saturate(2.4) brightness(1.07) contrast(1.06);
+      backdrop-filter: blur(3px) saturate(2.4) brightness(1.07) contrast(1.06);
+    }
+  }
+  /* Слои 05–06: блик под курсором и перелив. Переменные раскладывает
+     bvGlassEngine; без мыши и при reduced-motion остаётся тихий свет 9%.
+     Тёмная секция сама света не берёт — светятся её внутренние плитки,
+     иначе выйдет стекло на стекле. */
+  .bv-glass-card:not(.bv-dark-card)::after,
+  .bv-glass-dark::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    z-index: 1; pointer-events: none;
+    background:
+      radial-gradient(140px circle at var(--mx, 50%) var(--my, 0%),
+        rgba(255, 255, 255, .95), rgba(255, 255, 255, .22) 40%, transparent 68%),
+      linear-gradient(var(--sheen, 100deg),
+        transparent 36%, rgba(255, 255, 255, .55) 50%, transparent 64%);
+    mix-blend-mode: screen;
+    opacity: var(--lg-glow, .09);
+    transition: opacity 420ms cubic-bezier(.16, 1, .3, 1);
+  }
+  /* Контент карточки — над стеклянными слоями. Нулевая специфичность
+     (:where), чтобы не спорить с собственным позиционированием элементов. */
+  :where(.bv-glass-card, .bv-glass-dark) > :where(*) {
+    position: relative;
+    z-index: 2;
   }
 
   /* Градация «тёмное»: на угольной сцене тинт СВЕТЛЕЕ фона — пластина
-     выглядит приподнятой (не путать с чернильным стеклом для светлых сцен). */
+     выглядит приподнятой (не путать с чернильным стеклом для светлых сцен).
+     Плитка компактная, поэтому ей можно наклон плоскости к руке (--tx/--ty
+     ставит движок; при reduced-motion переменных нет — стоит ровно). */
   .bv-glass-dark {
+    position: relative;
+    isolation: isolate;
     background: rgba(241, 239, 234, .10);
     -webkit-backdrop-filter: blur(8px) saturate(1.4) brightness(1.06);
     backdrop-filter: blur(8px) saturate(1.4) brightness(1.06);
@@ -739,7 +799,28 @@ All colors MUST be HSL.
       inset 0 1.5px 1px rgba(255, 255, 255, .22),
       inset 0 -1.5px 1px rgba(0, 0, 0, .22),
       0 10px 26px rgba(0, 0, 0, .28);
+    transform: perspective(1200px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
+    transition: transform 620ms cubic-bezier(.16, 1, .3, 1);
   }
+
+  /* Перелив кнопок (брендбук, раздел 10): полоса света идёт за курсором
+     (--mx/--my/--sheen ставит движок), появляется только на наведении —
+     самопроизвольного мерцания нет. Графитовая 38%, вторичная и контурная 40%. */
+  .bv-sheen { --lg-glow: 0; }
+  .bv-sheen::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    z-index: 1; pointer-events: none;
+    background:
+      radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%),
+        rgba(255, 255, 255, .9), rgba(255, 255, 255, .2) 42%, transparent 70%),
+      linear-gradient(var(--sheen, 100deg),
+        transparent 38%, rgba(255, 255, 255, .78) 50%, transparent 62%);
+    mix-blend-mode: screen;
+    opacity: var(--lg-glow, 0);
+    transition: opacity 420ms cubic-bezier(.16, 1, .3, 1);
+  }
+  .bv-sheen:hover { --lg-glow: .38; }
+  .bv-sheen.bg-secondary:hover, .bv-sheen.border-input:hover { --lg-glow: .40; }
 
   /* Модальный слой — то же плотное стекло, тинт гуще ради текста */
   .bv-glass-modal {

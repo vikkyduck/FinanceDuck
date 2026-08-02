@@ -9,10 +9,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
-        outline: "border border-input bg-background hover:bg-muted/80",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        // bv-sheen — перелив «Без Воды»: световая полоса за курсором (раздел 10).
+        // Только заливные кнопки; ghost и link остаются без материала.
+        default: "bv-sheen relative isolate overflow-hidden bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+        destructive: "bv-sheen relative isolate overflow-hidden bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
+        outline: "bv-sheen relative isolate overflow-hidden border border-input bg-background hover:bg-muted/80",
+        secondary: "bv-sheen relative isolate overflow-hidden bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-muted/80",
         link: "text-primary underline-offset-4 hover:underline",
       },

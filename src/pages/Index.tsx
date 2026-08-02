@@ -85,8 +85,6 @@ const Index = () => {
       {/* Hero Section */}
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5" />
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-secondary/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
         
         <div className="relative container mx-auto px-8 pt-24 pb-16">
           <div className="max-w-4xl mx-auto text-center space-y-8">
@@ -97,7 +95,7 @@ const Index = () => {
             
             <h1 className="text-6xl md:text-7xl font-bold tracking-tight">
               Управление{" "}
-              <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              <span className="text-foreground">
                 финансами
               </span>
             </h1>

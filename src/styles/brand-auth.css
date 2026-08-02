@@ -1,0 +1,228 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Дизайн-система «Без Воды» 2.4 «Сухой остаток» — экран входа.
+   Значения 1:1 из брендбука (раздел 17 «CSS-токены»). Если значения нет
+   в токенах — его нет в макете.
+
+   Всё заскоплено в .bv-auth, чтобы не влиять на остальной кабинет
+   (там своя тема shadcn). Префикс классов bv-.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bv-auth {
+  /* Фоны и поверхности */
+  --color-bg-primary: #F7F5F1;      /* Бумага */
+  --color-bg-secondary: #EDEAE4;    /* Галерея */
+  --color-surface: #FCFBF8;         /* Мел */
+  /* Текст */
+  --color-text-primary: #1D1F23;    /* Графит */
+  --color-text-secondary: #545860;  /* Сталь-текст */
+  /* Акценты и материалы */
+  --color-accent: #A3564B;          /* Пыльная роза */
+  --color-accent-hover: #6C60AE;    /* Лаванда */
+  --color-accent-glass: #E9C4BD;    /* Розовое стекло */
+  --color-steel: #8B9098;
+  --color-ink-hover: #31353C;
+  --color-line: #DBD7CF;            /* Штрих */
+  --color-error: #8E3B54;           /* Марсала */
+
+  /* Жидкое стекло */
+  --lg-tint: rgba(252, 251, 248, .28);
+  --lg-blur: 3px;
+  --lg-sat: 1.65;
+  --lg-glow: .13;
+  --sheen: 100deg;
+  --lg-rim:
+    inset 0 1.5px 1px rgba(255, 255, 255, .88),
+    inset 0 -1.5px 1px rgba(29, 31, 35, .10),
+    inset 1.5px 0 1px rgba(255, 255, 255, .45),
+    inset -1.5px 0 1px rgba(29, 31, 35, .05);
+
+  /* Типографика */
+  --font-display: 'Unbounded', 'Arial Black', 'Segoe UI', sans-serif;
+  --font-body: 'Golos Text', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --text-h1: clamp(1.8rem, 3.2vw, 2.85rem);
+  --ls-eyebrow: .14em;
+  --ls-display: -.015em;
+
+  /* Отступы (модуль 8) */
+  --space-2xs: 8px; --space-xs: 12px; --space-sm: 16px;
+  --space-md: 24px; --space-lg: 32px; --space-xl: 48px;
+  --space-2xl: 64px;
+
+  /* Радиусы */
+  --radius-sm: 10px; --radius-md: 18px; --radius-lg: 28px; --radius-pill: 999px;
+
+  /* Тени */
+  --shadow-soft: 0 6px 18px rgba(29, 31, 35, .07), 0 2px 6px rgba(29, 31, 35, .05);
+  --shadow-float: 0 18px 44px rgba(29, 31, 35, .13), 0 6px 14px rgba(29, 31, 35, .07);
+
+  /* Движение */
+  --duration-fast: 160ms; --duration-base: 240ms; --duration-slow: 420ms;
+  --ease-out: cubic-bezier(.22, .61, .24, 1);
+  --ease-glass: cubic-bezier(.16, 1, .3, 1);
+}
+
+/* ── Сцена: бумага с графикой. Стекло допустимо только там, где под ним
+      есть что преломлять — поэтому под карточкой лежат узлы и сетка. ── */
+.bv-auth {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  /* minmax(0,1fr): без него трек раздувается до max-content заголовка
+     (Unbounded в крупном кегле шире узкого экрана) и контент уезжает за
+     левый край. Mobile-first: колонка никогда не шире вьюпорта. */
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
+  padding: var(--space-md);
+  background: linear-gradient(140deg, #EFECE6 0%, #E3E0D9 55%, #D6D2CA 100%);
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+  /* clip, а не hidden: hidden делает контейнер прокручиваемым, и autoFocus на
+     поле уводил сцену вбок (контент уезжал за левый край на мобильном).
+     clip обрезает вылет блобов, но прокрутки не создаёт. */
+  overflow: hidden;
+  overflow: clip;
+}
+.bv-scene { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.bv-scene svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bv-blob { position: absolute; border-radius: 50%; }
+
+/* ── Карточка-стекло: тинт → размытие → линза → кромка → блик ── */
+.bv-lg {
+  position: relative;
+  isolation: isolate;
+  background: var(--lg-tint);
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(1.03);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(1.03);
+  border: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--lg-rim), var(--shadow-soft);
+  transition: box-shadow var(--duration-base) var(--ease-out);
+}
+.bv-lg > * { position: relative; z-index: 2; }
+/* Слой 3 — линза: кромка преломляет фон внутрь */
+.bv-lg::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  z-index: 0; pointer-events: none;
+  -webkit-mask: radial-gradient(125% 125% at 50% 50%, transparent 40%, #000 82%);
+  mask: radial-gradient(125% 125% at 50% 50%, transparent 40%, #000 82%);
+}
+@supports (backdrop-filter: url(#bv-lens)) {
+  .bv-lg::before { backdrop-filter: url(#bv-lens); -webkit-backdrop-filter: url(#bv-lens); }
+}
+/* Safari: запасная кромка — свет гнётся насыщенностью и контрастом */
+@supports not (backdrop-filter: url(#bv-lens)) {
+  .bv-lg::before {
+    inset: -1px; transform: scale(1.012); opacity: .75; padding: 12px;
+    -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+    mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    -webkit-backdrop-filter: blur(3px) saturate(240%) brightness(1.07) contrast(1.06);
+    backdrop-filter: blur(3px) saturate(240%) brightness(1.07) contrast(1.06);
+  }
+}
+/* Слои 5–6 — блик под курсором и перелив */
+.bv-lg::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(140px circle at var(--mx, 50%) var(--my, 0%),
+      rgba(255,255,255,.95), rgba(255,255,255,.22) 40%, transparent 68%),
+    linear-gradient(var(--sheen, 100deg),
+      transparent 36%, rgba(255,255,255,.55) 50%, transparent 64%);
+  mix-blend-mode: screen;
+  opacity: var(--lg-glow, .13);
+  transition: opacity var(--duration-slow) var(--ease-glass);
+}
+
+/* ── Типографика ── */
+.bv-eyebrow {
+  font-weight: 600; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow); color: var(--color-text-secondary);
+}
+.bv-h1 {
+  font-family: var(--font-display); font-weight: 500;
+  font-size: var(--text-h1); line-height: 1.12;
+  letter-spacing: var(--ls-display); color: var(--color-text-primary);
+  overflow-wrap: break-word; /* длинное слово не расталкивает узкий экран */
+}
+/* Фирменный приём «срез»: пропил 55–64% высоты знака. Один на макет. */
+.bv-sliced {
+  background: linear-gradient(180deg, currentColor 0 55%, transparent 55% 64%, currentColor 64% 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.bv-lead {
+  font-size: 18px; line-height: 1.5; color: var(--color-text-secondary);
+}
+.bv-label {
+  font-weight: 600; font-size: 13px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--color-text-primary);
+}
+.bv-caption { font-size: 12.5px; line-height: 1.45; color: var(--color-text-secondary); }
+
+/* ── Поле ввода: Мел, волосяная рамка, фокус — кольцо Пыльной розы ── */
+.bv-input {
+  width: 100%; min-height: 48px; padding: 0 var(--space-sm);
+  font-family: var(--font-body); font-size: 16px; /* 16px: iOS не зумит */
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.bv-input::placeholder { color: var(--color-steel); }
+.bv-input:hover:not(:disabled) { border-color: var(--color-steel); }
+.bv-input:focus-visible {
+  outline: 2px solid var(--color-accent); outline-offset: 2px;
+  border-color: var(--color-accent);
+}
+.bv-input:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ── Кнопка: главное действие всегда графитовое ── */
+.bv-btn {
+  position: relative; isolation: isolate; overflow: hidden;
+  width: 100%; min-height: 48px;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2xs);
+  font-family: var(--font-body); font-weight: 600; font-size: 15px; letter-spacing: .01em;
+  color: #F1EFEA; background: var(--color-text-primary);
+  border: 0; border-radius: var(--radius-sm); cursor: pointer;
+  transform: perspective(1200px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
+  transition: transform 620ms var(--ease-glass), background var(--duration-fast) var(--ease-out);
+}
+.bv-btn > * { position: relative; z-index: 2; }
+.bv-btn:hover:not(:disabled) { background: var(--color-ink-hover); --lg-glow: .38; }
+.bv-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.bv-btn:disabled { opacity: .45; cursor: not-allowed; }
+/* Перелив: полоса поворачивается вслед за курсором */
+.bv-btn::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(120px circle at var(--mx, 50%) var(--my, 50%),
+      rgba(255,255,255,.9), rgba(255,255,255,.2) 42%, transparent 70%),
+    linear-gradient(var(--sheen, 100deg),
+      transparent 38%, rgba(255,255,255,.78) 50%, transparent 62%);
+  mix-blend-mode: screen;
+  opacity: var(--lg-glow, 0);
+  transition: opacity var(--duration-slow) var(--ease-glass);
+}
+
+.bv-link { color: var(--color-accent); text-decoration: none; }
+.bv-link:hover { color: var(--color-accent-hover); text-decoration: underline; }
+.bv-link:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 2px; }
+
+/* ── Мобильная версия — не уменьшенный десктоп: срез снимается
+      (в мелком кегле приём не читается), поля уже. ── */
+@media (max-width: 480px) {
+  .bv-sliced { background: none; -webkit-text-fill-color: currentColor; }
+  .bv-auth { padding: var(--space-sm); }
+}
+
+/* ── Уважение к настройкам движения ── */
+@media (prefers-reduced-motion: reduce) {
+  .bv-auth *, .bv-auth *::before, .bv-auth *::after {
+    animation-duration: .001ms !important; transition-duration: .001ms !important;
+  }
+  .bv-btn { transform: none; }
+}

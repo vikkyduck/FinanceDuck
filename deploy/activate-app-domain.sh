@@ -56,6 +56,14 @@ if ! grep -q "^PUBLIC_BASE_URL=https://$DOMAIN" "$ENV"; then
 fi
 chown financeduck:financeduck "$ENV"
 
+# 5.5 Кнопка «Личный кабинет» на сайте компании: переключить с исторического
+# адреса на домен компании (ссылка зашита литералом https://fin-dohod.ru
+# только в этой кнопке — замена безопасна).
+grep -rl "https://fin-dohod.ru" /opt/withoutwater/site --include="*.html" --include="*.js" 2>/dev/null | while read -r f; do
+  sed -i "s|https://fin-dohod.ru|https://app.withoutwater.ru|g" "$f"
+done
+log "кнопка ЛК на сайте компании переключена на app-домен"
+
 systemctl restart finance-duck
 sleep 3
 

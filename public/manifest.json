@@ -1,7 +1,7 @@
 {
-  "name": "FinanceDuck",
-  "short_name": "FinanceDuck",
-  "description": "Система проектного финансового учёта",
+  "name": "Без Воды — личный кабинет",
+  "short_name": "Без Воды",
+  "description": "Счета, платежи и расходы по проектам",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
@@ -27,6 +27,9 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["business", "finance"],
+  "categories": [
+    "business",
+    "finance"
+  ],
   "lang": "ru-RU"
 }

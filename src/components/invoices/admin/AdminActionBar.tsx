@@ -24,7 +24,9 @@ export const AdminActionBar = ({
   onTransferFunds,
 }: AdminActionBarProps) => {
   return (
-    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b py-3 sm:py-4 mb-4 sm:mb-6">
+    // Плотное стекло (брендбук, раздел 7): липкая панель поверх
+    // прокручиваемого контента — каноническое место для материала
+    <div className="sticky top-0 z-10 bv-glass-panel border-b py-3 sm:py-4 mb-4 sm:mb-6 -mx-3 px-3 sm:-mx-6 sm:px-6">
       <div className="flex flex-wrap gap-2 sm:gap-3">
         {/* Primary Actions */}
         <Button onClick={onCreateInvoice} className="shadow-sm">

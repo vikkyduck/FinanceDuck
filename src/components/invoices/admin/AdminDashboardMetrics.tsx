@@ -347,12 +347,18 @@ export const AdminDashboardMetrics = () => {
 
   return (
     <div className="space-y-6 mb-6">
-      {/* Yearly Summary - Top Row */}
-      <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
-        <CardHeader className="pb-2">
+      {/* Yearly Summary — тёмная секция «Уголь» с хром-обручами (брендбук:
+          тёмные сцены + жидкий хром как декоративный объект, без текста поверх).
+          Переменные внутри bv-dark-card перескоуплены — вложенные компоненты
+          сами переходят на тёмную гамму. */}
+      <Card className="bv-dark-card border-0">
+        {/* металлические обручи — в свободной от текста зоне справа */}
+        <div className="bv-ring hidden sm:block" style={{ "--ring-w": "26px", width: 300, height: 300, right: -70, top: -80 } as React.CSSProperties} />
+        <div className="bv-ring hidden lg:block" style={{ "--ring-w": "13px", width: 150, height: 150, right: 150, bottom: -60 } as React.CSSProperties} />
+        <CardHeader className="pb-2 relative z-[2]">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <CardTitle className="text-lg flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
+              <TrendingUp className="h-5 w-5" />
               Годовая сводка
             </CardTitle>
             <Select
@@ -372,32 +378,34 @@ export const AdminDashboardMetrics = () => {
             </Select>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            <div className="text-center p-3 sm:p-4 bg-background/50 rounded-lg">
+        <CardContent className="relative z-[2]">
+          {/* max-w на десктопе: справа живут обручи, текст на хром не заезжает */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:max-w-[72%]">
+            <div className="text-center p-3 sm:p-4 bg-muted rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Оборот</p>
               </div>
-              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400 break-words" data-testid="text-yearly-revenue">
+              <p className="text-xl sm:text-2xl font-bold break-words" data-testid="text-yearly-revenue">
                 {formatCurrency(stats.yearlySummary.totalRevenue)}
               </p>
             </div>
-            <div className="text-center p-3 sm:p-4 bg-background/50 rounded-lg">
+            <div className="text-center p-3 sm:p-4 bg-muted rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Чистая прибыль</p>
               </div>
-              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 break-words" data-testid="text-yearly-profit">
+              <p className="text-xl sm:text-2xl font-bold break-words" data-testid="text-yearly-profit">
                 {formatCurrency(stats.yearlySummary.totalProfit)}
               </p>
             </div>
-            <div className="text-center p-3 sm:p-4 bg-background/50 rounded-lg">
+            <div className="text-center p-3 sm:p-4 bg-muted rounded-lg">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <Percent className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Рентабельность</p>
               </div>
-              <p className={`text-xl sm:text-2xl font-bold ${stats.yearlySummary.netProfitMargin >= 20 ? 'text-green-600 dark:text-green-400' : stats.yearlySummary.netProfitMargin >= 10 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`} data-testid="text-yearly-margin">
+              {/* цвет — только если рентабельность требует внимания (<10%) */}
+              <p className={`text-xl sm:text-2xl font-bold ${stats.yearlySummary.netProfitMargin < 10 ? 'text-destructive' : ''}`} data-testid="text-yearly-margin">
                 {stats.yearlySummary.netProfitMargin.toFixed(1)}%
               </p>
             </div>

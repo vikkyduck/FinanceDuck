@@ -381,7 +381,7 @@ export const AdminDashboardMetrics = () => {
         <CardContent className="relative z-[2]">
           {/* max-w на десктопе: справа живут обручи, текст на хром не заезжает */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:max-w-[72%]">
-            <div className="text-center p-3 sm:p-4 bg-muted rounded-lg">
+            <div className="text-center p-3 sm:p-4 bv-glass-dark rounded-[14px]">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Оборот</p>
@@ -390,7 +390,7 @@ export const AdminDashboardMetrics = () => {
                 {formatCurrency(stats.yearlySummary.totalRevenue)}
               </p>
             </div>
-            <div className="text-center p-3 sm:p-4 bg-muted rounded-lg">
+            <div className="text-center p-3 sm:p-4 bv-glass-dark rounded-[14px]">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Чистая прибыль</p>
@@ -399,7 +399,7 @@ export const AdminDashboardMetrics = () => {
                 {formatCurrency(stats.yearlySummary.totalProfit)}
               </p>
             </div>
-            <div className="text-center p-3 sm:p-4 bg-muted rounded-lg">
+            <div className="text-center p-3 sm:p-4 bv-glass-dark rounded-[14px]">
               <div className="flex items-center justify-center gap-1 mb-1">
                 <Percent className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Рентабельность</p>

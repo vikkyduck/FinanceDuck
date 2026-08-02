@@ -661,7 +661,9 @@ All colors MUST be HSL.
 @layer utilities {
   /* ── Тёмная секция «Уголь». Переменные перескоуплены, поэтому все
         shadcn-компоненты внутри сами переходят на тёмную гамму. ── */
-  .bv-dark-card {
+  /* Двойной селектор — .bv-glass-card объявлена ниже по файлу и иначе
+     перекрывала бы угольный фон (карточка светлела, светлый заголовок пропадал). */
+  .bv-dark-card.bv-dark-card {
     --background: 225 10% 8%;          /* Уголь #131417 */
     --card: 225 10% 8%;
     --card-foreground: 43 20% 93%;
@@ -724,6 +726,19 @@ All colors MUST be HSL.
       inset 0 1.5px 1px rgba(255, 255, 255, .88),
       inset 0 -1.5px 1px rgba(29, 31, 35, .06),
       0 6px 18px rgba(29, 31, 35, .06), 0 2px 6px rgba(29, 31, 35, .04);
+  }
+
+  /* Градация «тёмное»: на угольной сцене тинт СВЕТЛЕЕ фона — пластина
+     выглядит приподнятой (не путать с чернильным стеклом для светлых сцен). */
+  .bv-glass-dark {
+    background: rgba(241, 239, 234, .10);
+    -webkit-backdrop-filter: blur(8px) saturate(1.4) brightness(1.06);
+    backdrop-filter: blur(8px) saturate(1.4) brightness(1.06);
+    border: 1px solid rgba(241, 239, 234, .14);
+    box-shadow:
+      inset 0 1.5px 1px rgba(255, 255, 255, .22),
+      inset 0 -1.5px 1px rgba(0, 0, 0, .22),
+      0 10px 26px rgba(0, 0, 0, .28);
   }
 
   /* Модальный слой — то же плотное стекло, тинт гуще ради текста */

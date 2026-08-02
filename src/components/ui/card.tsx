@@ -9,7 +9,10 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all duration-200 ease-out",
+      // bv-glass-card — жидкое стекло «Без Воды»: тинт Мела 72% + blur + кромка
+      // света. Радиус 18px (--radius-md системы) вместо резкого прямоугольника.
+      // bg-card остаётся фолбэком без поддержки backdrop-filter.
+      "rounded-[18px] border border-border/70 bg-card bv-glass-card text-card-foreground transition-all duration-200 ease-out",
       className
     )}
     {...props}

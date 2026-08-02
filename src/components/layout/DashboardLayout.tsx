@@ -12,12 +12,31 @@ interface DashboardLayoutProps {
  * а не украшает.
  */
 const NodeBackdrop = () => (
-  <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
+  <div
+    className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+    aria-hidden="true"
+    /* Та же сцена, что на экране входа: градиент бумаги + блобы розового
+       стекла и стали + граф узлов. Именно её преломляют стеклянные карточки —
+       без сцены стекло вырождалось в плоскую серую плашку. */
+    style={{ background: "linear-gradient(140deg, #F2EFE9 0%, #E9E5DE 55%, #DDD9D1 100%)" }}
+  >
+    <div
+      className="absolute rounded-full"
+      style={{ width: 520, height: 520, left: "-6%", top: "-14%", background: "radial-gradient(closest-side, rgba(233,196,189,.55), transparent)" }}
+    />
+    <div
+      className="absolute rounded-full"
+      style={{ width: 620, height: 620, right: "-8%", top: "30%", background: "radial-gradient(closest-side, rgba(233,196,189,.38), transparent 70%)" }}
+    />
+    <div
+      className="absolute rounded-full"
+      style={{ width: 460, height: 460, left: "22%", bottom: "-22%", background: "radial-gradient(closest-side, rgba(150,158,172,.4), transparent)" }}
+    />
     <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" fill="none">
-      <g stroke="hsl(var(--foreground))" strokeOpacity=".05" strokeWidth="1">
+      <g stroke="hsl(var(--foreground))" strokeOpacity=".07" strokeWidth="1">
         <path d="M120 180 300 90 520 160M120 180 90 420 210 600M1480 220 1300 130 1080 200M1480 220 1520 480 1400 700" />
       </g>
-      <g fill="hsl(var(--foreground))" fillOpacity=".05">
+      <g fill="hsl(var(--foreground))" fillOpacity=".09">
         <circle cx="120" cy="180" r="7" />
         <circle cx="300" cy="90" r="5" />
         <circle cx="520" cy="160" r="6" />
@@ -30,7 +49,7 @@ const NodeBackdrop = () => (
         <circle cx="1400" cy="700" r="6" />
       </g>
       {/* Один активный узел Пыльной розой — маркер системы */}
-      <circle cx="520" cy="160" r="14" stroke="hsl(var(--ring))" strokeOpacity=".16" />
+      <circle cx="520" cy="160" r="14" stroke="hsl(var(--ring))" strokeOpacity=".2" />
     </svg>
   </div>
 );

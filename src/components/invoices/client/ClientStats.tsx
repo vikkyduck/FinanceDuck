@@ -4,6 +4,8 @@ import { apiGet } from "@/lib/api";
 import { formatCurrency, formatDate } from "@/lib/invoiceCalculations";
 import { pluralizeRu as word } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
+import { CatEmpty } from "@/components/bv/CatEmpty";
 import { AlertCircle, ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 import { format } from "date-fns";
 import { SendMessageDialog } from "@/components/messages/SendMessageDialog";
@@ -94,23 +96,27 @@ const Block = ({
   children?: React.ReactNode;
   testId?: string;
 }) => (
-  <section className="border-t pt-6 first:border-t-0 first:pt-0" data-testid={testId}>
-    <button
-      type="button"
-      onClick={onToggle}
-      className="w-full text-left group"
-      aria-expanded={open}
-    >
-      <div className="flex items-baseline gap-3">
-        <div className="flex-1 min-w-0">{hero}</div>
-        <div className="text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0">
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+  // Каждый блок — стеклянная карточка над сценой кабинета («Без Воды»,
+  // раздел 7): сворачиваемость сохранена, тап по шапке раскрывает счета.
+  <Card data-testid={testId}>
+    <CardContent className="pt-5 pb-5 sm:pt-6 sm:pb-6">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full text-left group"
+        aria-expanded={open}
+      >
+        <div className="flex items-baseline gap-3">
+          <div className="flex-1 min-w-0">{hero}</div>
+          <div className="text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0">
+            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </div>
         </div>
-      </div>
-      {subhero && <div className="text-sm text-muted-foreground mt-1.5">{subhero}</div>}
-    </button>
-    {open && <div className="mt-4">{children}</div>}
-  </section>
+        {subhero && <div className="text-sm text-muted-foreground mt-1.5">{subhero}</div>}
+      </button>
+      {open && <div className="mt-4">{children}</div>}
+    </CardContent>
+  </Card>
 );
 
 export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
@@ -168,7 +174,7 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
       >
         <MessageSquare className={`${big ? "h-5 w-5" : "h-4 w-4"} ${hasUnread ? "text-foreground" : ""}`} />
         {hasUnread && (
-          <span className={`absolute ${big ? "top-2 right-2" : "-top-0.5 -right-0.5"} h-2 w-2 rounded-full bg-red-500 ring-2 ring-background`} />
+          <span className={`absolute ${big ? "top-2 right-2" : "-top-0.5 -right-0.5"} h-2 w-2 rounded-full bg-destructive ring-2 ring-background`} />
         )}
       </button>
     );
@@ -197,9 +203,9 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
 
   if (!hasAgency && !hasRecurring && !hasOneTime) {
     return (
-      <div className="rounded-lg border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground" data-testid="client-stats-empty">
+      <CatEmpty testId="client-stats-empty">
         {(dateFrom || dateTo) ? "За выбранный период счетов нет." : "У вас пока нет счетов."}
-      </div>
+      </CatEmpty>
     );
   }
 
@@ -207,7 +213,7 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
   const recurringHasActive = data.recurring.some(r => r.totalUnits > 0);
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-4 sm:space-y-6">
       {/* ============ Блок 1: По вашим проектам (agency 30/40) ============ */}
       {hasAgency && (
         <Block
@@ -216,8 +222,12 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
           testId="client-stats-agency"
           hero={
             <div>
-              <div className="text-sm text-muted-foreground mb-1">По вашим проектам · осталось</div>
-              <div className="text-5xl sm:text-6xl font-semibold tabular-nums tracking-tight text-green-700">
+              {/* Метка-капитель (Label из брендбука); цифра — Unbounded.
+                  Монохром: спокойные суммы графитом, цвет — только тревоге. */}
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                По вашим проектам · осталось
+              </div>
+              <div className="bv-number text-3xl sm:text-4xl md:text-5xl">
                 {formatCurrency(data.agency.remaining)}
               </div>
             </div>
@@ -252,7 +262,7 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
                         {inv.notes ? `№ ${inv.invoiceNumber} · ` : ""}{statusLabel[inv.status] || inv.status}
                       </div>
                       <div className="flex items-baseline gap-2 mt-1.5">
-                        <div className="text-lg font-semibold tabular-nums text-green-700">{formatCurrency(inv.remaining)}</div>
+                        <div className="text-lg font-semibold tabular-nums">{formatCurrency(inv.remaining)}</div>
                         <div className="text-xs text-muted-foreground">осталось из {formatCurrency(inv.budgetAfter)}</div>
                       </div>
                     </div>
@@ -351,7 +361,7 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
                           <div className="text-xs text-muted-foreground">{inv.marginRate}%</div>
                         </td>
                         <td className="py-3 text-right tabular-nums whitespace-nowrap align-top">{formatCurrency(inv.budgetAfter)}</td>
-                        <td className="py-3 text-right tabular-nums font-medium whitespace-nowrap text-green-700 align-top">{formatCurrency(inv.remaining)}</td>
+                        <td className="py-3 text-right tabular-nums font-medium whitespace-nowrap align-top">{formatCurrency(inv.remaining)}</td>
                         <td className="py-3 pl-2 align-top">
                           <MsgBtn inv={{ invoiceId: inv.invoiceId, invoiceNumber: inv.invoiceNumber }} />
                         </td>
@@ -419,8 +429,10 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
           testId="client-stats-recurring"
           hero={
             <div>
-              <div className="text-sm text-muted-foreground mb-1">Подписки · осталось</div>
-              <div className="text-5xl sm:text-6xl font-semibold tabular-nums tracking-tight text-green-700">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                Подписки · осталось
+              </div>
+              <div className="bv-number text-3xl sm:text-4xl md:text-5xl">
                 {recurringHasActive ? formatCurrency(recurringTotalRemaining) : "без срока"}
               </div>
             </div>
@@ -464,7 +476,7 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
                           <div className="text-sm tabular-nums">
                             осталось <span className="font-semibold">{r.remainingUnits}</span> {word(r.remainingUnits, unitForms[r.unit] || unitForms.month)}
                           </div>
-                          <div className="text-base font-semibold tabular-nums text-green-700">
+                          <div className="text-base font-semibold tabular-nums">
                             {formatCurrency(r.remainingMoney)}
                           </div>
                         </>
@@ -575,15 +587,19 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
           hero={
             data.oneTime.pendingCount > 0 ? (
               <div>
-                <div className="text-sm text-muted-foreground mb-1">Разовые работы · к оплате</div>
-                <div className="text-5xl sm:text-6xl font-semibold tabular-nums tracking-tight">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                  Разовые работы · к оплате
+                </div>
+                <div className="bv-number text-3xl sm:text-4xl md:text-5xl">
                   {formatCurrency(data.oneTime.pendingAmount)}
                 </div>
               </div>
             ) : (
               <div>
-                <div className="text-sm text-muted-foreground mb-1">Разовые работы</div>
-                <div className="text-5xl sm:text-6xl font-semibold tabular-nums tracking-tight text-green-700">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
+                  Разовые работы
+                </div>
+                <div className="bv-number text-3xl sm:text-4xl md:text-5xl">
                   всё оплачено
                 </div>
               </div>

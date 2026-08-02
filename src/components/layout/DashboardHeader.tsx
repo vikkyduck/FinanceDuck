@@ -1,6 +1,7 @@
 interface DashboardHeaderProps {
   title: string;
-  subtitle: string;
+  /** Подзаголовок-lead. Опционален: заголовок работает и один. */
+  subtitle?: string;
 }
 
 export const DashboardHeader = ({ title, subtitle }: DashboardHeaderProps) => {
@@ -9,9 +10,11 @@ export const DashboardHeader = ({ title, subtitle }: DashboardHeaderProps) => {
       <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-1 sm:mb-1.5 tracking-tight">
         {title}
       </h1>
-      <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-        {subtitle}
-      </p>
+      {subtitle && (
+        <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 };

@@ -278,76 +278,90 @@ export const ClientDashboard = () => {
     <DashboardLayout>
       <DashboardHeader
         title="Ваши финансы"
+        subtitle="Счета, оплаты и остатки по вашим проектам"
       />
 
-      <div className="space-y-8">
-        <div className="flex flex-col gap-3 sm:items-end">
-          <div className="flex flex-wrap gap-1.5 sm:justify-end">
-            {[
-              { key: "this-month", label: "Этот месяц" },
-              { key: "last-month", label: "Прошлый месяц" },
-              { key: "this-quarter", label: "Этот квартал" },
-              { key: "last-quarter", label: "Прошлый квартал" },
-              { key: "this-year", label: "Этот год" },
-              { key: "last-year", label: "Прошлый год" },
-            ].map(({ key, label }) => (
-              <Button
-                key={key}
-                variant={activePreset === key ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 text-xs px-2.5"
-                onClick={() => applyPreset(key)}
-                data-testid={`button-preset-${key}`}
-                aria-pressed={activePreset === key}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-          {(dateFrom || dateTo) && (
-            <p className="text-xs text-muted-foreground sm:text-right" data-testid="text-date-range-summary">
-              {dateFrom && dateTo
-                ? `Показывается: ${format(dateFrom, "d MMM yyyy", { locale: ru })} — ${format(dateTo, "d MMM yyyy", { locale: ru })}`
-                : dateFrom
-                ? `С ${format(dateFrom, "d MMM yyyy", { locale: ru })}`
-                : `По ${format(dateTo!, "d MMM yyyy", { locale: ru })}`}
-            </p>
-          )}
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex flex-col gap-1" data-testid="input-date-from">
-                <Label className="text-xs text-muted-foreground">С</Label>
-                <DatePicker
-                  date={dateFrom}
-                  onDateChange={setDateFrom}
-                  placeholder="Начало периода"
-                />
+      <div className="space-y-4 sm:space-y-6">
+        {/* Панель отчёта — стекло кабинета: слева смысл, справа управление */}
+        <Card data-testid="card-budget-report">
+          <CardContent className="pt-5 pb-5 sm:pt-6 sm:pb-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="lg:max-w-xs">
+                <h3 className="text-base font-semibold">Бюджетный отчёт</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Выберите период — соберём счета, расходы и остатки. Страница, PDF или Excel.
+                </p>
               </div>
-              <div className="flex flex-col gap-1" data-testid="input-date-to">
-                <Label className="text-xs text-muted-foreground">По</Label>
-                <DatePicker
-                  date={dateTo}
-                  onDateChange={setDateTo}
-                  placeholder="Конец периода"
-                />
+              <div className="flex flex-col gap-3 sm:items-end">
+                <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                  {[
+                    { key: "this-month", label: "Этот месяц" },
+                    { key: "last-month", label: "Прошлый месяц" },
+                    { key: "this-quarter", label: "Этот квартал" },
+                    { key: "last-quarter", label: "Прошлый квартал" },
+                    { key: "this-year", label: "Этот год" },
+                    { key: "last-year", label: "Прошлый год" },
+                  ].map(({ key, label }) => (
+                    <Button
+                      key={key}
+                      variant={activePreset === key ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5"
+                      onClick={() => applyPreset(key)}
+                      data-testid={`button-preset-${key}`}
+                      aria-pressed={activePreset === key}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                {(dateFrom || dateTo) && (
+                  <p className="text-xs text-muted-foreground sm:text-right" data-testid="text-date-range-summary">
+                    {dateFrom && dateTo
+                      ? `Показывается: ${format(dateFrom, "d MMM yyyy", { locale: ru })} — ${format(dateTo, "d MMM yyyy", { locale: ru })}`
+                      : dateFrom
+                      ? `С ${format(dateFrom, "d MMM yyyy", { locale: ru })}`
+                      : `По ${format(dateTo!, "d MMM yyyy", { locale: ru })}`}
+                  </p>
+                )}
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex flex-col gap-1" data-testid="input-date-from">
+                      <Label className="text-xs text-muted-foreground">С</Label>
+                      <DatePicker
+                        date={dateFrom}
+                        onDateChange={setDateFrom}
+                        placeholder="Начало периода"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1" data-testid="input-date-to">
+                      <Label className="text-xs text-muted-foreground">По</Label>
+                      <DatePicker
+                        date={dateTo}
+                        onDateChange={setDateTo}
+                        placeholder="Конец периода"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviewReport}
+                    disabled={previewing || downloading}
+                    data-testid="button-download-budget-report"
+                  >
+                    {previewing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4 mr-2" />
+                    )}
+                    Открыть бюджетный отчёт
+                  </Button>
+                </div>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePreviewReport}
-              disabled={previewing || downloading}
-              data-testid="button-download-budget-report"
-            >
-              {previewing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <FileText className="h-4 w-4 mr-2" />
-              )}
-              Открыть бюджетный отчёт
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogContent data-testid="dialog-report-preview">

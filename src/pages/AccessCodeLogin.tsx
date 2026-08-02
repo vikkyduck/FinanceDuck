@@ -216,12 +216,23 @@ const AccessCodeLogin = () => {
         transition={{ duration: 0.42, ease: [0.22, 0.61, 0.24, 1] }}
       >
         <header style={{ marginBottom: "var(--space-lg)" }}>
-          <p className="bv-eyebrow" style={{ marginBottom: "var(--space-xs)" }}>
-            Методологическое бюро
-          </p>
-          {/* Один срез на макет — на ключевом слове заголовка */}
+          {/* Действующий логотип — исходная точка системы (трафаретный срез) */}
+          <img
+            src="/brand/logo-bv.png"
+            alt="Без Воды"
+            width={640}
+            height={169}
+            style={{
+              width: 152, height: "auto", display: "block",
+              marginBottom: "var(--space-md)",
+              // PNG в градациях серого — подтягиваем к Графиту, иначе на бумаге блёкнет
+              filter: "brightness(.72) contrast(1.15)",
+            }}
+          />
+          {/* Срез на макете уже есть — он в трафаретном логотипе. Второй
+              (в заголовке) запрещён: два жеста спорят между собой. */}
           <h1 className="bv-h1" style={{ marginBottom: "var(--space-sm)" }}>
-            Личный <span className="bv-sliced">кабинет</span>
+            Личный кабинет
           </h1>
           <p className="bv-lead" style={{ maxWidth: "42ch" }}>
             Счета, платежи и расходы по проектам

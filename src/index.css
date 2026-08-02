@@ -10,42 +10,42 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Jony Ive & Steve Jobs Edition - Refined Minimalism */
-    /* Pure, clean backgrounds with subtle depth */
-    --background: 0 0% 99%;
-    --foreground: 0 0% 9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
-    
-    /* Primary - iOS Blue (Refined & Trustworthy) */
-    --primary: 211 100% 50%;
-    --primary-foreground: 0 0% 100%;
-    
-    /* Secondary - Minimal Gray (Supporting role only) */
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
-    
-    /* Neutrals - Apple-grade Grays */
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 9%;
-    
-    /* Status Colors - Clear & Purposeful */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --info: 211 100% 50%;
-    --info-foreground: 0 0% 100%;
-    
-    --border: 0 0% 89%;
-    --input: 0 0% 89%;
-    --ring: 211 100% 50%;
+    /* Дизайн-система «Без Воды» 2.4 «Сухой остаток».
+       Палитра раздела 3 брендбука, переведённая в HSL. Чистых #FFF и #000
+       нет нигде: у бумаги и угля всегда есть температура.
+       Роли: графит — смысл и главное действие, роза — акцент и фокус. */
+    --background: 40 27% 96%;      /* Бумага #F7F5F1 */
+    --foreground: 220 9% 13%;      /* Графит #1D1F23 */
+    --card: 45 40% 98%;            /* Мел #FCFBF8 */
+    --card-foreground: 220 9% 13%;
+    --popover: 45 40% 98%;
+    --popover-foreground: 220 9% 13%;
+
+    /* Главное действие — графитовое (кнопки), не цветное */
+    --primary: 220 9% 13%;
+    --primary-foreground: 43 23% 93%;  /* Бумага-на-угле #F1EFEA */
+
+    --secondary: 40 20% 91%;       /* Галерея #EDEAE4 */
+    --secondary-foreground: 220 9% 13%;
+
+    --muted: 40 20% 91%;
+    --muted-foreground: 220 7% 35%;    /* Сталь-текст #545860 */
+    --accent: 40 20% 91%;
+    --accent-foreground: 220 9% 13%;
+
+    /* Статусы приглушённые — не «светофор» */
+    --destructive: 342 41% 39%;    /* Марсала #8E3B54 */
+    --destructive-foreground: 43 23% 93%;
+    --success: 160 23% 35%;        /* Мята #456E60 */
+    --success-foreground: 43 23% 93%;
+    --warning: 30 38% 42%;
+    --warning-foreground: 43 23% 93%;
+    --info: 8 37% 47%;             /* Пыльная роза #A3564B */
+    --info-foreground: 43 23% 93%;
+
+    --border: 40 14% 84%;          /* Штрих #DBD7CF */
+    --input: 40 14% 84%;
+    --ring: 8 37% 47%;             /* фокус — кольцо Пыльной розы */
     --radius: 12px;
     
     /* Minimal Shadows - Apple HIG Style (Subtle, not aggressive) */
@@ -68,21 +68,21 @@ All colors MUST be HSL.
     --duration-normal: 350ms;
     --duration-slow: 500ms;
     
-    /* Chart Colors - Refined & Distinct */
-    --chart-1: 211 100% 50%;
-    --chart-2: 142 71% 45%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 291 47% 51%;
-    --chart-5: 0 84% 60%;
+    /* Графики — в палитре системы: графит, мята, роза, сталь, марсала */
+    --chart-1: 220 9% 13%;
+    --chart-2: 160 23% 35%;
+    --chart-3: 8 37% 47%;
+    --chart-4: 217 6% 57%;
+    --chart-5: 342 41% 39%;
 
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 9%;
-    --sidebar-primary: 211 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 0 0% 9%;
-    --sidebar-border: 0 0% 89%;
-    --sidebar-ring: 211 100% 50%;
+    --sidebar-background: 40 20% 91%;   /* Галерея — сайдбар отделён от бумаги */
+    --sidebar-foreground: 220 9% 13%;
+    --sidebar-primary: 220 9% 13%;
+    --sidebar-primary-foreground: 43 23% 93%;
+    --sidebar-accent: 40 27% 96%;
+    --sidebar-accent-foreground: 220 9% 13%;
+    --sidebar-border: 40 14% 84%;
+    --sidebar-ring: 8 37% 47%;
   }
 
   .dark {
@@ -154,20 +154,31 @@ All colors MUST be HSL.
   
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', sans-serif;
+    /* Наборный и интерфейсный шрифт системы — «невидимый слуга»,
+       передаёт данные без потерь (брендбук, раздел 4) */
+    font-family: 'Golos Text', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
     font-size: 15px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    letter-spacing: -0.015em;
-    line-height: 1.47;
+    letter-spacing: 0;
+    line-height: 1.5;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight;
     letter-spacing: -0.022em;
     line-height: 1.1;
     font-weight: 600;
+  }
+
+  /* Дисплейный шрифт — только заголовок страницы. В таблицы и наборный
+     текст Unbounded не пускаем: он для заявления, а не для чтения. */
+  h1 {
+    font-family: 'Unbounded', 'Arial Black', 'Segoe UI', sans-serif;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.12;
   }
   
   h1 { @apply text-4xl md:text-5xl; }
@@ -575,5 +586,54 @@ All colors MUST be HSL.
   
   .skeleton-wave::after {
     display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Приведение «светофора» к палитре «Без Воды» (брендбук, раздел 3).
+
+   В коде исторически 500+ мест с яркими tailwind-цветами (green-600, red-600,
+   amber-600, blue-600…). Брендбук такие запрещает: статусы приглушённые, а
+   кричащие цвета маскируют слабую структуру. Переписывать 41 файл поштучно —
+   долго и рискованно, поэтому смысл цвета сохраняем, а оттенок приводим к
+   системному: зелёный → Мята, красный → Марсала, янтарный → приглушённый
+   warning, синий/фиолетовый → Графит (в системе синего нет вовсе).
+
+   Слой utilities: специфичность та же, порядок — позже, поэтому побеждает.
+   Точечная зачистка по файлам может идти отдельно и постепенно.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer utilities {
+  .text-green-400, .text-green-500, .text-green-600, .text-green-700, .text-green-800,
+  .text-emerald-400, .text-emerald-500, .text-emerald-600, .text-emerald-700 {
+    color: hsl(var(--success));
+  }
+  .text-red-400, .text-red-500, .text-red-600, .text-red-700, .text-red-800,
+  .text-rose-400, .text-rose-500, .text-rose-600, .text-rose-700 {
+    color: hsl(var(--destructive));
+  }
+  .text-amber-400, .text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800,
+  .text-orange-400, .text-orange-500, .text-orange-600, .text-orange-700,
+  .text-yellow-500, .text-yellow-600, .text-yellow-700 {
+    color: hsl(var(--warning));
+  }
+  .text-blue-400, .text-blue-500, .text-blue-600, .text-blue-700,
+  .text-sky-400, .text-sky-500, .text-sky-600,
+  .text-indigo-400, .text-indigo-500, .text-indigo-600,
+  .text-violet-500, .text-violet-600, .text-purple-500, .text-purple-600 {
+    color: hsl(var(--foreground));
+  }
+
+  /* Мягкие заливки: тоже из системы, без неона */
+  .bg-green-50, .bg-green-100, .bg-emerald-50, .bg-emerald-100 { background-color: hsl(160 28% 90%); }
+  .bg-red-50, .bg-red-100, .bg-rose-50, .bg-rose-100 { background-color: hsl(340 45% 91%); }
+  .bg-amber-50, .bg-amber-100, .bg-orange-50, .bg-orange-100, .bg-yellow-50, .bg-yellow-100 { background-color: hsl(35 40% 90%); }
+  .bg-blue-50, .bg-blue-100, .bg-sky-50, .bg-sky-100, .bg-indigo-50, .bg-purple-50 { background-color: hsl(40 20% 91%); }
+
+  /* Цветные рамки — волосяные и нейтральные: толстых и ярких в системе нет */
+  [class*="border-green-"], [class*="border-emerald-"],
+  [class*="border-red-"], [class*="border-rose-"],
+  [class*="border-amber-"], [class*="border-orange-"], [class*="border-yellow-"],
+  [class*="border-blue-"], [class*="border-sky-"], [class*="border-indigo-"], [class*="border-purple-"] {
+    border-color: hsl(var(--border));
   }
 }

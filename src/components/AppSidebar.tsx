@@ -217,12 +217,16 @@ export function AppSidebar() {
         {!isCollapsed && (
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-primary rounded-lg">
-                <FileText className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <div className="flex-1">
-                <h2 className="font-semibold text-sm">Invoices</h2>
-                <p className="text-xs text-muted-foreground">{getRoleLabel()}</p>
+              <div className="flex-1 min-w-0">
+                {/* Бренд бюро — логотип с фирменным срезом */}
+                <img
+                  src="/brand/logo-bv.png"
+                  alt="Без Воды"
+                  width={640}
+                  height={169}
+                  className="h-5 w-auto"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">{getRoleLabel()}</p>
               </div>
               {totalAlerts > 0 && (
                 <Badge 
@@ -238,11 +242,16 @@ export function AppSidebar() {
         )}
         {isCollapsed && (
           <div className="flex flex-col items-center">
-            <div 
-              className="p-1.5 bg-primary rounded-lg relative cursor-pointer hover:opacity-80 transition-opacity"
+            <div
+              className="p-1.5 relative cursor-pointer hover:opacity-80 transition-opacity"
               onClick={() => totalAlerts > 0 && handleNavigation('/invoices?alerts=true')}
+              title="Без Воды"
             >
-              <FileText className="h-4 w-4 text-primary-foreground" />
+              {/* Знак бренда в свёрнутом виде — маркер-узел системы */}
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-label="Без Воды">
+                <circle cx="12" cy="12" r="9" stroke="hsl(var(--ring))" strokeOpacity=".45" />
+                <circle cx="12" cy="12" r="3.5" fill="hsl(var(--ring))" />
+              </svg>
               {totalAlerts > 0 && (
                 <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-destructive rounded-full flex items-center justify-center">
                   <span className="text-[9px] text-destructive-foreground font-semibold">

@@ -211,7 +211,7 @@ meRouter.get("/api/me/data-export", authMiddleware, async (req: AuthenticatedReq
 
       // Затраты по агентским счетам (та же проекция, что и в обзоре).
       const agencyIds = invRows
-        .filter(r => r.inv.scheme === "agency_30" || r.inv.scheme === "agency_40")
+        .filter(r => r.inv.scheme === "agency_30" || r.inv.scheme === "agency_40" || r.inv.scheme === "agency")
         .map(r => r.inv.id);
       if (agencyIds.length > 0) {
         const exp = await db.select().from(invoiceExpenses).where(

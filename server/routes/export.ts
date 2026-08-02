@@ -70,7 +70,7 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
       headerRow.font = { bold: true };
       headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
       const statusMap: Record<string, string> = { draft: "Черновик", sent: "Отправлен", paid: "Оплачен", cancelled: "Отменён" };
-      const schemeMap: Record<string, string> = { partner_10: "Партнёр 10%", partner_15: "Партнёр 15%", agency_30: "Агентский 30%", commission_based: "Комиссионный" };
+      const schemeMap: Record<string, string> = { partner_10: "Партнёр 10%", partner_15: "Партнёр 15%", agency_30: "Агентский 30%", agency_40: "Агентский 40%", agency: "Агентская", commission_based: "Комиссионный" };
       for (const inv of filteredInvoices) {
         const client = allClients.find(c => c.id === inv.clientId);
         const partner = allPartners.find(p => p.id === inv.partnerId);
@@ -192,7 +192,7 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
     // Клиенту «расходы / остаток» считаем только по агентским 30/40 —
     // по commission_based / partner_10 / partner_15 эта раскладка скрыта.
     const aggregateInvoices = isClient
-      ? invoices.filter(inv => inv.scheme === "agency_30" || inv.scheme === "agency_40")
+      ? invoices.filter(inv => inv.scheme === "agency_30" || inv.scheme === "agency_40" || inv.scheme === "agency")
       : invoices;
 
     const count = invoices.length;

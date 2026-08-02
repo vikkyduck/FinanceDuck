@@ -9,7 +9,7 @@ import {
   partners, clients, recurringInvoices, monthlyFinancialPlans, signedActs, accessTokens,
   assistantBonusPayments,
 } from "../../shared/schema";
-import { parseNum } from "../../shared/financialEngine";
+import { parseNum, isAgencyScheme, AGENCY_SCHEMES } from "../../shared/financialEngine";
 import type { ClientLTVData, MonthInvoiceDetail, DraftsStats } from "../storage";
 
 type DB = typeof _db;
@@ -31,7 +31,7 @@ export async function getExpectedCommission(db: DB, partnerId?: string): Promise
 }[]> {
   // Get all UNPAID invoices (status = 'sent') for partner schemes
   const conditions = [
-    inArray(invoices.scheme, ['commission_based', 'partner_10', 'partner_15', 'agency_30', 'agency_40']),
+    inArray(invoices.scheme, ['commission_based', 'partner_10', 'partner_15', 'agency_30', 'agency_40', 'agency']),
     eq(invoices.status, 'sent')
   ];
   
@@ -78,8 +78,8 @@ export async function getExpectedCommission(db: DB, partnerId?: string): Promise
     
     // Calculate commission based on scheme
     let commission = 0;
-    if (scheme === 'agency_30' || scheme === 'agency_40') {
-      // For agency schemes: partner gets partnerShareFromMargin
+    if (isAgencyScheme(scheme)) {
+      // For agency schemes (включая гибкую 'agency'): partner gets partnerShareFromMargin
       commission = parseNum(row.calculations.partnerShareFromMargin);
     } else {
       // For partner_10, partner_15, commission_based: use commissionAmount
@@ -334,10 +334,13 @@ export async function getDoNotSpendData(db: DB, partnerId?: string): Promise<{
     const clientBill = parseNum(row.calculations.clientBill);
     const executorExpenses = parseNum(row.calculations.executorExpensesTotal);
     
-    // Use stored clientBaseAfterMargin if available, else calculate based on scheme
+    // Use stored clientBaseAfterMargin if available, else calculate based on scheme.
+    // Гибкая 'agency' в запасном пути: база = сумма − маржа (ставки не жёсткие).
     const scheme = row.invoice.scheme;
-    const clientBaseRate = scheme === 'agency_40' ? 0.6 : 0.7; // agency_40: 60%, agency_30: 70%
-    const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || (clientBill * clientBaseRate);
+    const fallbackBase = scheme === 'agency'
+      ? clientBill - parseNum(row.calculations.agencyMargin)
+      : clientBill * (scheme === 'agency_40' ? 0.6 : 0.7); // agency_40: 60%, agency_30: 70%
+    const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || fallbackBase;
     const doNotSpendBudget = clientBase;
     const invoiceRemaining = Math.max(0, doNotSpendBudget - executorExpenses);
     
@@ -527,7 +530,7 @@ export async function getClientAgency30Report(db: DB, clientId: string): Promise
   total_spent: number;
   remaining_budget: number;
 }> {
-  // Get agency scheme invoices (agency_30 and agency_40) for this client
+  // Get agency scheme invoices (agency_30/40 + гибкая 'agency') for this client
   const agencyInvoices = await db
     .select({
       calculations: invoiceCalculations,
@@ -537,7 +540,7 @@ export async function getClientAgency30Report(db: DB, clientId: string): Promise
     .where(
       and(
         eq(invoices.clientId, clientId),
-        inArray(invoices.scheme, ['agency_30', 'agency_40'])
+        inArray(invoices.scheme, [...AGENCY_SCHEMES])
       )
     );
 

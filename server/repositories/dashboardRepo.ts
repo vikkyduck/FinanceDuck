@@ -6,7 +6,7 @@
 import { eq, and, sql, inArray, desc, isNull, isNotNull } from "drizzle-orm";
 import { db as _db } from "../db";
 import { invoices, invoiceCalculations, invoiceExpenses, partnerPayments, signedActs, partners, clients, accessTokens, recurringInvoices } from "../../shared/schema";
-import { parseNum } from "../../shared/financialEngine";
+import { parseNum, isAgencyScheme } from "../../shared/financialEngine";
 import type { MonthlyData, PartnerHeroMetricsData, DashboardInvoiceDetail } from "../storage";
 
 type DB = typeof _db;
@@ -773,9 +773,8 @@ export async function getClientBudget(db: DB, clientId: string): Promise<Array<{
       const inv = row.invoice;
       const calc = row.calculations;
       const partnerName = inv.partnerId ? partnerMap.get(inv.partnerId) || '—' : '—';
-      const isOpenCommission =
-        inv.scheme === 'agency_30'
-        || inv.scheme === 'agency_40';
+      // Агентские схемы, включая гибкую 'agency' — раскладка открыта клиенту.
+      const isOpenCommission = isAgencyScheme(inv.scheme);
 
       if (inv.serviceType === 'periodic') {
         const price = parseNum(inv.pricePerPeriod ?? '0');
@@ -909,10 +908,10 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
 
     const active = rows.filter(r => r.invoice.status !== 'cancelled' && inRange(r.invoice.paymentDate as any));
 
-    // --- Блок 1: агентские 30/40 ---
-    const agencyRows = active.filter(r => r.invoice.scheme === 'agency_30' || r.invoice.scheme === 'agency_40');
+    // --- Блок 1: агентские (жёсткие 30/40 + гибкая 'agency') ---
+    const agencyRows = active.filter(r => isAgencyScheme(r.invoice.scheme));
     // Подтягиваем затраты по этим счетам одним запросом. ВАЖНО: только для
-    // agency 30/40. По commission_based/partner — затраты клиенту видны не
+    // агентских схем. По commission_based/partner — затраты клиенту видны не
     // должны быть никогда (см. видимость в кабинете и в expenses-endpoint).
     const agencyIds = agencyRows.map(r => r.invoice.id);
     const expensesByAgencyInvoice = new Map<string, Array<{
@@ -941,7 +940,11 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
       const inv = r.invoice;
       const c = r.calculations;
       const bill = parseNum(c?.clientBill ?? inv.clientBill);
-      const marginRate = inv.scheme === 'agency_30' ? 30 : 40;
+      // Гибкая 'agency': ставка маржи персистится в calc.commissionRate
+      // (см. invoiceRepo/financialEngine), запасной путь — маржа/сумма.
+      const marginRate = inv.scheme === 'agency'
+        ? (parseNum(c?.commissionRate) || (bill > 0 ? Math.round(parseNum(c?.agencyMargin) / bill * 100) : 0))
+        : inv.scheme === 'agency_30' ? 30 : 40;
       const commissionAmount = parseNum(c?.agencyMargin ?? bill * (marginRate / 100));
       const budgetAfter = parseNum(c?.clientBaseAfterMargin ?? bill * (1 - marginRate / 100));
       const spent = parseNum(c?.executorExpensesTotal);
@@ -961,7 +964,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
     // Классификатор расширен: счёт попадает в блок 2, если он привязан к
     // шаблону recurring_invoices ИЛИ если у него service_type='periodic'
     // (предоплата за N единиц — месяц/день/час). Без agency.
-    const nonAgencyActive = active.filter(r => r.invoice.scheme !== 'agency_30' && r.invoice.scheme !== 'agency_40');
+    const nonAgencyActive = active.filter(r => !isAgencyScheme(r.invoice.scheme));
     const isPeriodicLike = (inv: any) => !!inv.recurringInvoiceId || inv.serviceType === 'periodic';
     const recurringInvoiceRows = nonAgencyActive.filter(r => isPeriodicLike(r.invoice));
 

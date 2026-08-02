@@ -169,7 +169,7 @@ export async function globalSearch(db: DB,
   // Видны клиенту ТОЛЬКО по агентским 30/40 счетам (видимость «кухни»).
   // Staff видит все.
   const expenseClientFilter = isClient
-    ? sql`AND i.client_id = ${options.clientId} AND i.scheme IN ('agency_30', 'agency_40')`
+    ? sql`AND i.client_id = ${options.clientId} AND i.scheme IN ('agency_30', 'agency_40', 'agency')`
     : sql``;
   const expenseFuzzy = useFuzzy
     ? sql`OR similarity(LOWER(ie.description), ${q}) >= ${TRG_MIN}`

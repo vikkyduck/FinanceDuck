@@ -7,8 +7,8 @@ import { parseNum } from "../../shared/financialEngine";
 export const myInvoicesRouter = Router();
 
 const statusMap: Record<string, string> = { draft: "Черновик", sent: "Отправлен", paid: "Оплачен", cancelled: "Отменён" };
-const schemeMap: Record<string, string> = { agency_30: "Агентство 30%", agency_40: "Агентство 40%", partner_10: "Партнёрское 10%", partner_15: "Партнёрское 15%", commission_based: "Партнёрское соглашение" };
-const isAgency = (scheme?: string | null) => scheme === "agency_30" || scheme === "agency_40";
+const schemeMap: Record<string, string> = { agency: "Агентская", agency_30: "Агентство 30%", agency_40: "Агентство 40%", partner_10: "Партнёрское 10%", partner_15: "Партнёрское 15%", commission_based: "Партнёрское соглашение" };
+const isAgency = (scheme?: string | null) => scheme === "agency_30" || scheme === "agency_40" || scheme === "agency";
 
 // Единый маршрут выгрузки счетов в Excel. Кнопка «Выгрузить в Excel» есть
 // у ассистента, бухгалтера и админа. Раньше тот же путь обслуживался

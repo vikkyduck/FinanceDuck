@@ -18,6 +18,16 @@ export type InvoiceScheme =
   // вручную (обобщает жёсткие agency_30/40). Клиент видит маржу и списания.
   | 'agency';
 
+/** Агентские схемы (открытая клиенту раскладка бюджета): жёсткие 30/40 и
+ *  гибкая 'agency'. Единственный источник истины для сервера — фильтры
+ *  `scheme === 'agency_30' || ...` по коду не размножать: именно такой
+ *  рассыпанный фильтр однажды оставил счёт по гибкой схеме без бюджета
+ *  в кабинете клиента. Фронтовый близнец: src/lib/invoiceHelpers.ts. */
+export const AGENCY_SCHEMES: readonly InvoiceScheme[] = ['agency_30', 'agency_40', 'agency'];
+export function isAgencyScheme(scheme: unknown): boolean {
+  return scheme === 'agency_30' || scheme === 'agency_40' || scheme === 'agency';
+}
+
 export interface FinancialResult {
   clientBill: number;
   commissionRate?: number;

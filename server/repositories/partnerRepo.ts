@@ -8,7 +8,7 @@ import {
   Partner, PartnerPayment,
   InsertPartner, InsertPartnerPayment, signedActs,
 } from "../../shared/schema";
-import { parseNum } from "../../shared/financialEngine";
+import { parseNum, isAgencyScheme, AGENCY_SCHEMES } from "../../shared/financialEngine";
 import type { PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData } from "../storage";
 import type { db as _db } from "../db";
 
@@ -288,10 +288,12 @@ export async function getPartnerClientStats(db: Db, partnerId: string, year: num
     let commission = 0;
     let clientRemaining = 0;
     
-    if (scheme === 'agency_30' || scheme === 'agency_40') {
+    if (isAgencyScheme(scheme)) {
       commission = parseNum(row.calculations.partnerShareFromMargin);
-      const clientPercent = scheme === 'agency_40' ? 0.60 : 0.70;
-      const clientBase = clientBill * clientPercent;
+      // База клиента — из расчётов (гибкая 'agency' жёсткой ставки не имеет);
+      // запасной путь для старых строк без сохранённой базы.
+      const storedBase = parseNum(row.calculations.clientBaseAfterMargin);
+      const clientBase = storedBase || clientBill * (scheme === 'agency_40' ? 0.60 : 0.70);
       const expenses = parseNum(row.calculations.executorExpensesTotal);
       clientRemaining = Math.max(0, clientBase - expenses);
     } else {
@@ -368,7 +370,7 @@ export async function getPartnerDocumentRisk(db: Db, partnerId: string): Promise
 }
 
 export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promise<PartnerAgency30FundsData[]> {
-  // Get agency scheme invoices (agency_30 and agency_40) for this partner
+  // Get agency scheme invoices (agency_30/40 + гибкая 'agency') for this partner
   const agencyInvoices = await db
     .select({
       invoice: invoices,
@@ -380,7 +382,7 @@ export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promis
     .leftJoin(clients, eq(invoices.clientId, clients.id))
     .where(and(
       eq(invoices.partnerId, partnerId),
-      inArray(invoices.scheme, ['agency_30', 'agency_40']),
+      inArray(invoices.scheme, [...AGENCY_SCHEMES]),
       inArray(invoices.status, ['paid', 'sent'])
     ));
 
@@ -394,10 +396,14 @@ export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promis
     const clientBill = parseNum(row.calculations.clientBill);
     const executorExpenses = parseNum(row.calculations.executorExpensesTotal);
     
-    // Client money that partner must not spend (70% for agency_30, 60% for agency_40)
+    // Client money that partner must not spend: из сохранённой базы расчётов;
+    // запасной путь только для старых жёстких схем (у гибкой 'agency' база
+    // всегда персистится — ставка не фиксированная).
     const scheme = row.invoice.scheme;
-    const clientBaseRate = scheme === 'agency_40' ? 0.6 : 0.7;
-    const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || (clientBill * clientBaseRate);
+    const fallbackBase = scheme === 'agency'
+      ? clientBill - parseNum(row.calculations.agencyMargin)
+      : clientBill * (scheme === 'agency_40' ? 0.6 : 0.7);
+    const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || fallbackBase;
     
     if (!clientMap.has(clientId)) {
       clientMap.set(clientId, {

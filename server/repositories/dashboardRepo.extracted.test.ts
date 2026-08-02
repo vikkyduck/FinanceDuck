@@ -100,6 +100,30 @@ describe("dashboardRepo — вынесенные методы: с оплачен
   });
 });
 
+describe("Клиентский обзор — гибкая схема 'agency' попадает в агентский бакет", () => {
+  // Регрессия владельца (2026-08-03): счёт 300 000 ₽ по гибкой схеме 'agency'
+  // (маржа 40% → клиенту доступно 180 000) висел у клиента в «Разовых работах»
+  // как просто «оплачен» — классификатор знал только agency_30/40.
+  it("300к, маржа 40% → agency-бакет: доступно/осталось 180 000, oneTime пуст", async () => {
+    await createInvoice(asDb(), {
+      invoiceNumber: "AG-FLEX-1", clientId, partnerId,
+      scheme: "agency" as const,
+      createdBy: "00000000-0000-0000-0000-000000000001",
+      status: "paid", paymentDate: "2026-07-23",
+      partnerCommissionRate: "8",              // партнёр (скрыт от клиента)
+    } as any, { clientBill: "300000", commissionRate: "40" }); // маржа (видна клиенту)
+
+    const r = await getClientOverviewBuckets(asDb(), clientId);
+    expect(r.agency.count).toBe(1);
+    expect(r.agency.available).toBeCloseTo(180000, 2);
+    expect(r.agency.remaining).toBeCloseTo(180000, 2);
+    expect(r.agency.invoices[0].marginRate).toBeCloseTo(40, 2);
+    expect(r.agency.invoices[0].commissionAmount).toBeCloseTo(120000, 2);
+    // Больше НЕ маскируется под разовую работу
+    expect(r.oneTime.totalCount).toBe(0);
+  });
+});
+
 describe("Коэффициент эффективности — котлы по partners.leverage_role", () => {
   it("owner/managed_asset/external разносятся по своим котлам, ratio=(others+managed)/owner", async () => {
     // Посеянный партнёр — 'external' по умолчанию; добавляем owner и managed.

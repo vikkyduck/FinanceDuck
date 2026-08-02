@@ -119,3 +119,15 @@ sudo -u postgres pg_dump finance_duck | gzip > /var/finance-duck/backups/pgdump-
 - **Оффсайт-бэкапы**: машина администратора ежедневно (09:30) забирает
   `/var/finance-duck/backups` к себе (launchd `com.financeduck.backup-pull`,
   скрипт `~/FinanceDuckBackups/pull.sh`). Локальный ретеншн на сервере — 30 копий.
+
+## Второй домен кабинета: app.withoutwater.ru (2026-08)
+
+Кабинет доступен с двух доменов (один бэкенд :5000, одна база):
+- fin-dohod.ru — исторический адрес, продолжает работать;
+- app.withoutwater.ru — адрес «от компании» для клиентов.
+
+Активация автоматическая: systemd-таймер `finance-duck-activate.timer`
+(скрипт-копия: deploy/activate-app-domain.sh) каждые 5 минут проверяет
+DNS; как только A-запись `app → <SERVER_IP>` появляется — выпускает
+сертификат, дополняет CORS_ORIGINS, переключает PUBLIC_BASE_URL на домен
+компании, рестартует сервис, шлёт TG-отчёт владельцу и отключает себя.

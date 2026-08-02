@@ -34,23 +34,15 @@ export const AdminActionBar = ({
         
         {/* Secondary Actions */}
         <div className="flex flex-wrap gap-2">
-          <Button 
-            variant="default" 
+          {/* Одна кнопка экспорта вместо двух: диалог покрывает и выбор данных,
+              и фильтры. Зелёный градиент убран — в системе такого цвета нет. */}
+          <Button
+            variant="outline"
             onClick={onExport}
-            className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-sm"
+            data-testid="button-export-excel"
           >
             <Download className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
             <span className="text-sm sm:text-base">Экспорт</span>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={onExportMyInvoices}
-            disabled={isExportingMyInvoices}
-            data-testid="button-export-excel"
-          >
-            {isExportingMyInvoices ? <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2 animate-spin" /> : <Download className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />}
-            <span className="text-sm sm:text-base hidden sm:inline">Выгрузить в Excel</span>
-            <span className="text-sm sm:hidden">Excel</span>
           </Button>
           <RecalculateInvoicesButton />
           {onTransferFunds && (

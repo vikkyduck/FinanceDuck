@@ -33,14 +33,18 @@ All colors MUST be HSL.
     --accent: 40 20% 91%;
     --accent-foreground: 220 9% 13%;
 
-    /* Статусы приглушённые — не «светофор» */
-    --destructive: 342 41% 39%;    /* Марсала #8E3B54 */
+    /* Статусы — монохром с ОДНИМ сигналом.
+       Референсы системы черно-белые, поэтому цвет не носитель смысла:
+       единственный цветной сигнал — Марсала на том, что требует внимания
+       (долг, просрочка, ошибка). «Оплачено» и прочее спокойное — графит,
+       так глаз мгновенно отделяет проблему от нормы, без светофора. */
+    --destructive: 342 41% 39%;    /* Марсала #8E3B54 — требует внимания */
     --destructive-foreground: 43 23% 93%;
-    --success: 160 23% 35%;        /* Мята #456E60 */
+    --success: 220 9% 13%;         /* Графит: «в порядке» = спокойно, не зелено */
     --success-foreground: 43 23% 93%;
-    --warning: 30 38% 42%;
+    --warning: 342 41% 39%;        /* та же Марсала: тревога одна на систему */
     --warning-foreground: 43 23% 93%;
-    --info: 8 37% 47%;             /* Пыльная роза #A3564B */
+    --info: 220 7% 35%;            /* Сталь-текст: справочное, не кричит */
     --info-foreground: 43 23% 93%;
 
     --border: 40 14% 84%;          /* Штрих #DBD7CF */
@@ -603,31 +607,42 @@ All colors MUST be HSL.
    Точечная зачистка по файлам может идти отдельно и постепенно.
    ═══════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
+  /* Спокойное (деньги получены, прибыль, «всё хорошо») — графитом.
+     Цифры одного цвета читаются как таблица, а не как витрина. */
   .text-green-400, .text-green-500, .text-green-600, .text-green-700, .text-green-800,
-  .text-emerald-400, .text-emerald-500, .text-emerald-600, .text-emerald-700 {
-    color: hsl(var(--success));
-  }
-  .text-red-400, .text-red-500, .text-red-600, .text-red-700, .text-red-800,
-  .text-rose-400, .text-rose-500, .text-rose-600, .text-rose-700 {
-    color: hsl(var(--destructive));
-  }
-  .text-amber-400, .text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800,
-  .text-orange-400, .text-orange-500, .text-orange-600, .text-orange-700,
-  .text-yellow-500, .text-yellow-600, .text-yellow-700 {
-    color: hsl(var(--warning));
-  }
+  .text-emerald-400, .text-emerald-500, .text-emerald-600, .text-emerald-700,
   .text-blue-400, .text-blue-500, .text-blue-600, .text-blue-700,
   .text-sky-400, .text-sky-500, .text-sky-600,
   .text-indigo-400, .text-indigo-500, .text-indigo-600,
   .text-violet-500, .text-violet-600, .text-purple-500, .text-purple-600 {
     color: hsl(var(--foreground));
   }
+  /* ЕДИНСТВЕННЫЙ цветовой сигнал — то, что требует внимания: долг, просрочка,
+     ошибка. Красное и янтарное сводим в одну Марсалу, чтобы глаз цеплял
+     проблему сразу и не разбирал оттенки. */
+  .text-red-400, .text-red-500, .text-red-600, .text-red-700, .text-red-800,
+  .text-rose-400, .text-rose-500, .text-rose-600, .text-rose-700,
+  .text-amber-400, .text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800,
+  .text-orange-400, .text-orange-500, .text-orange-600, .text-orange-700,
+  .text-yellow-500, .text-yellow-600, .text-yellow-700 {
+    color: hsl(var(--destructive));
+  }
 
-  /* Мягкие заливки: тоже из системы, без неона */
-  .bg-green-50, .bg-green-100, .bg-emerald-50, .bg-emerald-100 { background-color: hsl(160 28% 90%); }
-  .bg-red-50, .bg-red-100, .bg-rose-50, .bg-rose-100 { background-color: hsl(340 45% 91%); }
-  .bg-amber-50, .bg-amber-100, .bg-orange-50, .bg-orange-100, .bg-yellow-50, .bg-yellow-100 { background-color: hsl(35 40% 90%); }
-  .bg-blue-50, .bg-blue-100, .bg-sky-50, .bg-sky-100, .bg-indigo-50, .bg-purple-50 { background-color: hsl(40 20% 91%); }
+  /* Заливки: нейтральная бумага-галерея; выделяется только тревожная */
+  .bg-green-50, .bg-green-100, .bg-emerald-50, .bg-emerald-100,
+  .bg-blue-50, .bg-blue-100, .bg-sky-50, .bg-sky-100, .bg-indigo-50, .bg-purple-50 {
+    background-color: hsl(40 20% 91%);
+  }
+  .bg-red-50, .bg-red-100, .bg-rose-50, .bg-rose-100,
+  .bg-amber-50, .bg-amber-100, .bg-orange-50, .bg-orange-100, .bg-yellow-50, .bg-yellow-100 {
+    background-color: hsl(340 45% 93%);   /* Марсала-дымка */
+  }
+
+  /* Градиенты «из зелёного в изумрудный» и подобные — в системе не существуют */
+  [class*="from-green-"], [class*="to-emerald-"], [class*="from-emerald-"],
+  [class*="to-green-"], [class*="from-blue-"], [class*="to-blue-"] {
+    background-image: none;
+  }
 
   /* Цветные рамки — волосяные и нейтральные: толстых и ярких в системе нет */
   [class*="border-green-"], [class*="border-emerald-"],

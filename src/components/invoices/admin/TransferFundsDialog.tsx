@@ -8,7 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { apiGet, apiPost } from "@/lib/api";
-import { formatCurrency } from "@/lib/format";
+import { formatMoney } from "@/lib/format";
+
+/**
+ * Деньги переноса показываем ТОЧНО, с копейками, когда они есть.
+ * Округление до рубля здесь врёт в опасную сторону: остаток 0,50 ₽
+ * выглядел как «1 ₽», пользователь вводил 1 — и кнопка молча гасла,
+ * потому что сервер сравнивает с точной суммой.
+ */
+const exactMoney = (v: number) => formatMoney(v, { decimals: !Number.isInteger(v) });
 
 interface TransferFundsDialogProps {
   open: boolean;
@@ -77,11 +85,30 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
   const fromInvoice = clientInvoices.find((i) => i.id === fromId);
   const toInvoice   = clientInvoices.find((i) => i.id === toId);
 
-  const amt = Number(amount);
+  // Запятая как десятичный разделитель — привычный ввод, Number её не понимает
+  const amt = Number(String(amount).replace(",", ".").trim());
+  const available = fromInvoice ? fromInvoice.clientRemaining : 0;
   const valid = !!clientId
     && !!fromId && !!toId && fromId !== toId
     && Number.isFinite(amt) && amt > 0
-    && (fromInvoice ? amt <= fromInvoice.clientRemaining + 1e-6 : false);
+    && (fromInvoice ? amt <= available + 1e-6 : false);
+
+  /** Почему кнопка неактивна — молчаливый disabled читается как поломка. */
+  const blockReason = (() => {
+    if (valid || submitting) return null;
+    if (!clientId) return "Выберите клиента";
+    if (!fromId) return "Выберите счёт-источник";
+    if (fromInvoice && available <= 0) {
+      return available < 0
+        ? `На источнике перерасход ${exactMoney(available)} — переносить нечего`
+        : "На источнике нет доступных средств";
+    }
+    if (!toId) return "Выберите счёт-получатель";
+    if (!amount.trim()) return "Укажите сумму";
+    if (!Number.isFinite(amt) || amt <= 0) return "Сумма должна быть больше нуля";
+    if (amt > available + 1e-6) return `Больше доступного — на источнике ${exactMoney(available)}`;
+    return null;
+  })();
 
   const submit = async () => {
     if (!valid) return;
@@ -104,7 +131,7 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
   };
 
   const invoiceLabel = (i: InvoiceLite) =>
-    `${i.clientTitle || i.invoiceNumber || i.id.slice(0, 6)} — доступно ${formatCurrency(i.clientRemaining)}`;
+    `${i.clientTitle || i.invoiceNumber || i.id.slice(0, 6)} — доступно ${exactMoney(i.clientRemaining)}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -139,8 +166,10 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
                 <Select value={fromId} onValueChange={setFromId} disabled={!clientId}>
                   <SelectTrigger><SelectValue placeholder="Источник" /></SelectTrigger>
                   <SelectContent>
+                    {/* Источник без денег выбрать нельзя — иначе выбор молча
+                        ведёт в тупик с неактивной кнопкой. */}
                     {clientInvoices.map((i) => (
-                      <SelectItem key={i.id} value={i.id} disabled={i.id === toId}>
+                      <SelectItem key={i.id} value={i.id} disabled={i.id === toId || i.clientRemaining <= 0}>
                         {invoiceLabel(i)}
                       </SelectItem>
                     ))}
@@ -165,15 +194,27 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
 
             <div className="space-y-1">
               <Label>Сумма, ₽</Label>
-              <Input
-                type="number" min="0" step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                />
+                {/* «Всё» подставляет ТОЧНЫЙ остаток — вручную его не набрать,
+                    если в нём копейки, а на экране рубли. */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setAmount(String(available))}
+                  disabled={!fromInvoice || available <= 0}
+                >
+                  Всё
+                </Button>
+              </div>
               {fromInvoice && (
                 <p className="text-xs text-muted-foreground">
-                  Доступно на источнике: {formatCurrency(fromInvoice.clientRemaining)}
+                  Доступно на источнике: {exactMoney(available)}
                 </p>
               )}
             </div>
@@ -188,7 +229,12 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
               />
             </div>
 
-            <div className="flex gap-2 justify-end pt-2">
+            <div className="flex flex-wrap items-center gap-2 justify-end pt-2">
+              {blockReason && (
+                <p className="text-xs text-muted-foreground mr-auto" data-testid="text-transfer-block-reason">
+                  {blockReason}
+                </p>
+              )}
               <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>Отмена</Button>
               <Button onClick={submit} disabled={!valid || submitting}>
                 {submitting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}

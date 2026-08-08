@@ -1,10 +1,10 @@
 /**
  * partnerRepo — partners, partner-payments
  */
-import { eq, and, or, desc, gte, inArray } from "drizzle-orm";
+import { eq, and, or, desc, gte, inArray, sql } from "drizzle-orm";
 import {
   partners, clients, clientPartners, accessTokens, invoices,
-  partnerPayments, invoiceCalculations,
+  partnerPayments, invoiceCalculations, invoiceTransfers,
   Partner, PartnerPayment,
   InsertPartner, InsertPartnerPayment, signedActs,
 } from "../../shared/schema";
@@ -376,6 +376,14 @@ export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promis
       invoice: invoices,
       calculations: invoiceCalculations,
       clientName: clients.name,
+      // Переносы бюджета — см. getDoNotSpendData: без них «Клиентские деньги»
+      // у партнёра расходятся с тем, что видит сам клиент.
+      transferIn: sql<string>`COALESCE((
+        SELECT SUM(t.amount) FROM ${invoiceTransfers} t WHERE t.to_invoice_id = ${invoices.id}
+      ), 0)`,
+      transferOut: sql<string>`COALESCE((
+        SELECT SUM(t.amount) FROM ${invoiceTransfers} t WHERE t.from_invoice_id = ${invoices.id}
+      ), 0)`,
     })
     .from(invoices)
     .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
@@ -404,7 +412,14 @@ export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promis
       ? clientBill - parseNum(row.calculations.agencyMargin)
       : clientBill * (scheme === 'agency_40' ? 0.6 : 0.7);
     const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || fallbackBase;
-    
+    // Бюджет с поправкой на переносы + остаток из сохранённого расчёта:
+    // один источник истины с кабинетом клиента и аудитом денег.
+    const budgetAfterTransfers = clientBase + parseNum(row.transferIn) - parseNum(row.transferOut);
+    const storedRemaining = row.calculations.clientRemaining;
+    const invoiceRemaining = storedRemaining !== null && storedRemaining !== undefined
+      ? parseNum(storedRemaining)
+      : budgetAfterTransfers - executorExpenses;
+
     if (!clientMap.has(clientId)) {
       clientMap.set(clientId, {
         clientId,
@@ -417,16 +432,14 @@ export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promis
     }
 
     const summary = clientMap.get(clientId)!;
-    summary.totalBudget += clientBase;
+    summary.totalBudget += budgetAfterTransfers;
     summary.totalSpent += executorExpenses;
+    summary.remaining += invoiceRemaining;
     summary.invoiceCount += 1;
   }
 
   return Array.from(clientMap.values())
-    .map(s => ({
-      ...s,
-      remaining: Math.max(0, s.totalBudget - s.totalSpent),
-    }))
+    .map(s => ({ ...s }))
     .filter(s => s.totalBudget > 0)
     .sort((a, b) => b.remaining - a.remaining);
 }

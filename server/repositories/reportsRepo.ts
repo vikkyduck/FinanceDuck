@@ -301,6 +301,15 @@ export async function getDoNotSpendData(db: DB, partnerId?: string): Promise<{
       invoice: invoices,
       calculations: invoiceCalculations,
       clientName: clients.name,
+      // Переносы бюджета между счетами: без них «доступно» врёт, а итог
+      // расходится с кабинетом клиента (перенос МЕЖДУ клиентами реально
+      // двигает деньги — см. регрессию 004→033 на 5 100 ₽).
+      transferIn: sql<string>`COALESCE((
+        SELECT SUM(t.amount) FROM ${invoiceTransfers} t WHERE t.to_invoice_id = ${invoices.id}
+      ), 0)`,
+      transferOut: sql<string>`COALESCE((
+        SELECT SUM(t.amount) FROM ${invoiceTransfers} t WHERE t.from_invoice_id = ${invoices.id}
+      ), 0)`,
     })
     .from(invoices)
     .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
@@ -341,8 +350,15 @@ export async function getDoNotSpendData(db: DB, partnerId?: string): Promise<{
       ? clientBill - parseNum(row.calculations.agencyMargin)
       : clientBill * (scheme === 'agency_40' ? 0.6 : 0.7); // agency_40: 60%, agency_30: 70%
     const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || fallbackBase;
-    const doNotSpendBudget = clientBase;
-    const invoiceRemaining = Math.max(0, doNotSpendBudget - executorExpenses);
+    // «Доступно» с поправкой на переносы бюджета — та же формула, что в аудите
+    // денег (остаток = база − расходы + переносы) и в кабинете клиента.
+    const doNotSpendBudget = clientBase + parseNum(row.transferIn) - parseNum(row.transferOut);
+    // Единственный источник истины по остатку — сохранённый расчёт; локальная
+    // формула остаётся запасным путём для старых строк без него.
+    const storedRemaining = row.calculations.clientRemaining;
+    const invoiceRemaining = storedRemaining !== null && storedRemaining !== undefined
+      ? parseNum(storedRemaining)
+      : doNotSpendBudget - executorExpenses;
     
     if (!clientMap.has(clientId)) {
       clientMap.set(clientId, {
@@ -359,6 +375,7 @@ export async function getDoNotSpendData(db: DB, partnerId?: string): Promise<{
     const summary = clientMap.get(clientId)!;
     summary.totalBudget += doNotSpendBudget;
     summary.totalSpent += executorExpenses;
+    summary.remaining += invoiceRemaining;
     summary.invoiceCount += 1;
     summary.invoices.push({
       id: row.invoice.id,
@@ -375,7 +392,9 @@ export async function getDoNotSpendData(db: DB, partnerId?: string): Promise<{
   return Array.from(clientMap.values())
     .map(s => ({
       ...s,
-      remaining: Math.max(0, s.totalBudget - s.totalSpent),
+      // Итог — сумма остатков счетов (как у клиента в кабинете), а не
+      // Σбюджет − Σрасходы: последнее не знало о переносах и клампило минус,
+      // из-за чего админка показывала 805К там, где у клиента 811К.
       invoices: s.invoices.sort((a, b) => {
         if (!a.createdAt || !b.createdAt) return 0;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();

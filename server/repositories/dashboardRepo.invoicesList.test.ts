@@ -54,6 +54,18 @@ describe("getDashboardInvoices — категории", () => {
     expect(nums(await getDashboardInvoices(asDb(), 2026, 2, "received"))).toEqual(["D-1", "D-4"]);
   });
 
+  it("received: оплата в другом месяце — счёт идёт в месяц ФАКТА, не плана", async () => {
+    // Регрессия владельца (2026-08-03): счёт 29062026 — план 17 июля,
+    // фактически оплачен 6 августа — не показывался в августовских деньгах.
+    await mk({ status: "paid", paymentDate: "2026-07-17", actualPaymentDate: "2026-08-06" }); // D-1
+    const aug  = await getDashboardInvoices(asDb(), 2026, 7, "received");
+    const july = await getDashboardInvoices(asDb(), 2026, 6, "received");
+    expect(nums(aug)).toEqual(["D-1"]);
+    expect(nums(july)).toEqual([]);
+    // В списке подписан датой фактической оплаты, а не плановым сроком
+    expect(aug[0].paymentDate).toContain("2026-08-06");
+  });
+
   it("expected: неоплаченные/неотменённые с effectiveDate в месяце", async () => {
     await mk({ status: "sent",  paymentDate: "2026-03-10" });         // D-1 ✓
     await mk({ status: "draft", paymentDate: "2026-03-20" });         // D-2 ✓

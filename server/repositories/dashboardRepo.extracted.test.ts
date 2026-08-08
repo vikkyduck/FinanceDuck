@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, seedPartnerAndClient, type TestDb } from "../test/testDb";
 import { createInvoice } from "./invoiceRepo";
-import { partners } from "../../shared/schema";
+import { partners, invoices } from "../../shared/schema";
+import { eq } from "drizzle-orm";
 import {
   getPartnerDebtSummaries,
   getPartnerSchemeDoNotSpendData,
@@ -97,6 +98,30 @@ describe("dashboardRepo — вынесенные методы: с оплачен
   it("getClientOverviewBuckets держит форму", async () => {
     const r = await getClientOverviewBuckets(asDb(), clientId, "2026-01-01", "2026-12-31");
     expect(r.agency).toBeDefined();
+  });
+});
+
+describe("Деньги месяца — по дате фактической оплаты", () => {
+  // Регрессия владельца (2026-08-03): счёт 29062026 выставлен на 17 июля,
+  // оплачен 6 августа — в августовской карточке «Получено» его не было,
+  // потому что месяц считался по ПЛАНОВОЙ дате.
+  it("счёт с планом в июле и фактом в августе даёт деньги августа", async () => {
+    const inv = await createInvoice(asDb(), {
+      invoiceNumber: "CROSS-1", clientId, partnerId,
+      scheme: "commission_based" as const,
+      createdBy: "00000000-0000-0000-0000-000000000001",
+      status: "paid", paymentDate: "2026-07-17",
+    } as any, { clientBill: "150000" });
+    await db.update(invoices)
+      .set({ actualPaymentDate: "2026-08-06" })
+      .where(eq(invoices.id, inv.id));
+
+    const aug  = await getAdminDashboardStats(asDb(), noRecurring, 2026, 7);
+    const july = await getAdminDashboardStats(asDb(), noRecurring, 2026, 6);
+    expect(aug.monthlyCashFlow.received).toBeCloseTo(150000, 2);
+    expect(july.monthlyCashFlow.received).toBeCloseTo(0, 2);
+    // Год не меняется: факт и план в одном году
+    expect(aug.yearlySummary.totalRevenue).toBeCloseTo(150000, 2);
   });
 });
 

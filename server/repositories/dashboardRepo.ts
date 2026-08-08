@@ -531,8 +531,12 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     const yearStartStr  = `${selectedYear}-01-01`;
     const yearEndStr    = `${selectedYear}-12-31`;
 
-    // Effective date expression: paymentDate when set, otherwise DATE(createdAt)
-    const effectiveDate = sql`COALESCE(${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
+    // Эффективная дата денег: СНАЧАЛА фактическая оплата (когда деньги реально
+    // пришли), затем плановая дата, затем дата создания. Порядок важен: счёт,
+    // выставленный на июль и оплаченный в августе, — августовские деньги.
+    // Раньше факт игнорировался, и карточка месяца расходилась с «Годовой
+    // сводкой» (getAdminMonthlyData всегда считала по факту).
+    const effectiveDate = sql`COALESCE(${invoices.actualPaymentDate}, ${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
 
     // Run all aggregation queries in parallel for performance
     const [
@@ -1388,12 +1392,12 @@ export async function getDashboardInvoices(db: DB, year: number, month: number, 
   // Провал-списки дашборда. Раньше метод грузил ВСЕ счета и фильтровал в JS —
   // при росте базы каждый клик по карточке = полная выборка. Теперь фильтр в
   // WHERE; семантика категорий 1:1 с getAdminDashboardStats (эффективная дата =
-  // paymentDate, иначе DATE(createdAt)).
+  // фактическая оплата, иначе плановая, иначе DATE(createdAt)).
   const pad = (n: number) => String(n).padStart(2, "0");
   const lastDay = new Date(year, month + 1, 0).getDate();
   const monthStartStr = `${year}-${pad(month + 1)}-01`;
   const monthEndStr   = `${year}-${pad(month + 1)}-${pad(lastDay)}`;
-  const effectiveDate = sql`COALESCE(${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
+  const effectiveDate = sql`COALESCE(${invoices.actualPaymentDate}, ${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
   const inMonth = sql`${effectiveDate} BETWEEN ${monthStartStr}::date AND ${monthEndStr}::date`;
 
   let where;
@@ -1425,6 +1429,7 @@ export async function getDashboardInvoices(db: DB, year: number, month: number, 
       invoiceNumber: invoices.invoiceNumber,
       status: invoices.status,
       paymentDate: invoices.paymentDate,
+      actualPaymentDate: invoices.actualPaymentDate,
       createdAt: invoices.createdAt,
       clientName: clients.name,
       netProfitAdmin: invoiceCalculations.netProfitAdmin,
@@ -1445,9 +1450,13 @@ export async function getDashboardInvoices(db: DB, year: number, month: number, 
       netProfitAdmin: parseNum(r.netProfitAdmin),
       clientBill: parseNum(r.clientBill),
       status: r.status,
+      // В списках месяца показываем ту же дату, по которой счёт в него попал,
+      // — иначе счёт из августа подписан июльским плановым сроком.
       paymentDate: category === 'drafts' || category === 'drafts_no_date'
         ? null
-        : (useEffective ? (r.paymentDate ?? r.createdAt)?.toString() ?? null : r.paymentDate?.toString() ?? null),
+        : (useEffective
+            ? (r.actualPaymentDate ?? r.paymentDate ?? r.createdAt)?.toString() ?? null
+            : r.paymentDate?.toString() ?? null),
     }))
     .sort((a, b) => b.netProfitAdmin - a.netProfitAdmin);
 }

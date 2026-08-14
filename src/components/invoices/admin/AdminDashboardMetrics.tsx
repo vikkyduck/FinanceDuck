@@ -119,7 +119,7 @@ const InvoiceList = ({ year, month, category, isOpen }: InvoiceListProps) => {
   }
 
   return (
-    <div className="pt-2 space-y-1 max-h-48 overflow-y-auto">
+    <div className="pt-2 space-y-1 max-h-72 overflow-y-auto">
       {invoices.map(inv => (
         <Link
           key={inv.id}
@@ -189,7 +189,7 @@ const RecurringList = ({ year, month, isOpen }: RecurringListProps) => {
   }
 
   return (
-    <div className="pt-2 space-y-1 max-h-48 overflow-y-auto">
+    <div className="pt-2 space-y-1 max-h-72 overflow-y-auto">
       {recurring.map(rec => (
         <Link
           key={rec.id}

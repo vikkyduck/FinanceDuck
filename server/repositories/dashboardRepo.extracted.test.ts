@@ -11,6 +11,7 @@ import {
   getClientOverviewBuckets,
   getPartnerInvoicesDetail,
   getPartnerDebtDetails,
+  getDashboardInvoices,
 } from "./dashboardRepo";
 
 // Smoke-тесты для 7 методов, вынесенных из God-объекта storage.ts в dashboardRepo.
@@ -171,5 +172,47 @@ describe("Коэффициент эффективности — котлы по 
     expect(stats.leverage.managedProfit).toBeCloseTo(2000, 2);
     expect(stats.leverage.othersProfit).toBeCloseTo(3000, 2);
     expect(stats.leverage.ratio).toBeCloseTo(5, 2); // (3000+2000)/1000
+  });
+});
+
+describe("Продажи месяца — по дате создания, а не оплаты", () => {
+  // Кейс владельца (2026-08-14): счёт 12082026 заведён 14 августа, плановая
+  // оплата 14 сентября, статус sent. Он должен попадать в «Продажи (Август)»:
+  // продажа — это заключённый в месяце проект, а не полученные деньги.
+  it("счёт создан в августе с оплатой в сентябре попадает в продажи августа", async () => {
+    const inv = await createInvoice(asDb(), {
+      invoiceNumber: "SALE-1", clientId, partnerId,
+      scheme: "commission_based" as const,
+      createdBy: "00000000-0000-0000-0000-000000000001",
+      status: "sent", paymentDate: "2026-09-14",
+    } as any, { clientBill: "40000" });
+    await db.update(invoices)
+      .set({ createdAt: new Date("2026-08-14T17:13:04Z") })
+      .where(eq(invoices.id, inv.id));
+
+    const aug = await getAdminDashboardStats(asDb(), noRecurring, 2026, 7);
+    expect(aug.monthlySales.draftsCount).toBeGreaterThanOrEqual(1);
+    expect(aug.monthlySales.draftsTotal).toBeGreaterThan(0);
+
+    // …и виден в раскрывающемся списке под «Количество» — ПЕРВЫМ, потому что
+    // свежий. Раньше список шёл по прибыли, и продажа с маленьким чеком
+    // уезжала под обрез окна (кейс 12082026: 36 800 ₽, шестая из шести).
+    const big = await createInvoice(asDb(), {
+      invoiceNumber: "SALE-BIG", clientId, partnerId,
+      scheme: "commission_based" as const,
+      createdBy: "00000000-0000-0000-0000-000000000001",
+      status: "draft", paymentDate: "2026-08-20",
+    } as any, { clientBill: "500000" });
+    await db.update(invoices)
+      .set({ createdAt: new Date("2026-08-04T10:00:00Z") })
+      .where(eq(invoices.id, big.id));
+
+    const list = await getDashboardInvoices(asDb(), 2026, 7, "drafts");
+    expect(list.map(r => r.invoiceNumber)).toContain("SALE-1");
+    expect(list[0].invoiceNumber).toBe("SALE-1"); // свежая продажа сверху
+
+    // В сентябрьские продажи не попадает — там его не заключали
+    const sep = await getAdminDashboardStats(asDb(), noRecurring, 2026, 8);
+    expect(sep.monthlySales.draftsCount).toBe(0);
   });
 });

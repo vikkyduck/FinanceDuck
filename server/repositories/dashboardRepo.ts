@@ -1442,7 +1442,15 @@ export async function getDashboardInvoices(db: DB, year: number, month: number, 
     .where(where);
 
   const useEffective = category === 'received' || category === 'expected';
-  return rows
+  // «Продажи месяца» — это лента заключённых сделок: сверху свежая. По прибыли
+  // новая продажа с маленьким чеком уезжала в самый низ списка и не попадалась
+  // владельцу на глаза (кейс 12082026). Денежные категории остаются по прибыли.
+  const byCreatedDesc = category === 'drafts' || category === 'drafts_no_date';
+  const sorted = [...rows].sort((a, b) => byCreatedDesc
+    ? (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0)
+    : parseNum(b.netProfitAdmin) - parseNum(a.netProfitAdmin));
+
+  return sorted
     .map((r) => ({
       id: r.id,
       invoiceNumber: r.invoiceNumber || `INV-${r.id}`,
@@ -1457,6 +1465,5 @@ export async function getDashboardInvoices(db: DB, year: number, month: number, 
         : (useEffective
             ? (r.actualPaymentDate ?? r.paymentDate ?? r.createdAt)?.toString() ?? null
             : r.paymentDate?.toString() ?? null),
-    }))
-    .sort((a, b) => b.netProfitAdmin - a.netProfitAdmin);
+    }));
 }

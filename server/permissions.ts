@@ -43,6 +43,16 @@ export function isClientUsageVisible(invoice: {
 // Permission tables
 // ---------------------------------------------------------------------------
 
+/** Поля периодической услуги (предоплата за N месяцев/дней/часов).
+ *  Нужны КАЖДОЙ роли, а не только клиенту: по ним считается «Остаток» счёта
+ *  (invoiceRepo.applyPeriodicOverrides), и без них админу с ассистентом не
+ *  рисуется блок «Периодическая услуга» с кнопкой «Закрыть месяц» — закрывать
+ *  периоды становится некому, и остаток навсегда замирает на полной сумме
+ *  счёта. Секрета в этих полях нет: клиент их и так видит. */
+const PERIODIC_FIELDS = [
+  'serviceType', 'periodUnit', 'pricePerPeriod', 'totalPeriods', 'periodsUsed',
+] as const;
+
 export const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
   admin: [
     'id', 'invoiceNumber', 'partnerId', 'clientId', 'status', 'description',
@@ -50,30 +60,34 @@ export const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
     'plannedExpenses', 'closingDocumentUrl',
+    ...PERIODIC_FIELDS,
   ],
   partner: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description', 'clientTitle',
     'clientBill', 'scheme', 'createdAt', 'updatedAt',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'plannedExpenses',
+    ...PERIODIC_FIELDS,
   ],
   client: [
     'id', 'invoiceNumber', 'status', 'description', 'clientTitle', 'clientBill',
     'scheme', 'createdAt', 'updatedAt',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes',
-    // Поля для periodic-режима: клиент видит, что он покупает и насколько использовал.
-    'serviceType', 'periodUnit', 'pricePerPeriod', 'totalPeriods', 'periodsUsed',
+    // Клиент видит, что он покупает и насколько использовал.
+    ...PERIODIC_FIELDS,
   ],
   assistant: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description', 'clientTitle',
     'clientBill', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
     'plannedExpenses',
+    ...PERIODIC_FIELDS,
   ],
   accountant: [
     'id', 'invoiceNumber', 'clientId', 'status', 'description', 'clientTitle',
     'clientBill', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'scheme',
     'plannedExpenses', 'closingDocumentUrl',
+    ...PERIODIC_FIELDS,
   ],
 };
 

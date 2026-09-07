@@ -972,11 +972,12 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
     const isPeriodicLike = (inv: any) => !!inv.recurringInvoiceId || inv.serviceType === 'periodic';
     const recurringInvoiceRows = nonAgencyActive.filter(r => isPeriodicLike(r.invoice));
 
-    // Считаем «использовано» = COUNT(invoice_expenses) WHERE createdBy
-    // принадлежит admin/assistant токенам. Расходы клиента (просмотр) и
-    // партнёра не учитываются — единица списывается, только когда работу
-    // отметили мы.
-    const periodicInvoiceIds = recurringInvoiceRows.map(r => r.invoice.id);
+    // «Использовано» по ШАБЛОНАМ recurring_invoices (блок 2b) = COUNT
+    // (invoice_expenses) WHERE createdBy принадлежит admin/assistant токенам:
+    // у шаблона своего счётчика периодов нет. Для standalone-periodic счетов
+    // (блок 2a) считать так НЕЛЬЗЯ — там единственный источник истины
+    // invoices.periods_used, тот же, по которому считается «Остаток» счёта.
+    const periodicInvoiceIds = recurringInvoiceRows.filter(r => !!r.invoice.recurringInvoiceId).map(r => r.invoice.id);
     const usedByInvoice = new Map<string, number>();
     if (periodicInvoiceIds.length > 0) {
       const usageRows = await db
@@ -1028,7 +1029,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
       const unit = (inv.periodUnit as 'month' | 'day' | 'hour') || 'month';
       const unitPrice = parseNum(inv.pricePerPeriod);
       if (!Number.isFinite(unitPrice) || total < 1) continue;
-      const used = Math.min(total, Math.max(0, usedByInvoice.get(inv.id) ?? Number(inv.periodsUsed ?? 0)));
+      const used = Math.min(total, Math.max(0, Number(inv.periodsUsed ?? 0)));
       const remaining = Math.max(0, total - used);
       const partnerName = inv.partnerId ? (partnersByIdMap.get(inv.partnerId) || '—') : '—';
       recurringBlock.push({

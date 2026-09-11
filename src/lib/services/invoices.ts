@@ -303,14 +303,6 @@ export const invoiceService = {
     });
   },
 
-  async closePeriod(invoiceId: string): Promise<any> {
-    return apiPost(`/invoices/${invoiceId}/close-period`, {});
-  },
-
-  async updatePeriodsUsed(invoiceId: string, periodsUsed: number): Promise<any> {
-    return apiPatch(`/invoices/${invoiceId}`, { periodsUsed });
-  },
-
   async fetchClients(): Promise<ClientListItem[]> {
     const data = await apiGet<any[]>("/clients");
     return data.map((client) => ({

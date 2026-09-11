@@ -89,6 +89,43 @@ export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise
   return parseNum(row?.balance ?? 0);
 }
 
+/**
+ * «Использовано» по периодическому счёту = число строк расходов (не больше
+ * totalPeriods). Каждая оплата исполнителю за период заводится расходом — она
+ * и есть прожитый период. Одно правило, один источник: ручного счётчика нет,
+ * иначе два источника начинают спорить (ручная поправка становилась храповиком,
+ * и удалённый расход не откатывал месяц).
+ *
+ * Почему так: пока месяцы закрывались только руками, счёт 0899 при восьми
+ * оплатах исполнителю показывал «использовано 0/9» и остаток на полную сумму —
+ * и админу, и партнёру, и клиенту. Для one_time возвращает undefined.
+ */
+export function derivePeriodsUsed(
+  invoice: { serviceType?: string | null; totalPeriods?: number | null },
+  expenseCount: number,
+): number | undefined {
+  if (invoice.serviceType !== 'periodic') return undefined;
+  const total = Number(invoice.totalPeriods ?? 0);
+  if (!Number.isFinite(total) || total < 1) return undefined;
+  return Math.min(total, Math.max(0, Number(expenseCount) || 0));
+}
+
+/** Персистит производное «использовано» в invoices.periods_used, чтобы все
+ *  читатели (список, карточка, кабинет клиента, applyPeriodicOverrides)
+ *  видели одно число. Возвращает счёт с актуальным periodsUsed. */
+async function _syncPeriodsUsed<T extends { id: string; serviceType?: string | null; totalPeriods?: number | null; periodsUsed?: number | null }>(
+  db: DBorTx,
+  invoice: T,
+  expenseCount: number,
+): Promise<T> {
+  const used = derivePeriodsUsed(invoice, expenseCount);
+  if (used === undefined || used === Number(invoice.periodsUsed ?? 0)) return invoice;
+  await db.update(invoices)
+    .set({ periodsUsed: used, updatedAt: new Date() })
+    .where(eq(invoices.id, invoice.id));
+  return { ...invoice, periodsUsed: used };
+}
+
 export function applyPeriodicOverrides(
   invoice: {
     serviceType?: string | null;
@@ -190,8 +227,11 @@ async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promi
   const expensesPaidByPartner = expenses.filter(e => e.paidByAdmin !== true).reduce((s, e) => s + parseNum(e.amount), 0);
   const expensesPaidByAdmin   = expenses.filter(e => e.paidByAdmin === true).reduce((s, e) => s + parseNum(e.amount), 0);
 
-  const invoice = await _getInvoiceRaw(db, invoiceId);
-  if (!invoice) return;
+  const invoiceRaw = await _getInvoiceRaw(db, invoiceId);
+  if (!invoiceRaw) return;
+  // Прожитые периоды следуют за расходами — до оверрайда, чтобы остаток
+  // считался от актуального periodsUsed.
+  const invoice = await _syncPeriodsUsed(db, invoiceRaw, expenses.length);
 
   const [existing] = await db
     .select()
@@ -466,6 +506,8 @@ export async function updateInvoiceCalculations(
   const expensesPaidByPartner = expenses.filter(e => e.paidByAdmin !== true).reduce((s, e) => s + parseNum(e.amount), 0);
   const expensesPaidByAdmin   = expenses.filter(e => e.paidByAdmin === true).reduce((s, e) => s + parseNum(e.amount), 0);
   const plannedExp            = parseNum(invoice.plannedExpenses);
+  // periodsUsed — производное от расходов и здесь тоже (PATCH periodic-полей).
+  const invoiceSynced = await _syncPeriodsUsed(db, invoice, expenses.length);
 
   // Для periodic clientBill = price × periods, перекрываем вход в расчёт.
   const periodicBill = derivePeriodicClientBill(invoice);
@@ -487,7 +529,7 @@ export async function updateInvoiceCalculations(
     plannedExp,
     marginRate,
   );
-  computed = applyPeriodicOverrides(invoice, computed);
+  computed = applyPeriodicOverrides(invoiceSynced, computed);
 
   if (existing) {
     const [updated] = await db.update(invoiceCalculations)
@@ -651,6 +693,28 @@ export async function generateInvoiceNumber(db: DB): Promise<string> {
   const result = await db.select({ count: sql<number>`count(*)` }).from(invoices);
   const n = Number(result[0]?.count || 0) + 1;
   return `INV-${new Date().getFullYear()}-${String(n).padStart(4, '0')}`;
+}
+
+/**
+ * Идемпотентная починка при старте: периодические счета, у которых сохранённое
+ * periods_used разошлось с числом расходов (данные до появления
+ * derivePeriodsUsed или правленные руками), прогоняются через канонический
+ * пересчёт. Возвращает число починенных.
+ */
+export async function healPeriodicUsage(db: DB): Promise<number> {
+  const res: any = await db.execute(sql`
+    SELECT i.id
+    FROM invoices i
+    WHERE i.service_type = 'periodic'
+      AND COALESCE(i.total_periods, 0) >= 1
+      AND COALESCE(i.periods_used, 0) <> LEAST(
+        i.total_periods,
+        (SELECT COUNT(*) FROM invoice_expenses e WHERE e.invoice_id = i.id)
+      )
+  `);
+  const rows: Array<{ id: string }> = res.rows ?? res;
+  for (const r of rows) await recalcInvoice(db, r.id);
+  return rows.length;
 }
 
 export async function recalculateAllInvoices(db: DB): Promise<{ updated: number; errors: number }> {

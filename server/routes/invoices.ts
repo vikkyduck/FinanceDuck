@@ -209,44 +209,6 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
   }
 });
 
-// Закрыть один период периодического счёта: periodsUsed += 1, не больше totalPeriods.
-invoicesRouter.post("/api/invoices/:id/close-period", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const id = String(req.params.id);
-    const actor = req.user!;
-    const role = actor.role;
-    const existing = await findAuthorizedInvoice(storage, actor, id);
-    if (!existing) return res.status(404).json({ error: "Invoice not found" });
-    if (existing.serviceType !== 'periodic') {
-      return res.status(400).json({ error: "Счёт не периодический" });
-    }
-    const total = Number(existing.totalPeriods ?? 0);
-    const used  = Number(existing.periodsUsed ?? 0);
-    if (used >= total) {
-      return res.status(400).json({ error: "Все периоды уже закрыты" });
-    }
-    await storage.updateInvoice(id, { periodsUsed: used + 1 });
-    await storage.updateInvoiceCalculations(id, {});
-    const fullInvoice = await findAuthorizedInvoice(storage, actor, id);
-    if (role === "assistant" || role === "admin" || role === "accountant") {
-      await storage.logAssistantAction({
-        accessTokenId: req.user!.token.id,
-        actionType: "update_invoice",
-        entityType: "invoice",
-        entityId: id,
-        description: `Закрыт период по счёту: ${existing.invoiceNumber} (${used + 1}/${total})`,
-        details: JSON.stringify({ invoiceNumber: existing.invoiceNumber, periodsUsed: used + 1, totalPeriods: total }),
-        ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null,
-        userAgent: req.headers["user-agent"] || null,
-      });
-    }
-    res.json(stripSensitiveFieldsForRole(fullInvoice as any, role));
-  } catch (error) {
-    console.error("Close period error:", error);
-    res.status(500).json({ error: "Failed to close period" });
-  }
-});
-
 invoicesRouter.delete("/api/invoices/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;

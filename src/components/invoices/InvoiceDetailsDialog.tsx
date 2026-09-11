@@ -153,9 +153,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
   const [updatingHideFromAssistant, setUpdatingHideFromAssistant] = useState(false);
 
   // Периодические услуги — управление числом закрытых периодов.
-  const [periodsUsedEdit, setPeriodsUsedEdit] = useState<number | ''>('');
-  const [updatingPeriodsUsed, setUpdatingPeriodsUsed] = useState(false);
-  const [closingPeriod, setClosingPeriod] = useState(false);
   // Сообщения по счёту/списанию.
   const [messageInvoiceOpen, setMessageInvoiceOpen] = useState(false);
   const [messageExpense, setMessageExpense] = useState<{ id: string; description: string; amount: number } | null>(null);
@@ -225,7 +222,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
       setPlannedExpensesEdit(plannedExp);
 
       // Текущее число закрытых периодов
-      setPeriodsUsedEdit(invoice.periods_used ?? 0);
 
       // Текущее «Название для клиента»
       setClientTitleEdit(invoice.client_title ?? "");
@@ -694,50 +690,6 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
     }
   };
 
-  const handleClosePeriod = async () => {
-    if (!invoiceId) return;
-    setClosingPeriod(true);
-    try {
-      await apiPost(`/invoices/${invoiceId}/close-period`, {});
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      await fetchInvoiceDetails();
-      toast({ title: "Период закрыт", description: "Использовано на 1 больше." });
-    } catch (error: any) {
-      toast({ title: "Ошибка", description: error.message || "Не удалось закрыть период", variant: "destructive" });
-    } finally {
-      setClosingPeriod(false);
-    }
-  };
-
-  const handleSavePeriodsUsed = async () => {
-    if (!invoiceId) return;
-    const total = Number(invoice?.total_periods ?? 0);
-    const value = Number(periodsUsedEdit);
-    if (!Number.isInteger(value) || value < 0) {
-      toast({ title: "Ошибка", description: "Значение должно быть целым ≥ 0", variant: "destructive" });
-      return;
-    }
-    if (value > total) {
-      toast({ title: "Ошибка", description: `Не может быть больше ${total}`, variant: "destructive" });
-      return;
-    }
-    setUpdatingPeriodsUsed(true);
-    try {
-      await apiPatch(`/invoices/${invoiceId}`, { periodsUsed: value });
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/client/budget'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      await fetchInvoiceDetails();
-      toast({ title: "Сохранено", description: "Число закрытых периодов обновлено." });
-    } catch (error: any) {
-      toast({ title: "Ошибка", description: error.message || "Не удалось сохранить", variant: "destructive" });
-    } finally {
-      setUpdatingPeriodsUsed(false);
-    }
-  };
-
   const handleMoveInvoice = async () => {
     if (!invoiceId || !moveClientId) return;
     if (moveClientId === invoice?.client_id) {
@@ -1143,48 +1095,13 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                         </div>
                         <Progress value={pct} className="h-2" />
                         {canManage && (
-                          <div className="flex flex-wrap items-end gap-3 pt-2">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              onClick={handleClosePeriod}
-                              disabled={closingPeriod || used >= total}
-                              data-testid="button-close-period"
-                            >
-                              {closingPeriod && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
-                              + Закрыть {invoice.period_unit === 'day' ? 'день' : invoice.period_unit === 'hour' ? 'час' : 'месяц'}
-                            </Button>
-                            <div className="flex items-end gap-2">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-muted-foreground">Закрыто (ручная правка)</Label>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={total}
-                                  step={1}
-                                  value={periodsUsedEdit}
-                                  onChange={(e) => setPeriodsUsedEdit(e.target.value === '' ? '' : Number(e.target.value))}
-                                  className="w-24 h-9 text-sm"
-                                  data-testid="input-periods-used"
-                                />
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={handleSavePeriodsUsed}
-                                disabled={updatingPeriodsUsed || periodsUsedEdit === '' || Number(periodsUsedEdit) === used}
-                                data-testid="button-save-periods-used"
-                              >
-                                {updatingPeriodsUsed && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
-                                Сохранить
-                              </Button>
-                            </div>
+                          <div className="flex justify-end pt-2">
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={handleRevertToOneTime}
                               disabled={converting}
-                              className="ml-auto text-muted-foreground hover:text-foreground"
+                              className="text-muted-foreground hover:text-foreground"
                               data-testid="button-revert-to-onetime"
                             >
                               Превратить обратно в разовый

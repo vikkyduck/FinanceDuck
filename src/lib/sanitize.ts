@@ -26,19 +26,15 @@ export function stripHtml(html: string): string {
 }
 
 /**
- * Безопасная санитизация текста для отображения
- * Удаляет HTML и экранирует спецсимволы
+ * Очистка текста ПЕРЕД сохранением: убирает HTML-теги и крайние пробелы.
+ * Спецсимволы НЕ экранирует: храним то, что человек набрал, а экранирует
+ * тот, кто выводит (React — сам, Telegram — escapeHtml на сервере).
+ * Раньше здесь был escapeHtml, и в таблице расходов показывалось
+ * «https:&#x2F;&#x2F;…» и «&quot;» вместо «/» и «"».
  */
 export function sanitizeText(text: string | null | undefined): string {
   if (!text) return '';
-  
-  // Удаляем HTML теги
-  let clean = stripHtml(text);
-  
-  // Экранируем оставшиеся спецсимволы
-  clean = escapeHtml(clean);
-  
-  return clean;
+  return stripHtml(text).trim();
 }
 
 /**

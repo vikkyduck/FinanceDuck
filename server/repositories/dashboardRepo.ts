@@ -5,6 +5,7 @@
  */
 import { eq, and, sql, inArray, desc, isNull, isNotNull } from "drizzle-orm";
 import { db as _db } from "../db";
+import { decodeHtmlEntities } from "../lib/sanitize";
 import { invoices, invoiceCalculations, invoiceExpenses, partnerPayments, signedActs, partners, clients, accessTokens, recurringInvoices } from "../../shared/schema";
 import { parseNum, isAgencyScheme } from "../../shared/financialEngine";
 import type { MonthlyData, PartnerHeroMetricsData, DashboardInvoiceDetail } from "../storage";
@@ -749,7 +750,7 @@ export async function getClientBudget(db: DB, clientId: string): Promise<Array<{
         expensesByInvoice.set(exp.invoiceId, []);
       }
       expensesByInvoice.get(exp.invoiceId)!.push({
-        description: exp.description || '',
+        description: decodeHtmlEntities(exp.description || ''),
         amount: parseNum(exp.amount),
         date: exp.date || '',
       });
@@ -931,7 +932,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
         const list = expensesByAgencyInvoice.get(e.invoiceId) || [];
         list.push({
           id: e.id,
-          description: e.description || '',
+          description: decodeHtmlEntities(e.description || ''),
           amount: parseNum(e.amount),
           date: e.date as any || null,
         });

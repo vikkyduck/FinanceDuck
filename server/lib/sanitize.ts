@@ -44,6 +44,33 @@ export const EXPENSE_WRITABLE_FIELDS = [
   "description", "amount", "paidByAdmin", "date",
 ] as const;
 
+// Описание расхода — простой текст. Старый клиент экранировал его в HTML
+// ПЕРЕД сохранением (sanitizeText → escapeHtml), а React экранирует еще раз
+// при показе: в таблице «&#x2F;» и «&quot;» вместо «/» и «"», ссылка из
+// чека становилась сплошной строкой без переносов и распирала окно счета.
+// Храним то, что человек набрал; экранирует тот, кто выводит (React, escapeHtml
+// для Telegram). Повтор до стабильности снимает и двойное экранирование
+// (правка уже экранированного описания давала «&amp;#x2F;»).
+const ENTITY_RE = /&(amp|lt|gt|quot|#x27|#39|#x2F|#47);/gi;
+const ENTITY_MAP: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', "#x27": "'", "#39": "'", "#x2f": "/", "#47": "/",
+};
+export function decodeHtmlEntities(text: string): string {
+  let cur = text;
+  for (let i = 0; i < 5; i++) {
+    const next = cur.replace(ENTITY_RE, (_m, name: string) => ENTITY_MAP[name.toLowerCase()]);
+    if (next === cur) break;
+    cur = next;
+  }
+  return cur;
+}
+
+export function pickExpense(body: unknown): any {
+  const out = pick(body, EXPENSE_WRITABLE_FIELDS);
+  if (typeof out.description === "string") out.description = decodeHtmlEntities(out.description).trim();
+  return out;
+}
+
 // Поля партнёра. leverageRole дополнительно ограничен: значение из
 // LEVERAGE_ROLES и менять может только админ (см. routes/partners.ts).
 export const PARTNER_WRITABLE_FIELDS = [

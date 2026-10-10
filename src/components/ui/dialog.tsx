@@ -36,8 +36,12 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
+        // [&>*]:min-w-0 — дети грида не шире окна: иначе длинная строка без
+        // пробелов (ссылка из чека в описании расхода) распирает колонку грида,
+        // и правый край — суммы, кнопка «Добавить расход» — уезжает за окно.
+        // Широкая таблица прокручивается внутри своей обертки (ui/table).
         // bv-glass-modal — плотное стекло модальных слоёв («Без Воды», раздел 7)
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-card bv-glass-modal p-6 shadow-lg duration-fast data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-98 data-[state=open]:zoom-in-98 sm:rounded-xl",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg [&>*]:min-w-0 translate-x-[-50%] translate-y-[-50%] gap-4 border bg-card bv-glass-modal p-6 shadow-lg duration-fast data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-98 data-[state=open]:zoom-in-98 sm:rounded-xl",
         className,
       )}
       {...props}

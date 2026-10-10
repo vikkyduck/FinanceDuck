@@ -1690,9 +1690,9 @@ export const InvoiceDetailsDialog = ({ open, onOpenChange, invoiceId, canEdit = 
                         {expenses.map((expense) => (
                           <TableRow key={expense.id}>
                             <TableCell>{formatDate(expense.date)}</TableCell>
-                            <TableCell>{expense.description}</TableCell>
+                            <TableCell className="[overflow-wrap:anywhere]">{expense.description}</TableCell>
                             {!(userRole === 'client' && invoice?.scheme !== 'agency_30' && invoice?.scheme !== 'agency_40' && invoice?.scheme !== 'agency') && (
-                              <TableCell className="text-right">{formatCurrency(expense.amount)}</TableCell>
+                              <TableCell className="text-right whitespace-nowrap">{formatCurrency(expense.amount)}</TableCell>
                             )}
                             <TableCell>
                               <Button

@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { storage } from "../storage";
 import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
 import { stripSensitiveFieldsForRole, stripSensitiveFieldsFromList, isClientFinancialVisible, isClientUsageVisible } from "../permissions";
-import { pick, INVOICE_WRITABLE_FIELDS, EXPENSE_WRITABLE_FIELDS } from "../lib/sanitize";
+import { pick, pickExpense, INVOICE_WRITABLE_FIELDS } from "../lib/sanitize";
 import { validateBody, invoiceMoneySchema, expenseCreateSchema, expenseUpdateSchema } from "../lib/validate";
 import { constrainInvoiceWrite, findAuthorizedInvoice } from "../invoiceAccess";
 
@@ -270,7 +270,7 @@ invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("a
 
     const vErr = validateBody(expenseCreateSchema, req.body);
     if (vErr) return res.status(400).json({ error: vErr });
-    const expense = await storage.createInvoiceExpense({ ...pick(req.body, EXPENSE_WRITABLE_FIELDS), invoiceId: id, createdBy: req.user!.token.id });
+    const expense = await storage.createInvoiceExpense({ ...pickExpense(req.body), invoiceId: id, createdBy: req.user!.token.id });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_expense", entityType: "expense", entityId: expense.id, description: `Создан расход: ${req.body.description || expense.id}`, details: JSON.stringify({ invoiceId: id, amount: req.body.amount, paidByPartner: req.body.paidByPartner }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
@@ -330,7 +330,7 @@ invoicesRouter.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "
 
     const vErr = validateBody(expenseUpdateSchema, req.body);
     if (vErr) return res.status(400).json({ error: vErr });
-    const expense = await storage.updateInvoiceExpense(id, pick(req.body, EXPENSE_WRITABLE_FIELDS));
+    const expense = await storage.updateInvoiceExpense(id, pickExpense(req.body));
     if (!expense) return res.status(404).json({ error: "Expense not found" });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "update_expense", entityType: "expense", entityId: id, description: `Обновлён расход: ${expense.description || id}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });

@@ -6,6 +6,7 @@
  */
 
 import { db as _db } from "../db";
+import { decodeHtmlEntities } from "../lib/sanitize";
 import {
   invoices, invoiceCalculations, invoiceExpenses, invoiceTransfers, partners, clients,
   Invoice, InvoiceCalculation, InvoiceExpense, Partner, Client,
@@ -194,12 +195,20 @@ export function calculateInvoiceServer(
 // ---------------------------------------------------------------------------
 // Private helpers (not exported)
 // ---------------------------------------------------------------------------
+// Описания, сохраненные старым клиентом HTML-экранированными, отдаются
+// простым текстом (см. decodeHtmlEntities); при следующей правке строка
+// сохраняется уже чистой.
+function plainExpense<T extends { description: string | null }>(e: T): T {
+  return e.description ? { ...e, description: decodeHtmlEntities(e.description) } : e;
+}
+
 async function _getInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<InvoiceExpense[]> {
-  return db
+  const rows = await db
     .select()
     .from(invoiceExpenses)
     .where(eq(invoiceExpenses.invoiceId, invoiceId))
     .orderBy(desc(invoiceExpenses.date));
+  return rows.map(plainExpense);
 }
 
 async function _getInvoiceRaw(db: DBorTx, id: string): Promise<InvoiceWithRelations | null> {
@@ -552,11 +561,12 @@ export async function getInvoiceExpenses(db: DB, invoiceId: string): Promise<Inv
 export async function getInvoiceExpense(db: DB, id: string): Promise<InvoiceExpense | null> {
   const [expense] = await db.select().from(invoiceExpenses)
     .where(eq(invoiceExpenses.id, id)).limit(1);
-  return expense ?? null;
+  return expense ? plainExpense(expense) : null;
 }
 
 export async function getAllExpenses(db: DB): Promise<InvoiceExpense[]> {
-  return db.select().from(invoiceExpenses).orderBy(desc(invoiceExpenses.date));
+  const rows = await db.select().from(invoiceExpenses).orderBy(desc(invoiceExpenses.date));
+  return rows.map(plainExpense);
 }
 
 export async function createInvoiceExpense(db: DB, expense: InsertInvoiceExpense): Promise<InvoiceExpense> {

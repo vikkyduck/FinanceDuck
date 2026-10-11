@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Download, X, FileSpreadsheet, Users, Building2, Receipt } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -312,7 +311,11 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4">
+        {/* Обычная прокрутка браузера, не Radix ScrollArea: у окна только
+            max-h, и вьюпорт ScrollArea (h-full) брал полную высоту содержимого —
+            область не прокручивалась, низ (список партнеров) обрезался.
+            min-h-0 дает flex-элементу сжаться до остатка высоты окна. */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-4">
           <div className="space-y-6">
             {/* Export Types */}
             <div className="space-y-3">
@@ -529,7 +532,7 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                     {filters.partner_ids.length === (partners?.length || 0) ? 'Снять все' : 'Выбрать все'}
                   </Button>
                 </div>
-                <ScrollArea className="h-48 border rounded-lg p-3">
+                <div className="max-h-48 overflow-y-auto overscroll-contain border rounded-lg p-3">
                   <div className="space-y-3">
                     {loadingPartners && (
                       <div className="flex items-center justify-center py-4">
@@ -564,11 +567,11 @@ export const ExportFiltersDialog = ({ open, onOpenChange }: ExportFiltersDialogP
                       </p>
                     )}
                   </div>
-                </ScrollArea>
+                </div>
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="flex items-center justify-between gap-3 pt-4 border-t">
           <Button

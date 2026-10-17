@@ -205,7 +205,7 @@ describe('Scoped queries and report contracts', () => {
   it('uses real schema columns for forecast and overdue reports', async () => {
     const created = await invoice({ status: 'sent', issueDate: '2020-01-15', paymentDate: '2020-01-20' });
     expect((await getInvoicesByMonth(database(), 1, 2020, 'forecast')).some(row => row.id === created.id)).toBe(true);
-    expect((await getOverdueInvoicesDetailed(database())).find(row => row.id === created.id)).toMatchObject({ priority_level: 'high', client_bill: 1000 });
+    expect((await getOverdueInvoicesDetailed(database(), { role: 'admin' })).find(row => row.id === created.id)).toMatchObject({ priority_level: 'high', client_bill: 1000 });
   });
   it('keeps money conserved when half a kopeck must be rounded', () => {
     const result = calculateInvoiceFinancials({ scheme: 'commission_based', clientBill: 0.01 });

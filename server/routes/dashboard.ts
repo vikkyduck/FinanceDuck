@@ -70,7 +70,7 @@ dashboardRouter.get("/api/invoices/overdue", authMiddleware, requireRole("admin"
 
 dashboardRouter.get("/api/alert-counts", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    res.json(await storage.getAlertCounts(req.user?.role || "client"));
+    res.json(await storage.getAlertCounts(req.user!));
   } catch (error) {
     console.error("Get alert counts error:", error);
     res.status(500).json({ error: "Failed to get alert counts" });
@@ -90,18 +90,18 @@ dashboardRouter.get("/api/search", authMiddleware, async (req: AuthenticatedRequ
   }
 });
 
-dashboardRouter.get("/api/priority-actions", authMiddleware, requireRole("admin", "assistant"), async (_req: AuthenticatedRequest, res: Response) => {
+dashboardRouter.get("/api/priority-actions", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    res.json(await storage.getPriorityActions());
+    res.json(await storage.getPriorityActions(req.user!));
   } catch (error) {
     console.error("Get priority actions error:", error);
     res.status(500).json({ error: "Failed to get priority actions" });
   }
 });
 
-dashboardRouter.get("/api/overdue-invoices", authMiddleware, requireRole("admin", "assistant"), async (_req: AuthenticatedRequest, res: Response) => {
+dashboardRouter.get("/api/overdue-invoices", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    res.json(await storage.getOverdueInvoicesDetailed());
+    res.json(await storage.getOverdueInvoicesDetailed(req.user!));
   } catch (error) {
     console.error("Get overdue invoices detailed error:", error);
     res.status(500).json({ error: "Failed to get overdue invoices" });

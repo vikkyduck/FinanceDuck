@@ -10,6 +10,7 @@ import {
   assistantBonusPayments,
 } from "../../shared/schema";
 import { parseNum } from "../../shared/financialEngine";
+import { invoiceScope } from '../invoiceQuery';
 
 
 type DB = typeof _db;
@@ -41,6 +42,7 @@ export async function globalSearch(db: DB,
   const isStaff = role === 'admin' || role === 'assistant';
   const isClient = role === 'client';
   if (!isStaff && !isClient) return results;
+  if (isClient && !options.clientId) return results;
 
   const q = trimmed.toLowerCase();
   const like = `%${q}%`;
@@ -52,9 +54,10 @@ export async function globalSearch(db: DB,
   const useFuzzy = q.length >= 3;
 
   // ── Счета ────────────────────────────────────────────────────────────
-  const clientFilter = isClient
-    ? sql`AND i.client_id = ${options.clientId}`
-    : sql``;
+  // The search SQL aliases invoices as i; use the same central scope via a
+  // subquery so invoices, message excerpts and expenses share one boundary.
+  const scope = invoiceScope({ role: role as 'admin' | 'assistant' | 'client', clientId: options.clientId });
+  const clientFilter = scope ? sql`AND i.id IN (SELECT ${invoices.id} FROM ${invoices} WHERE ${scope})` : sql``;
   const fuzzyExpr = useFuzzy
     ? sql`GREATEST(
           similarity(LOWER(COALESCE(i.invoice_number, '')), ${q}),
@@ -118,7 +121,7 @@ export async function globalSearch(db: DB,
   }
 
   // ── Треды (по тексту сообщений) ──────────────────────────────────────
-  const threadAccess = isClient ? sql`AND i.client_id = ${options.clientId}` : sql``;
+  const threadAccess = clientFilter;
   const threadFuzzy = useFuzzy
     ? sql`OR similarity(LOWER(im.body), ${q}) >= ${TRG_MIN}`
     : sql``;
@@ -169,8 +172,8 @@ export async function globalSearch(db: DB,
   // Видны клиенту ТОЛЬКО по агентским 30/40 счетам (видимость «кухни»).
   // Staff видит все.
   const expenseClientFilter = isClient
-    ? sql`AND i.client_id = ${options.clientId} AND i.scheme IN ('agency_30', 'agency_40', 'agency')`
-    : sql``;
+    ? sql`${clientFilter} AND i.scheme IN ('agency_30', 'agency_40', 'agency')`
+    : clientFilter;
   const expenseFuzzy = useFuzzy
     ? sql`OR similarity(LOWER(ie.description), ${q}) >= ${TRG_MIN}`
     : sql``;

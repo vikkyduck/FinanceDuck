@@ -282,8 +282,8 @@ export class DatabaseStorage implements StorageOperations {
     return recurringRepo.getRecurringInvoicesForMonth(this.database, year, month);
   }
   
-  async getAlertCounts(role: string) {
-    return alertsRepo.getAlertCounts(this.database, role);
+  async getAlertCounts(actor: import('./invoiceAccess').InvoiceActor) {
+    return alertsRepo.getAlertCounts(this.database, actor);
   }
 
   async globalSearch(
@@ -294,12 +294,12 @@ export class DatabaseStorage implements StorageOperations {
     return searchRepo.globalSearch(this.database, query, role, options);
   }
 
-  async getPriorityActions() {
-    return alertsRepo.getPriorityActions(this.database);
+  async getPriorityActions(actor: import('./invoiceAccess').InvoiceActor) {
+    return alertsRepo.getPriorityActions(this.database, actor);
   }
 
-  async getOverdueInvoicesDetailed() {
-    return alertsRepo.getOverdueInvoicesDetailed(this.database);
+  async getOverdueInvoicesDetailed(actor: import('./invoiceAccess').InvoiceActor) {
+    return alertsRepo.getOverdueInvoicesDetailed(this.database, actor);
   }
 
   async getPartnerTerms(partnerId: string) {

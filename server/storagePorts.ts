@@ -1,4 +1,5 @@
 import type * as exportRepo from "./repositories/exportRepo";
+import type { InvoiceActor } from './invoiceAccess';
 
 import type {
   partners,
@@ -286,7 +287,7 @@ export interface ReportingQueries {
     year?: number,
     month?: number,
   ): ReturnType<typeof dashboardRepo.getAdminDashboardStats>;
-  getAlertCounts(role: string): ReturnType<typeof alertsRepo.getAlertCounts>;
+  getAlertCounts(actor: InvoiceActor): ReturnType<typeof alertsRepo.getAlertCounts>;
   globalSearch(
     query: string,
     role: string,
@@ -294,8 +295,8 @@ export interface ReportingQueries {
       clientId?: string;
     },
   ): ReturnType<typeof searchRepo.globalSearch>;
-  getPriorityActions(): ReturnType<typeof alertsRepo.getPriorityActions>;
-  getOverdueInvoicesDetailed(): ReturnType<
+  getPriorityActions(actor: InvoiceActor): ReturnType<typeof alertsRepo.getPriorityActions>;
+  getOverdueInvoicesDetailed(actor: InvoiceActor): ReturnType<
     typeof alertsRepo.getOverdueInvoicesDetailed
   >;
   getPartnerTerms(

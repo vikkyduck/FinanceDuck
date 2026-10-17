@@ -284,7 +284,7 @@ invoicesRouter.patch("/api/invoices/:id/closing-document", authMiddleware, requi
     const invoice = await findAuthorizedInvoice(storage, req.user!, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
     const updated = await invoiceCommands.update(commandActor(req), id, { closingDocumentUrl });
-    res.json(updated);
+    res.json(stripSensitiveFieldsForRole(updated, req.user!.role));
   } catch (error) {
     if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Update closing document error:", error);

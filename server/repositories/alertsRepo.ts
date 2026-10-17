@@ -11,10 +11,12 @@ import {
 } from "../../shared/schema";
 import { parseNum } from "../../shared/financialEngine";
 import type { OverdueInvoice } from "../storage";
+import type { InvoiceActor } from '../invoiceAccess';
+import { invoiceScope } from '../invoiceQuery';
 
 type DB = typeof _db;
 
-export async function getPriorityActions(db: DB): Promise<Array<{
+export async function getPriorityActions(db: DB, actor: InvoiceActor): Promise<Array<{
   id: string;
   type: string;
   priority: number;
@@ -50,6 +52,7 @@ export async function getPriorityActions(db: DB): Promise<Array<{
     .where(
       and(
         eq(invoices.status, 'sent'),
+        invoiceScope(actor),
         isNull(invoices.actualPaymentDate),
         sql`${invoices.paymentDate} < ${today.toISOString().split('T')[0]}`
       )
@@ -83,6 +86,7 @@ export async function getPriorityActions(db: DB): Promise<Array<{
     .where(
       and(
         eq(invoices.status, 'draft'),
+        invoiceScope(actor),
         isNull(invoices.paymentDate)
       )
     );
@@ -114,6 +118,7 @@ export async function getPriorityActions(db: DB): Promise<Array<{
     .where(
       and(
         eq(invoices.status, 'sent'),
+        invoiceScope(actor),
         isNull(invoices.actualPaymentDate),
         sql`${invoices.createdAt} < ${thirtyDaysAgo.toISOString()}`
       )
@@ -137,7 +142,7 @@ export async function getPriorityActions(db: DB): Promise<Array<{
   return actions.slice(0, 5); // Top 5
 }
 
-export async function getAlertCounts(db: DB, role: string): Promise<{
+export async function getAlertCounts(db: DB, actor: InvoiceActor): Promise<{
   overdueInvoices: number;
   pendingInvoices: number;
   unresolvedSecurityEvents: number;
@@ -146,13 +151,14 @@ export async function getAlertCounts(db: DB, role: string): Promise<{
   let overdueCount = 0;
   let pendingCount = 0;
 
-  if (role === 'admin' || role === 'assistant') {
+  if (actor.role === 'admin' || actor.role === 'assistant') {
     const overdueInvoices = await db
       .select({ id: invoices.id })
       .from(invoices)
       .where(
         and(
           eq(invoices.status, 'sent'),
+          invoiceScope(actor),
           isNull(invoices.actualPaymentDate),
           sql`${invoices.paymentDate} < ${today.toISOString().split('T')[0]}`
         )
@@ -164,7 +170,7 @@ export async function getAlertCounts(db: DB, role: string): Promise<{
   const pendingInvoices = await db
     .select({ id: invoices.id })
     .from(invoices)
-    .where(eq(invoices.status, 'draft'));
+    .where(and(eq(invoices.status, 'draft'), invoiceScope(actor)));
   pendingCount = pendingInvoices.length;
 
   return {
@@ -218,7 +224,7 @@ export async function getOverdueInvoices(db: DB): Promise<OverdueInvoice[]> {
   return overdueInvoices.sort((a, b) => b.daysOverdue - a.daysOverdue);
 }
 
-export async function getOverdueInvoicesDetailed(db: DB): Promise<Array<{
+export async function getOverdueInvoicesDetailed(db: DB, actor: InvoiceActor): Promise<Array<{
   id: string;
   invoice_number: string;
   payment_date: string;
@@ -246,6 +252,7 @@ export async function getOverdueInvoicesDetailed(db: DB): Promise<Array<{
     .where(
       and(
         eq(invoices.status, 'sent'),
+        invoiceScope(actor),
         sql`${invoices.paymentDate} < ${today.toISOString().split('T')[0]}`
       )
     )

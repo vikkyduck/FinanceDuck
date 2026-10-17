@@ -7,6 +7,7 @@ import { AuthenticatedRequest, requireRole } from "../middleware";
 import { resolveTelegramTarget, sendTelegramMessage, escapeHtml, publicUrl } from "../lib/telegram";
 import type { MessagesStore } from "../routeStores";
 import { findAuthorizedInvoice, resolveMessageInvoiceScope } from "../invoiceAccess";
+import { AGENCY_SCHEMES } from '../../shared/financialEngine';
 
 // «Сторона» треда: клиент — одна, admin+assistant — другая. Мы храним
 // read_at симметрично, и помечаем «прочитано» с противоположной стороны.
@@ -47,7 +48,7 @@ messagesRouter.get("/api/messages/threads", authMiddleware, async (req: Authenti
         i.client_id              AS client_id,
         c.name                   AS client_name,
         ie.description           AS expense_description,
-        ie.amount                AS expense_amount,
+        ${actor.role === 'client' ? sql`CASE WHEN i.scheme IN (${sql.join(AGENCY_SCHEMES.map(scheme => sql`${scheme}`), sql`, `)}) THEN ie.amount ELSE NULL END` : sql`ie.amount`} AS expense_amount,
         COUNT(*)::int            AS message_count,
         MAX(im.created_at)       AS last_message_at,
         (
@@ -71,7 +72,7 @@ messagesRouter.get("/api/messages/threads", authMiddleware, async (req: Authenti
         JOIN clients  c ON c.id = i.client_id
         LEFT JOIN invoice_expenses ie ON ie.id = im.expense_id
        ${accessWhere}
-       GROUP BY im.invoice_id, im.expense_id, i.invoice_number, i.client_id, c.name, ie.description, ie.amount
+       GROUP BY im.invoice_id, im.expense_id, i.invoice_number, i.client_id, i.scheme, c.name, ie.description, ie.amount
        ORDER BY MAX(im.created_at) DESC
     `);
 

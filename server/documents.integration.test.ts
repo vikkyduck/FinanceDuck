@@ -41,7 +41,8 @@ it('restores referenced objects on an empty volume and refuses missing objects b
   const broken = { ...snapshot, objects: {} }; await writeFile(path.join(backups, 'backup-manual-missing.json'), JSON.stringify(broken));
   expect((await service.restoreBackup('backup-manual-missing.json')).success).toBe(false);
   expect(await db.select().from(schema.signedActs)).toHaveLength(2);
-  await db.delete(schema.signedActs); await rm(path.join(directory, 'objects'), { recursive: true });
+  // The database survives while the document volume is lost. Recovery must still work.
+  await rm(path.join(directory, 'objects'), { recursive: true });
   expect((await service.restoreBackup(backup.id)).success).toBe(true);
   for (const act of await db.select().from(schema.signedActs)) expect((await objects.get(act.objectKey!)).length).toBeGreaterThan(0);
 });

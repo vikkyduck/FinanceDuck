@@ -198,14 +198,14 @@ export class BackupService {
       }
 
       const validated = validateBackup(backupData);
-      // Keep a complete recovery point before replacing any records.
-      await this.createBackup("manual");
-      // Publish immutable, hash-verified files before making database references live.
+      // Repair missing immutable files from the verified archive before creating the
+      // protective snapshot: otherwise loss of the object volume would block recovery.
       for (const [key, encoded] of Object.entries(validated.objects)) {
         const data = Buffer.from(encoded, 'base64');
         if (objectDigest(data) !== key) throw new Error('Corrupt document object');
         await this.objects.put(data);
       }
+      await this.createBackup("manual");
       await this.database.transaction(async tx => {
         const tables = Object.values(backupTables);
         await tx.execute(sql`LOCK TABLE ${sql.join(tables.map(table => sql`${table}`), sql`, `)} IN ACCESS EXCLUSIVE MODE`);
@@ -233,6 +233,9 @@ export class BackupService {
     if (!file) throw new Error('Backup not found');
     // Complete authenticated preflight before any backup, SQL change or object publication.
     await validateArchive(file);
+    // Verified objects can safely repair a lost volume without changing financial facts.
+    // Do this before the protective backup, which must read current document references.
+    for await (const item of readArchive(file)) if (item.kind === 'row' && item.object) await this.objects.put(Buffer.from(item.object, 'base64'));
     await this.createBackup('manual');
     await this.database.transaction(async tx => {
       const tables = Object.values(backupTables);
@@ -247,7 +250,6 @@ export class BackupService {
         if (item.kind !== 'row') { await flush(); continue; }
         if (tableKey !== item.table) { await flush(); tableKey = item.table; }
         const row = restoreRow(item.table, item.row);
-        if (item.object) await this.objects.put(Buffer.from(item.object, 'base64'));
         if (item.table === 'userSessions') row.revoked = true;
         batch.push(row); bytes += Buffer.byteLength(JSON.stringify(item.row));
         if (batch.length >= 250 || bytes >= 1024 * 1024) await flush();

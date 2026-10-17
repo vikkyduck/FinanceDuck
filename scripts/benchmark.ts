@@ -59,7 +59,7 @@ try {
     await pool.query(`INSERT INTO invoice_expenses(invoice_id,description,amount,created_by,date)
       SELECT fixture_uuid('invoice-'||n),'Fixture expense '||k,10,$3,'2026-01-01' FROM generate_series($1::int,$2::int) n CROSS JOIN generate_series(1,3) k`, [previous+1,count,actorId]);
     previous = count; await pool.query('ANALYZE');
-    for (const concurrency of [1,5,20,40]) {
+    for (const concurrency of (process.env.BENCH_BACKUP_ONLY === '1' ? [] : [1,5,20,40])) {
       const times: number[] = []; let errors = 0, next = 0;
       // Warm the query plans and buffers outside the measurement.
       for (let i=0;i<5;i++) await fetch(origin+'/api/invoices?page=1&limit=100').then(r=>r.arrayBuffer());
@@ -101,6 +101,8 @@ try {
   try {
     console.log('Starting streaming archive round trip');
     const start = performance.now(); const info = await backup.createBackup(); const createMs = Math.round(performance.now()-start);
+    // Simulate complete object-volume loss while SQL document references survive.
+    await rm(path.join(directory, 'objects'), { recursive: true });
     console.log(`Archive created in ${createMs} ms; starting authenticated restore`);
     const restoreStart = performance.now(); const restored = await backup.restoreBackup(info.id);
     if (!restored.success) throw new Error(restored.message);
@@ -108,7 +110,7 @@ try {
     let verifiedObjects = 0;
     for(const row of (await pool.query('SELECT object_key FROM signed_acts')).rows) { await objects.get(row.object_key); verifiedObjects++; }
     results.backup = { invoices: previous, expenses: previous*3, documentMiB: docs, archiveBytes: (await stat(path.join(directory,'backups',info.id))).size,
-      createMs, restoreMs: Math.round(performance.now()-restoreStart), peakRssMiB:Math.round(peakRss/1048576), peakHeapMiB:Math.round(peakHeap/1048576), verifiedObjects, allTableFingerprintsMatch: true };
+      createMs, restoreMs: Math.round(performance.now()-restoreStart), peakRssMiB:Math.round(peakRss/1048576), peakHeapMiB:Math.round(peakHeap/1048576), verifiedObjects, recoveredEmptyObjectVolume: true, allTableFingerprintsMatch: true };
     console.log(JSON.stringify(results.backup));
   } finally { clearInterval(sampler); }
   let exported = 0; const exportStart = performance.now();

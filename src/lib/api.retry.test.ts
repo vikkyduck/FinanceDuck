@@ -38,3 +38,13 @@ it('keeps an uncertain command key for manual retry until a result is confirmed'
   await apiRequest('/api/invoices', options);
   expect(fetcher.mock.calls[3][1].headers.get('Idempotency-Key')).not.toBe(keys[0]);
 });
+
+it('retries an explicit period command with the same period and idempotency key', async () => {
+  vi.stubGlobal('localStorage', { getItem: () => 'period-session' });
+  const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('lost')).mockResolvedValueOnce(new Response('{"periodsUsed":1}'));
+  vi.stubGlobal('fetch', fetcher);
+  await apiRequest('/api/invoices/fixture/periods', { method: 'POST', body: '{"period":1,"closed":true}' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher.mock.calls[0][1].headers.get('Idempotency-Key')).toBe(fetcher.mock.calls[1][1].headers.get('Idempotency-Key'));
+  expect(fetcher.mock.calls[0][1].body).toBe(fetcher.mock.calls[1][1].body);
+});

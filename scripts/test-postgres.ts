@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -71,6 +74,15 @@ try {
   assert.equal(logs.count, 1);
   console.log('PASS: concurrent retries commit one invoice and one audit event');
 
+  const periodic = await commands.create({ role: 'admin', tokenId: actor.id }, { ...input, invoiceNumber: 'PERIOD-CONCURRENT', serviceType: 'periodic', totalPeriods: 3, pricePerPeriod: '100' });
+  const closes = await Promise.allSettled(Array.from({ length: 12 }, (_, i) => commands.setPeriod({ role: 'admin', tokenId: actor.id, requestKey: `period-${i}` }, periodic.id, 1, true)));
+  assert.equal(closes.filter(row => row.status === 'fulfilled').length, 1);
+  assert.equal((await repo.getInvoice(db, periodic.id))!.periodsUsed, 1);
+  const opens = await Promise.all(Array.from({ length: 12 }, () => commands.setPeriod({ role: 'admin', tokenId: actor.id, requestKey: 'reopen-once' }, periodic.id, 1, false)));
+  assert.equal(opens.length, 12);
+  assert.equal((await repo.getInvoice(db, periodic.id))!.periodsUsed, 0);
+  console.log('PASS: simultaneous period closures consume exactly one unit; cancellation retries are idempotent');
+
   const { JobRunner } = await import('../server/services/jobRunner');
   let executions = 0;
   const job = { key: 'concurrent-job', run: async () => { executions++; }, nextRunAt: () => new Date(Date.now() + 3600000) };
@@ -85,6 +97,22 @@ try {
   const [deleteLogs] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.assistantActionLogs).where(eq(schema.assistantActionLogs.actionType, 'delete_expense'));
   assert.equal(deleteLogs.count, 1);
   console.log('PASS: 12 concurrent deletion retries commit one mutation and audit event');
+  const { BackupService } = await import('../server/backupService');
+  const backupDirectory = await mkdtemp(path.join(tmpdir(), 'finance-pg-backup-'));
+  try {
+    process.env.ACCESS_CODE_SECRET = 'postgres-test-backup-secret';
+    const service = new BackupService(db, backupDirectory);
+    const info = await service.createBackup();
+    const snapshot = await service.downloadBackup(info.id);
+    const result = await service.restoreBackup(info.id);
+    assert.equal(result.success, true, result.message);
+    const restored = await service.downloadBackup((await service.createBackup()).id);
+    for (const table of Object.keys(snapshot!.data) as (keyof typeof snapshot.data)[]) {
+      assert.deepEqual(restored!.data[table].map(row => JSON.stringify(row)).sort(), snapshot!.data[table].map(row => JSON.stringify(row)).sort(), table);
+    }
+    console.log('PASS: encrypted PostgreSQL cursor backup round trip preserves all rows, bigints and dates');
+  } finally { await rm(backupDirectory, { recursive: true, force: true }); }
+
 } finally {
   await pool?.end();
   await control.query(`DROP DATABASE IF EXISTS "${name}"`);

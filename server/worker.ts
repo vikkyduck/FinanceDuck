@@ -13,6 +13,7 @@ const jobs: Job[] = [
     if (result.errors.length) throw new Error(result.errors.join('; '));
     return result;
   } },
+  { key: 'manual-backup', initialRunAt: new Date('9999-01-01'), nextRunAt: () => new Date('9999-01-01'), run: () => backupService.createBackup('manual') },
   { key: 'daily-backup', initialRunAt: nextDailyBackup(new Date()), nextRunAt: nextDailyBackup,
     run: () => backupService.createBackup('auto') },
   { key: 'login-limit-cleanup', nextRunAt: hourly, run: async () => ({ deleted: await pruneExpiredLoginAttempts(db) }) },

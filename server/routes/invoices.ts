@@ -91,33 +91,6 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
       "update",
     );
 
-    // Валидация периодических полей: 1 ≤ totalPeriods, 0 ≤ pricePerPeriod,
-    // 0 ≤ periodsUsed ≤ totalPeriods. Проверяем по эффективному состоянию
-    // (новое значение, если прислали, иначе текущее в БД).
-    const periodicTouched =
-      invoiceData.serviceType !== undefined ||
-      invoiceData.periodUnit !== undefined ||
-      invoiceData.pricePerPeriod !== undefined ||
-      invoiceData.totalPeriods !== undefined ||
-      invoiceData.periodsUsed !== undefined;
-    if (periodicTouched) {
-      const eff = {
-        serviceType:    invoiceData.serviceType    ?? existing.serviceType,
-        pricePerPeriod: invoiceData.pricePerPeriod ?? existing.pricePerPeriod,
-        totalPeriods:   invoiceData.totalPeriods   ?? existing.totalPeriods,
-        periodsUsed:    invoiceData.periodsUsed    ?? existing.periodsUsed,
-      };
-      if (eff.serviceType === 'periodic') {
-        const price = Number(eff.pricePerPeriod ?? 0);
-        const total = Number(eff.totalPeriods ?? 0);
-        const used  = Number(eff.periodsUsed ?? 0);
-        if (!Number.isFinite(total) || total < 1) return res.status(400).json({ error: "totalPeriods должно быть ≥ 1" });
-        if (!Number.isFinite(price) || price < 0) return res.status(400).json({ error: "pricePerPeriod должно быть ≥ 0" });
-        if (!Number.isInteger(used) || used < 0)  return res.status(400).json({ error: "periodsUsed должно быть ≥ 0" });
-        if (used > total) return res.status(400).json({ error: "periodsUsed не может превышать totalPeriods" });
-      }
-    }
-
     const invoice = await invoiceCommands.update(commandActor(req), id, invoiceData, calculations || {});
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
     const fullInvoice = await findAuthorizedInvoice(storage, actor, id);
@@ -127,6 +100,18 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
     if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
     console.error("Update invoice error:", error);
     res.status(500).json({ error: "Failed to update invoice" });
+  }
+});
+
+invoicesRouter.post("/api/invoices/:id/periods", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { period, closed } = req.body ?? {};
+    if (!Number.isSafeInteger(period) || period < 1 || typeof closed !== 'boolean') return res.status(400).json({ error: 'Нужны номер периода и действие закрытия' });
+    res.json(await invoiceCommands.setPeriod(commandActor(req), req.params.id, period, closed));
+  } catch (error) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    console.error('Service period error:', error);
+    res.status(500).json({ error: 'Не удалось изменить период' });
   }
 });
 

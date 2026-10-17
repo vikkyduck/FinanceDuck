@@ -1,3 +1,4 @@
+import { serviceUsage } from "../../shared/schema";
 import { CommandError } from "../lib/commandError";
 /**
  * Invoice Repository
@@ -92,41 +93,30 @@ export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise
   return parseNum(row?.balance ?? 0);
 }
 
-/**
- * «Использовано» по периодическому счёту = число строк расходов (не больше
- * totalPeriods). Каждая оплата исполнителю за период заводится расходом — она
- * и есть прожитый период. Одно правило, один источник: ручного счётчика нет,
- * иначе два источника начинают спорить (ручная поправка становилась храповиком,
- * и удалённый расход не откатывал месяц).
- *
- * Почему так: пока месяцы закрывались только руками, счёт 0899 при восьми
- * оплатах исполнителю показывал «использовано 0/9» и остаток на полную сумму —
- * и админу, и партнёру, и клиенту. Для one_time возвращает undefined.
- */
-export function derivePeriodsUsed(
-  invoice: { serviceType?: string | null; totalPeriods?: number | null },
-  expenseCount: number,
-): number | undefined {
-  if (invoice.serviceType !== 'periodic') return undefined;
-  const total = Number(invoice.totalPeriods ?? 0);
-  if (!Number.isFinite(total) || total < 1) return undefined;
-  return Math.min(total, Math.max(0, Number(expenseCount) || 0));
+/** Cached projection of the explicit usage ledger. Caller holds the invoice lock. */
+async function _syncPeriodsUsed<T extends { id: string; periodsUsed?: number | null }>(db: DBorTx, invoice: T): Promise<T> {
+  const [row] = await db.select({ used: sql<number>`count(*)::int` }).from(serviceUsage)
+    .where(and(eq(serviceUsage.invoiceId, invoice.id), eq(serviceUsage.closed, true)));
+  if (row.used === invoice.periodsUsed) return invoice;
+  await db.update(invoices).set({ periodsUsed: row.used, updatedAt: new Date() }).where(eq(invoices.id, invoice.id));
+  return { ...invoice, periodsUsed: row.used };
 }
 
-/** Персистит производное «использовано» в invoices.periods_used, чтобы все
- *  читатели (список, карточка, кабинет клиента, applyPeriodicOverrides)
- *  видели одно число. Возвращает счёт с актуальным periodsUsed. */
-async function _syncPeriodsUsed<T extends { id: string; serviceType?: string | null; totalPeriods?: number | null; periodsUsed?: number | null }>(
-  db: DBorTx,
-  invoice: T,
-  expenseCount: number,
-): Promise<T> {
-  const used = derivePeriodsUsed(invoice, expenseCount);
-  if (used === undefined || used === Number(invoice.periodsUsed ?? 0)) return invoice;
-  await db.update(invoices)
-    .set({ periodsUsed: used, updatedAt: new Date() })
-    .where(eq(invoices.id, invoice.id));
-  return { ...invoice, periodsUsed: used };
+export async function setServicePeriod(db: DBorTx, invoiceId: string, period: number, closed: boolean, actorId: string) {
+  return db.transaction(async tx => {
+    await lockInvoices(tx, [invoiceId]);
+    const invoice = await _getInvoiceRaw(tx, invoiceId);
+    if (!invoice) throw new CommandError('Invoice not found', 404);
+    if (invoice.serviceType !== 'periodic' || invoice.status === 'cancelled') throw new CommandError('Закрывать периоды можно только у действующей подписки', 400);
+    const used = invoice.periodsUsed;
+    if (period !== (closed ? used + 1 : used) || period < 1 || period > (invoice.totalPeriods ?? 0)) {
+      throw new CommandError('Состояние периодов изменилось. Обновите счёт и повторите действие', 409);
+    }
+    await tx.insert(serviceUsage).values({ invoiceId, period, closed, closedAt: closed ? new Date() : null, updatedBy: actorId })
+      .onConflictDoUpdate({ target: [serviceUsage.invoiceId, serviceUsage.period], set: { closed, closedAt: closed ? new Date() : null, updatedAt: new Date(), updatedBy: actorId } });
+    await _recalculateInvoiceExpenses(tx, invoiceId);
+    return { periodsUsed: closed ? used + 1 : used - 1, period, closed };
+  });
 }
 
 export function applyPeriodicOverrides(
@@ -246,11 +236,13 @@ export async function lockInvoices(db: DBorTx, ids: string[]) {
 async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<InvoiceCalculation | null> {
   const invoiceRaw = await _getInvoiceRaw(db, invoiceId);
   if (!invoiceRaw) return null;
-  const expenses = await _getInvoiceExpenses(db, invoiceId);
-  const invoice = await _syncPeriodsUsed(db, invoiceRaw, expenses.length);
-  const total = expenses.reduce((sum, e) => sum + parseNum(e.amount), 0);
-  const byPartner = expenses.filter(e => !e.paidByAdmin).reduce((sum, e) => sum + parseNum(e.amount), 0);
-  const byAdmin = expenses.filter(e => e.paidByAdmin).reduce((sum, e) => sum + parseNum(e.amount), 0);
+  const invoice = await _syncPeriodsUsed(db, invoiceRaw);
+  const [sums] = await db.select({
+    total: sql<string>`coalesce(sum(${invoiceExpenses.amount}), 0)`,
+    partner: sql<string>`coalesce(sum(${invoiceExpenses.amount}) filter (where not ${invoiceExpenses.paidByAdmin}), 0)`,
+    admin: sql<string>`coalesce(sum(${invoiceExpenses.amount}) filter (where ${invoiceExpenses.paidByAdmin}), 0)`,
+  }).from(invoiceExpenses).where(eq(invoiceExpenses.invoiceId, invoiceId));
+  const total = parseNum(sums.total), byPartner = parseNum(sums.partner), byAdmin = parseNum(sums.admin);
   const existing = invoice.calculations;
   const bill = derivePeriodicClientBill(invoice) ?? parseNum(invoice.clientBill ?? existing?.clientBill);
   const partnerRate = parseNum(invoice.partnerCommissionRate ?? existing?.commissionRate);
@@ -295,18 +287,20 @@ export async function getInvoices(db: DBorTx, role: UserRole, partnerId?: string
 }
 
 export async function getInvoiceListMetadata(db: DBorTx, actor: { role: UserRole; partnerId?: string; clientId?: string }, filters: Partial<InvoiceQuery>) {
-  const [count] = await db.select({ total: sql<number>`COUNT(*)::int` }).from(invoices)
-    .leftJoin(clients, eq(clients.id, invoices.clientId)).leftJoin(partners, eq(partners.id, invoices.partnerId)).where(invoiceFilters(actor, filters));
+  const countQuery = db.select({ total: sql<number>`COUNT(*)::int` }).from(invoices).$dynamic();
+  if (filters.search?.trim()) countQuery.leftJoin(clients, eq(clients.id, invoices.clientId)).leftJoin(partners, eq(partners.id, invoices.partnerId));
+  const [count] = await countQuery.where(invoiceFilters(actor, filters));
   const [counts] = await db.select({
     all: sql<number>`COUNT(*)::int`, draft: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'draft')::int`,
     sent: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'sent')::int`, paid: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'paid')::int`,
     cancelled: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'cancelled')::int`,
     overdue: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'sent' AND ${invoices.actualPaymentDate} IS NULL AND ${invoices.paymentDate} < CURRENT_DATE)::int`,
   }).from(invoices).where(invoiceScope(actor));
-  const clientOptions = await db.selectDistinct({ id: clients.id, name: clients.name }).from(invoices)
-    .innerJoin(clients, eq(clients.id, invoices.clientId)).where(invoiceScope(actor)).orderBy(clients.name);
-  const partnerOptions = actor.role === 'client' ? [] : await db.selectDistinct({ id: partners.id, name: partners.name }).from(invoices)
-    .innerJoin(partners, eq(partners.id, invoices.partnerId)).where(invoiceScope(actor)).orderBy(partners.name);
+  const scope = invoiceScope(actor) ?? sql`true`;
+  const clientOptions = await db.select({ id: clients.id, name: clients.name }).from(clients)
+    .where(sql`EXISTS (SELECT 1 FROM ${invoices} WHERE ${invoices.clientId} = ${clients.id} AND ${scope})`).orderBy(clients.name);
+  const partnerOptions = actor.role === 'client' ? [] : await db.select({ id: partners.id, name: partners.name }).from(partners)
+    .where(sql`EXISTS (SELECT 1 FROM ${invoices} WHERE ${invoices.partnerId} = ${partners.id} AND ${scope})`).orderBy(partners.name);
   return { total: count.total, statusCounts: counts, clients: clientOptions, partners: partnerOptions };
 }
 
@@ -436,6 +430,10 @@ export async function updateInvoice(
       const [transfer] = await tx.select({ id: invoiceTransfers.id }).from(invoiceTransfers)
         .where(or(eq(invoiceTransfers.fromInvoiceId, id), eq(invoiceTransfers.toInvoiceId, id))).limit(1);
       if (transfer) throw new CommandError("Сначала отмените переносы бюджета перед сменой клиента");
+    }
+    if (changes.periodsUsed !== undefined && changes.periodsUsed !== current.periodsUsed) throw new CommandError('Используйте закрытие или отмену периода', 400);
+    if (current.periodsUsed > 0 && (changes.serviceType === 'one_time' || (changes.totalPeriods != null && changes.totalPeriods < current.periodsUsed) || (changes.periodUnit !== undefined && changes.periodUnit !== current.periodUnit))) {
+      throw new CommandError('Сначала отмените закрытые периоды перед изменением единицы, уменьшением количества или преобразованием в разовый счёт', 409);
     }
     const scheme = changes.scheme ?? current.scheme;
     const terms = { ...changes };
@@ -621,28 +619,6 @@ export async function generateInvoiceNumber(db: DBorTx): Promise<string> {
     RETURNING last_number
   `);
   return `INV-${year}-${String(result.rows[0].last_number).padStart(4, '0')}`;
-}
-
-/**
- * Идемпотентная починка при старте: периодические счета, у которых сохранённое
- * periods_used разошлось с числом расходов (данные до появления
- * derivePeriodsUsed или правленные руками), прогоняются через канонический
- * пересчёт. Возвращает число починенных.
- */
-export async function healPeriodicUsage(db: DB): Promise<number> {
-  const res = await db.execute<{ id: string }>(sql`
-    SELECT i.id
-    FROM invoices i
-    WHERE i.service_type = 'periodic'
-      AND COALESCE(i.total_periods, 0) >= 1
-      AND COALESCE(i.periods_used, 0) <> LEAST(
-        i.total_periods,
-        (SELECT COUNT(*) FROM invoice_expenses e WHERE e.invoice_id = i.id)
-      )
-  `);
-  const rows = res.rows;
-  for (const r of rows) await recalcInvoice(db, r.id);
-  return rows.length;
 }
 
 export async function recalculateAllInvoices(db: DB): Promise<{ updated: number; errors: number }> {

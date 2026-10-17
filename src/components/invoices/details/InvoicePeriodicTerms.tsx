@@ -25,6 +25,7 @@ type Props = Pick<
   | "converting"
   | "handleConvertToSubscription"
   | "handleRevertToOneTime"
+  | "handleSetPeriod"
 >;
 export function InvoicePeriodicTerms({ model }: { model: Props }) {
   const {
@@ -41,6 +42,7 @@ export function InvoicePeriodicTerms({ model }: { model: Props }) {
     converting,
     handleConvertToSubscription,
     handleRevertToOneTime,
+    handleSetPeriod,
   } = model;
   if (!invoice) return null;
   return (
@@ -63,8 +65,7 @@ export function InvoicePeriodicTerms({ model }: { model: Props }) {
                 <p className="text-sm font-semibold">Превратить в подписку</p>
                 <p className="text-xs text-muted-foreground">
                   Сумма счёта пересчитается автоматически: цена × количество.
-                  «Использовано» будет считаться по записям расходов
-                  админа/ассистента.
+                  Использованные периоды закрываются вручную. Расходы учитываются отдельно.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
@@ -187,7 +188,7 @@ export function InvoicePeriodicTerms({ model }: { model: Props }) {
               : invoice.period_unit === "hour"
                 ? "ч"
                 : "мес";
-          const canManage = userRole === "admin" || userRole === "assistant";
+          const canManage = userRole === "admin" || userRole === "assistant" || userRole === "accountant";
           const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
           return (
             <div className="col-span-full pt-3 border-t">
@@ -228,12 +229,15 @@ export function InvoicePeriodicTerms({ model }: { model: Props }) {
                 </div>
                 <Progress value={pct} className="h-2" />
                 {canManage && (
-                  <div className="flex justify-end pt-2">
+                  <div className="flex flex-wrap justify-end gap-2 pt-2">
+                    <Button size="sm" onClick={() => handleSetPeriod(true)} disabled={converting || remaining === 0 || invoice.status === 'cancelled'} data-testid="button-close-period">{remaining === 0 ? "Все периоды закрыты" : `Закрыть период ${used + 1}`}</Button>
+                    <Button size="sm" variant="outline" onClick={() => handleSetPeriod(false)} disabled={converting || used === 0 || invoice.status === 'cancelled'} data-testid="button-reopen-period">Отменить закрытие {used || ''}</Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={handleRevertToOneTime}
-                      disabled={converting}
+                      disabled={converting || used > 0}
+                      title={used > 0 ? "Сначала отмените закрытые периоды" : undefined}
                       className="text-muted-foreground hover:text-foreground"
                       data-testid="button-revert-to-onetime"
                     >

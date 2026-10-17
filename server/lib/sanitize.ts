@@ -25,7 +25,7 @@ export const INVOICE_WRITABLE_FIELDS = [
   "commissionAmount", "partnerCommissionRate", "description", "clientTitle",
   "issueDate", "paymentDate", "actualPaymentDate", "notes", "hideFromAssistant",
   "plannedExpenses", "closingDocumentUrl", "serviceType", "periodUnit",
-  "pricePerPeriod", "totalPeriods", "periodsUsed",
+  "pricePerPeriod", "totalPeriods",
 ] as const;
 
 // Поля клиента. Исключены: id, createdAt, updatedAt. partnerId НЕ здесь —

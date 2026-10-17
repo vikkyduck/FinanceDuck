@@ -45,6 +45,7 @@ type Props = Pick<
   | "converting"
   | "handleConvertToSubscription"
   | "handleRevertToOneTime"
+  | "handleSetPeriod"
   | "isAgency30"
   | "partnerRate"
   | "setPartnerRate"

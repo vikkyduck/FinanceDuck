@@ -5,7 +5,6 @@ import { originPolicy } from "./originPolicy";
 import { registerRoutes, registerHealthCheck } from "./routes";
 import { db } from "./db";
 import { migrateAccessCodesAtRest } from "./repositories/userRepo";
-import { healPeriodicUsage } from "./repositories/invoiceRepo";
 
 const app = express();
 
@@ -47,11 +46,5 @@ registerRoutes(app);
 migrateAccessCodesAtRest(db)
   .then(n => { if (n) console.log(`[accessCode] зашифровано кодов при старте: ${n}`); })
   .catch(e => console.error("[accessCode] миграция при старте не удалась (вход работает):", (e as Error)?.message));
-
-// Периодические счета: «использовано» следует за расходами (derivePeriodsUsed).
-// Данные, заведённые до этого правила, подтягиваются один раз при старте.
-healPeriodicUsage(db)
-  .then(n => { if (n) console.log(`[periodic] подтянуто «использовано» по расходам: ${n} сч.`); })
-  .catch(e => console.error("[periodic] починка при старте не удалась:", (e as Error)?.message));
 
 export { app };

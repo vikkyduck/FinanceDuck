@@ -55,14 +55,20 @@ export function BackupManager() {
     queryKey: ["/api/backups"],
     queryFn: () => apiGet<BackupInfo[]>("/backups"),
     staleTime: 30000,
+    refetchInterval: 10000,
+  });
+
+  const { data: backupStatus } = useQuery<{ state: string; pending: boolean; lastError?: string; filename?: string }>({
+    queryKey: ['/api/backups/status'], queryFn: () => apiGet('/backups/status'), refetchInterval: 5000,
   });
 
   const createBackupMutation = useMutation({
     mutationFn: async () => {
-      return apiPost<BackupInfo>("/backups");
+      return apiPost<{ message: string }>("/backups");
     },
-    onSuccess: (backup) => {
-      showSuccess("Готово", `Бэкап создан: ${backup.filename}`);
+    onSuccess: (result) => {
+      showSuccess("Задание принято", result.message);
+      queryClient.invalidateQueries({ queryKey: ["/api/backups/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/backups"] });
     },
     onError: (error: Error) => {
@@ -128,7 +134,7 @@ export function BackupManager() {
         </CardTitle>
         <Button
           onClick={() => createBackupMutation.mutate()}
-          disabled={createBackupMutation.isPending}
+          disabled={createBackupMutation.isPending || backupStatus?.pending}
           data-testid="button-create-backup"
           className="w-full sm:w-auto"
         >
@@ -142,10 +148,11 @@ export function BackupManager() {
       </CardHeader>
       <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
         <div className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-          Автоматические бэкапы создаются ежедневно в 3:00. Хранятся последние 7
-          автоматических копий.
+          Автоматические бэкапы создаются ежедневно в 06:00 МСК (03:00 UTC). Хранятся последние 30 автоматических копий. Файлы зашифрованы; для восстановления на другом сервере нужен сохранённый серверный ключ.
         </div>
 
+        {backupStatus?.pending && <p role="status" className="text-sm mb-3">{backupStatus.lastError || 'Копия создаётся в фоне. Можно закрыть эту страницу.'}</p>}
+        {!backupStatus?.pending && backupStatus?.filename && <p role="status" className="text-sm mb-3">Последняя ручная копия готова: {backupStatus.filename}</p>}
         {isLoading ? (
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (

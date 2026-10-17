@@ -36,6 +36,13 @@
       "when": 1792258602680,
       "tag": "0004_little_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792261071032,
+      "tag": "0005_certain_ricochet",
+      "breakpoints": true
     }
   ]
 }

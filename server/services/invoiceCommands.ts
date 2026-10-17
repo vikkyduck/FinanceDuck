@@ -101,14 +101,24 @@ export class InvoiceCommands {
     });
   }
 
+  setPeriod(actor: CommandActor, id: string, period: number, closed: boolean) {
+    if (!Number.isSafeInteger(period) || period < 1 || typeof closed !== 'boolean') throw new CommandError('Неверный период', 400);
+    return this.run(actor, [id], 'update_invoice', { id, period, closed }, async tx => {
+      const result = await repo.setServicePeriod(tx, id, period, closed, actor.tokenId);
+      const invoice = (await repo.getInvoice(tx, id))!;
+      return { result, entityId: id, description: `${closed ? 'Закрыт период' : 'Отменено закрытие периода'} ${period}`,
+        notification: isClientUsageVisible(invoice) ? { clientId: invoice.clientId, body: `<b>${closed ? 'Закрыт период' : 'Отменено закрытие периода'} ${period}</b> · ${escapeHtml(invoice.clientTitle || invoice.invoiceNumber)}\nИспользовано: ${result.periodsUsed} из ${invoice.totalPeriods}` } : undefined };
+    });
+  }
+
   createExpense(actor: CommandActor, input: RecordExpense) {
     const fields = parseCommand(expenseInput, input);
     return this.run(actor, [input.invoiceId], 'create_expense', input, async tx => {
       const expense = await repo.createInvoiceExpense(tx, { ...fields, invoiceId: input.invoiceId, createdBy: actor.tokenId });
       const invoice = (await repo.getInvoice(tx, input.invoiceId))!;
       const periodic = invoice.serviceType === 'periodic';
-      const notification = isClientUsageVisible(invoice) ? { clientId: invoice.clientId,
-        body: `<b>Списание</b> · ${escapeHtml(invoice.clientTitle || invoice.invoiceNumber)}\n${periodic ? 'Оплата периода' : escapeHtml(expense.description)} — ${money(periodic ? invoice.pricePerPeriod : expense.amount)}` } : undefined;
+      const notification = !periodic && isClientUsageVisible(invoice) ? { clientId: invoice.clientId,
+        body: `<b>Списание</b> · ${escapeHtml(invoice.clientTitle || invoice.invoiceNumber)}\n${escapeHtml(expense.description)} — ${money(expense.amount)}` } : undefined;
       return { result: expense, entityId: input.invoiceId, description: `Создан расход: ${expense.description}`, notification };
     });
   }

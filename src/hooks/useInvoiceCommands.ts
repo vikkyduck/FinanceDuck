@@ -11,7 +11,7 @@ import { format } from "date-fns";
 
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, UserRole } from "@/lib/invoicePermissions";
-import { apiPatch, apiDelete } from "@/lib/api";
+import { apiPost, apiPatch, apiDelete } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function useInvoiceCommands({
@@ -652,7 +652,6 @@ export function useInvoiceCommands({
         periodUnit: convertUnit,
         pricePerPeriod: price.toString(),
         totalPeriods: total,
-        periodsUsed: 0,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client/budget"] });
@@ -677,6 +676,20 @@ export function useInvoiceCommands({
       setConverting(false);
     }
   };
+  const handleSetPeriod = async (closed: boolean) => {
+    if (!invoiceId || !invoice || converting) return;
+    const period = Number(invoice.periods_used ?? 0) + (closed ? 1 : 0);
+    setConverting(true);
+    try {
+      await apiPost(`/invoices/${invoiceId}/periods`, { period, closed });
+      await queryClient.invalidateQueries();
+      await fetchInvoiceDetails();
+      toast({ title: closed ? `Период ${period} закрыт` : `Закрытие периода ${period} отменено` });
+    } catch (error) {
+      toast({ title: "Ошибка", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+      await fetchInvoiceDetails();
+    } finally { setConverting(false); }
+  };
   const handleRevertToOneTime = async () => {
     if (!invoiceId) return;
     if (
@@ -691,7 +704,6 @@ export function useInvoiceCommands({
         serviceType: "one_time",
         pricePerPeriod: null,
         totalPeriods: null,
-        periodsUsed: 0,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client/budget"] });
@@ -825,6 +837,7 @@ export function useInvoiceCommands({
     handleSaveClientTitle,
     handleConvertToSubscription,
     handleRevertToOneTime,
+    handleSetPeriod,
     getStatusLabel,
     calcRaw,
     calc,

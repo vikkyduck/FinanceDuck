@@ -25,7 +25,7 @@ export const invoiceTerms = z.object({
   issueDate: isoDate.nullish(), paymentDate: isoDate.nullish(), actualPaymentDate: isoDate.nullish(),
   hideFromAssistant: z.boolean().optional(), serviceType: z.enum(['one_time', 'periodic']).optional(),
   periodUnit: z.enum(['month', 'day', 'hour']).optional(), pricePerPeriod: money.nullish(),
-  totalPeriods: z.number().int().min(1).max(1_000_000).nullish(), periodsUsed: z.number().int().nonnegative().optional(),
+  totalPeriods: z.number().int().min(1).max(1_000_000).nullish(),
 });
 export const calculationInput = z.object({ clientBill: z.preprocess(value => value ?? undefined, money.optional()), commissionRate: rate.nullish() });
 export const expenseInput = z.object({ description: z.string().min(1).max(10000), amount: money.refine(value => Number(value) > 0, 'Расход должен быть больше 0'),
@@ -37,7 +37,7 @@ export function parseCommand<S extends z.ZodTypeAny>(schema: S, value: unknown):
   return result.data;
 }
 
-export function validatePeriodicTerms(terms: ChangeInvoiceTerms) {
+export function validatePeriodicTerms(terms: ChangeInvoiceTerms & { periodsUsed?: number }) {
   if (terms.serviceType !== 'periodic') return;
   if (!terms.totalPeriods || terms.pricePerPeriod == null) throw new CommandError('Периодической услуге нужны цена и число периодов', 400);
   if ((terms.periodsUsed ?? 0) > terms.totalPeriods) throw new CommandError('Использованные периоды превышают общее число', 400);

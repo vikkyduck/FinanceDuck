@@ -171,6 +171,18 @@ export const invoiceCalculations = pgTable("invoice_calculations", {
   uniqueIndex("idx_invoice_calculations_invoice").on(table.invoiceId),
 ]);
 
+// One row per numbered service period. Legacy dates remain unknown, not fabricated.
+export const serviceUsage = pgTable("service_usage", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  period: integer("period").notNull(),
+  closed: boolean("closed").default(true).notNull(),
+  source: text("source").notNull().default("manual"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedBy: uuid("updated_by").references(() => accessTokens.id, { onDelete: 'set null' }),
+}, table => [uniqueIndex("service_usage_invoice_period").on(table.invoiceId, table.period)]);
+
 export const invoiceExpenses = pgTable("invoice_expenses", {
   id: uuid("id").defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),

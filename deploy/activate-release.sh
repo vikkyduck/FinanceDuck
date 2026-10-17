@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Versioned migrations must be backward compatible with the previous application.
-# This release adds scheduled_jobs and an index; automatic rollback switches code only.
+# Usage ledger is additive, but the old application must not run after manual period changes.
 set -Eeuo pipefail
 release="${1:?Release directory required}"
 commit="${2:?Commit required}"
@@ -20,6 +20,11 @@ rollback() {
   trap - ERR
   if (( stopped )); then
     systemctl stop finance-duck finance-duck-worker || true
+    # A previous application derives usage from expenses. Never silently erase new manual usage.
+    if [[ ! -f "$previous/dist-server/backupCli.js" ]] && sudo -u postgres psql -At -d finance_duck -c "SELECT 1 FROM service_usage WHERE source='manual' OR updated_by IS NOT NULL LIMIT 1" 2>/dev/null | grep -q 1; then
+      echo 'Automatic code rollback stopped: manual service usage exists. Services remain stopped; recover forward or restore the protected pre-switch database.'
+      exit "$rc"
+    fi
     ln -s "$previous" /opt/finance-duck-rollback
     mv -Tf /opt/finance-duck-rollback /opt/finance-duck
     if (( worker_existed )); then

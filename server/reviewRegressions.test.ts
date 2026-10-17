@@ -127,6 +127,7 @@ describe('Complete backup and safe restore', () => {
     await db.insert(s.notificationOutbox).values({ clientId, body: 'round trip', deliveredAt: new Date() });
     await db.insert(s.commandReceipts).values({ key: 'round-trip', fingerprint: 'fixture', result: '{}' });
     await db.insert(s.scheduledJobs).values({ key: 'round-trip', state: 'idle' });
+    await db.insert(s.serviceUsage).values({ invoiceId: created.id, period: 1, closed: false });
     const service = new BackupService(database(), directory);
     const info = await service.createBackup();
     const before = await service.downloadBackup(info.id);

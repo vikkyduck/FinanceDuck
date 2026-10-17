@@ -1,120 +1,83 @@
-/**
- * Периодические счета: «использовано» = число расходов.
- *
- * До этого правила месяцы закрывались только руками, и счёт 0899 при восьми
- * оплатах исполнителю показывал «использовано 0/9» и остаток на полную сумму —
- * и админу, и партнёру, и клиенту. Теперь каждая строка расхода = прожитый
- * период; второго (ручного) источника нет — два источника спорили.
- */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createTestDb, seedPartnerAndClient, type TestDb } from "../test/testDb";
-import {
-  createInvoice, createInvoiceExpense, deleteInvoiceExpense, getInvoice,
-  updateInvoice, updateInvoiceCalculations, derivePeriodsUsed, healPeriodicUsage,
-} from "./invoiceRepo";
-import { invoices } from "../../shared/schema";
-import { eq } from "drizzle-orm";
-
-describe("derivePeriodsUsed — правило", () => {
-  const periodic = { serviceType: "periodic", totalPeriods: 9 };
-
-  it("one_time — не трогаем", () => {
-    expect(derivePeriodsUsed({ serviceType: "one_time", totalPeriods: 9 }, 5)).toBeUndefined();
-  });
-  it("использовано = число расходов", () => {
-    expect(derivePeriodsUsed(periodic, 0)).toBe(0);
-    expect(derivePeriodsUsed(periodic, 8)).toBe(8);
-  });
-  it("не больше totalPeriods", () => {
-    expect(derivePeriodsUsed(periodic, 40)).toBe(9);
-  });
-});
-
-let db: TestDb;
-let close: () => Promise<void>;
-let partnerId: string;
-let clientId: string;
-const asDb = () => db as unknown as typeof import("../db").db;
-const ACTOR = "00000000-0000-0000-0000-000000000001";
-
-beforeEach(async () => {
+import { beforeAll, afterAll, it, expect } from 'vitest';
+import { eq, sql } from 'drizzle-orm';
+import { readFile } from 'node:fs/promises';
+import { createTestDb, seedPartnerAndClient, type TestDb } from '../test/testDb';
+import * as repo from './invoiceRepo';
+import * as s from '../../shared/schema';
+import { InvoiceCommands } from '../services/invoiceCommands';
+let db: TestDb, close: () => Promise<void>, partnerId: string, clientId: string, actorId: string;
+const database = () => db as unknown as typeof import('../db').db;
+let sequence = 0;
+beforeAll(async () => {
   ({ db, close } = await createTestDb());
   ({ partnerId, clientId } = await seedPartnerAndClient(db));
+  [actorId] = (await db.insert(s.accessTokens).values({ code: 'PERIOD-TEST', role: 'admin' }).returning()).map(row => row.id);
 });
-afterEach(async () => { await close(); });
-
-// Счёт как 0899: 270 000 × 9 мес, клиентская схема, плановые расходы.
-async function makePeriodic() {
-  return createInvoice(asDb(), {
-    invoiceNumber: `P-${Math.round(performance.now() * 1000)}`,
-    clientId, partnerId,
-    scheme: "commission_based" as const,
-    createdBy: ACTOR,
-    serviceType: "periodic",
-    periodUnit: "month",
-    pricePerPeriod: "270000",
-    totalPeriods: 9,
-    periodsUsed: 0,
-    partnerCommissionRate: "15",
-    plannedExpenses: "1215000",
-  }, { clientBill: "2430000", commissionRate: "15" });
-}
-
-const expense = (invoiceId: string) => ({
-  invoiceId, description: "ИП Марушкина (оклад)", amount: "130000",
-  paidByAdmin: false, date: "2026-06-03", createdBy: ACTOR,
+afterAll(async () => { await close(); });
+const make = () => repo.createInvoice(database(), { invoiceNumber: `P-${++sequence}`, clientId, partnerId, createdBy: actorId,
+  scheme: 'commission_based', serviceType: 'periodic', periodUnit: 'month', pricePerPeriod: '100', totalPeriods: 3 });
+const actor = () => ({ tokenId: actorId, role: 'admin' as const });
+it('expenses never consume or reopen service periods; financial projections follow the separate ledger', async () => {
+  const inv = await make(), commands = new InvoiceCommands(database());
+  const expense = await commands.createExpense(actor(), { invoiceId: inv.id, description: 'Payment', amount: '25' });
+  expect((await repo.getInvoice(database(), inv.id))!.periodsUsed).toBe(0);
+  await commands.setPeriod(actor(), inv.id, 1, true);
+  await commands.deleteExpense(actor(), expense.id);
+  const result = (await repo.getInvoice(database(), inv.id))!;
+  expect(result.periodsUsed).toBe(1);
+  expect(Number(result.calculations!.clientSpent)).toBe(100);
+  expect(Number(result.calculations!.clientRemaining)).toBe(200);
+  expect(Number(result.calculations!.executorExpensesTotal)).toBe(0);
 });
-
-describe("periodsUsed следует за расходами (PGlite)", () => {
-  it("каждый расход = прожитый месяц; остаток и «потрачено» считаются от него", async () => {
-    const inv = await makePeriodic();
-    for (let i = 0; i < 3; i++) await createInvoiceExpense(asDb(), expense(inv.id));
-
-    const got = await getInvoice(asDb(), inv.id, "admin");
-    expect(got?.periodsUsed).toBe(3);
-    expect(Number(got?.calculations?.clientSpent)).toBe(270000 * 3);
-    expect(Number(got?.calculations?.clientRemaining)).toBe(270000 * 6);
-    // Денежная математика админа не тронута: расходы как были.
-    expect(Number(got?.calculations?.executorExpensesTotal)).toBe(130000 * 3);
-  });
-
-  it("удаление расхода откатывает месяц", async () => {
-    const inv = await makePeriodic();
-    const e1 = await createInvoiceExpense(asDb(), expense(inv.id));
-    await createInvoiceExpense(asDb(), expense(inv.id));
-    await deleteInvoiceExpense(asDb(), e1.id);
-
-    const got = await getInvoice(asDb(), inv.id, "admin");
-    expect(got?.periodsUsed).toBe(1);
-    expect(Number(got?.calculations?.clientRemaining)).toBe(270000 * 8);
-  });
-
-  it("ручная правка periodsUsed не удерживается — число расходов главнее", async () => {
-    const inv = await makePeriodic();
-    await createInvoiceExpense(asDb(), expense(inv.id));
-    await createInvoiceExpense(asDb(), expense(inv.id));
-
-    // PATCH periodic-полей идёт через updateInvoice + updateInvoiceCalculations.
-    await updateInvoice(asDb(), inv.id, { periodsUsed: 5 });
-    await updateInvoiceCalculations(asDb(), inv.id, {});
-    const got = await getInvoice(asDb(), inv.id, "admin");
-    expect(got?.periodsUsed).toBe(2);
-    expect(Number(got?.calculations?.clientRemaining)).toBe(270000 * 7);
-  });
-
-  it("healPeriodicUsage подтягивает старые данные (periods_used = 0 при расходах)", async () => {
-    const inv = await makePeriodic();
-    for (let i = 0; i < 8; i++) await createInvoiceExpense(asDb(), expense(inv.id));
-    // Имитируем состояние до правила: счётчик обнулён напрямую в БД.
-    await db.update(invoices).set({ periodsUsed: 0 }).where(eq(invoices.id, inv.id));
-
-    const healed = await healPeriodicUsage(asDb());
-    expect(healed).toBe(1);
-    const got = await getInvoice(asDb(), inv.id, "admin");
-    expect(got?.periodsUsed).toBe(8);
-    expect(Number(got?.calculations?.clientRemaining)).toBe(270000);
-
-    // Повторный прогон ничего не находит — идемпотентно.
-    expect(await healPeriodicUsage(asDb())).toBe(0);
-  });
+it('retries are idempotent, stale requests conflict, and reopening retains an audit trail', async () => {
+  const inv = await make(), commands = new InvoiceCommands(database());
+  const keyed = { ...actor(), requestKey: 'period-once' };
+  expect(await commands.setPeriod(keyed, inv.id, 1, true)).toEqual(await commands.setPeriod(keyed, inv.id, 1, true));
+  await expect(commands.setPeriod(actor(), inv.id, 1, true)).rejects.toMatchObject({ status: 409 });
+  await commands.setPeriod(actor(), inv.id, 2, true);
+  await expect(commands.setPeriod(actor(), inv.id, 1, false)).rejects.toMatchObject({ status: 409 });
+  await commands.setPeriod(actor(), inv.id, 2, false);
+  expect((await repo.getInvoice(database(), inv.id))!.periodsUsed).toBe(1);
+  expect(await db.select().from(s.serviceUsage).where(eq(s.serviceUsage.invoiceId, inv.id))).toHaveLength(2);
+  expect(await db.select().from(s.assistantActionLogs).where(eq(s.assistantActionLogs.entityId, inv.id))).toHaveLength(3);
+});
+it('rejects arbitrary counter writes, invalid terms, overuse and cancelled invoices', async () => {
+  const inv = await make(), commands = new InvoiceCommands(database());
+  await commands.setPeriod(actor(), inv.id, 1, true);
+  await expect(repo.updateInvoice(database(), inv.id, { periodsUsed: 0 })).rejects.toMatchObject({ status: 400 });
+  await expect(commands.update(actor(), inv.id, { serviceType: 'one_time' })).rejects.toMatchObject({ status: 409 });
+  await expect(commands.update(actor(), inv.id, { periodUnit: 'hour' })).rejects.toMatchObject({ status: 409 });
+  await commands.setPeriod(actor(), inv.id, 2, true);
+  await expect(commands.update(actor(), inv.id, { totalPeriods: 1 })).rejects.toMatchObject({ status: 400 });
+  await commands.setPeriod(actor(), inv.id, 3, true);
+  await expect(commands.setPeriod(actor(), inv.id, 4, true)).rejects.toMatchObject({ status: 409 });
+  await commands.update(actor(), inv.id, { status: 'cancelled' });
+  await expect(commands.setPeriod(actor(), inv.id, 3, false)).rejects.toMatchObject({ status: 400 });
+});
+it('uses centralized role policy on closing, reopening and receipt replay', async () => {
+  const inv = await make(), commands = new InvoiceCommands(database());
+  await expect(commands.setPeriod({ ...actor(), role: 'client', clientId }, inv.id, 1, true)).rejects.toMatchObject({ status: 403 });
+  const assistant = { ...actor(), role: 'assistant' as const, requestKey: 'assistant-period' };
+  await commands.setPeriod(assistant, inv.id, 1, true);
+  await db.update(s.invoices).set({ hideFromAssistant: true }).where(eq(s.invoices.id, inv.id));
+  await expect(commands.setPeriod(assistant, inv.id, 1, true)).rejects.toMatchObject({ status: 404 });
+  await expect(commands.setPeriod(assistant, inv.id, 1, false)).rejects.toMatchObject({ status: 409 });
+  await commands.setPeriod({ ...actor(), role: 'accountant' }, inv.id, 1, false);
+});
+it('migration preserves historical counters exactly and does not invent closing dates', async () => {
+  const inv = await make();
+  await db.update(s.invoices).set({ periodsUsed: 2 }).where(eq(s.invoices.id, inv.id));
+  const migration = await readFile('drizzle/0005_certain_ricochet.sql', 'utf8');
+  await db.execute(sql.raw(migration.slice(migration.indexOf('INSERT INTO service_usage'))));
+  const rows = await db.select().from(s.serviceUsage).where(eq(s.serviceUsage.invoiceId, inv.id));
+  expect(rows.map(row => row.period).sort()).toEqual([1, 2]);
+  expect(rows.every(row => row.source === 'legacy' && row.closedAt === null)).toBe(true);
+  await repo.updateInvoiceCalculations(database(), inv.id, {});
+  expect((await repo.getInvoice(database(), inv.id))!.periodsUsed).toBe(2);
+});
+it('audit failure rolls back the usage entry, projection and notification', async () => {
+  const inv = await make(), commands = new InvoiceCommands(database());
+  await expect(commands.setPeriod({ ...actor(), tokenId: '00000000-0000-0000-0000-000000000001' }, inv.id, 1, true)).rejects.toThrow();
+  expect((await repo.getInvoice(database(), inv.id))!.periodsUsed).toBe(0);
+  expect(await db.select().from(s.serviceUsage).where(eq(s.serviceUsage.invoiceId, inv.id))).toHaveLength(0);
 });

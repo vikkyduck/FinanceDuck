@@ -1,3 +1,4 @@
+import type { AssistantInvoiceDto } from "@shared/contracts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMoney } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
@@ -20,7 +21,7 @@ export const AssistantMonthlyChart = ({ selectedYear }: Props) => {
         { credentials: 'include' }
       );
       if (!response.ok) return { data: [], average: 0, bestMonth: null };
-      const invoices: any[] = await response.json();
+      const invoices: AssistantInvoiceDto[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return { data: [], average: 0, bestMonth: null };

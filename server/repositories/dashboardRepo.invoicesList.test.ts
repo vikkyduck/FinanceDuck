@@ -14,7 +14,7 @@ let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
 let seq = 0;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 const BY = "00000000-0000-0000-0000-000000000001";
 
 beforeEach(async () => {
@@ -34,8 +34,8 @@ async function mk(opts: {
     scheme: "commission_based" as const, createdBy: BY,
     status: opts.status ?? "sent",
     paymentDate: opts.paymentDate === undefined ? null : opts.paymentDate,
-  } as any, { clientBill: opts.bill ?? "1000" });
-  const patch: any = {};
+  }, { clientBill: opts.bill ?? "1000" });
+  const patch: Partial<import("../../shared/schema").Invoice> = {};
   if (opts.actualPaymentDate) patch.actualPaymentDate = opts.actualPaymentDate;
   if (opts.createdAt) patch.createdAt = new Date(opts.createdAt);
   if (opts.recurring) patch.recurringInvoiceId = inv.id; // маркер «из рекуррентного»

@@ -1,7 +1,8 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { storage } from "../storage";
+import type { ClientsStore } from "../routeStores";
 import { UserRole } from "../../shared/schema";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import {
   projectClientForRole,
   projectClientsForRole,
@@ -17,7 +18,8 @@ import {
   resolveClientCollectionScope,
 } from "../tenantAccess";
 
-export const clientsRouter = Router();
+export function createClientsRouter(storage: ClientsStore, authMiddleware: AuthMiddleware) {
+const clientsRouter = Router();
 
 function auditSafeClientBody(body: unknown): string {
   const safe = body && typeof body === "object"
@@ -49,7 +51,7 @@ clientsRouter.get("/api/closing-docs-status", authMiddleware, requireRole("admin
     const allInvoices = await storage.getInvoices("admin" as UserRole);
     const hiddenInvoices = allInvoices.filter(inv => inv.hideFromAssistant);
 
-    const clientDocsMap = new Map<string, any>();
+    const clientDocsMap = new Map<string, { clientId: string; clientName: string; totalInvoices: number; invoicesWithDoc: number; invoicesWithoutDoc: number; invoiceDetails: { id: string; invoiceNumber: string; status: string; hasClosingDoc: boolean; closingDocumentUrl: string | null; paymentDate: string | null }[] }>();
     for (const client of clients) {
       clientDocsMap.set(client.id, { clientId: client.id, clientName: client.name, totalInvoices: 0, invoicesWithDoc: 0, invoicesWithoutDoc: 0, invoiceDetails: [] });
     }
@@ -79,7 +81,7 @@ clientsRouter.get("/api/clients/acts-status", authMiddleware, requireRole("admin
     const allInvoices = await storage.getInvoices(role);
     const paidInvoices = allInvoices.filter(inv => inv.status === "paid");
 
-    const clientActsMap = new Map<string, any>();
+    const clientActsMap = new Map<string, { clientId: string; clientName: string; totalInvoices: number; invoicesWithCompanyAct: number; invoicesWithExecutorAct: number; invoicesWithBothActs: number; invoicesWithoutActs: number; invoiceDetails: { id: string; invoiceNumber: string; hasCompanyAct: boolean; hasExecutorAct: boolean; paymentDate: string | null }[] }>();
     for (const client of clients) {
       clientActsMap.set(client.id, { clientId: client.id, clientName: client.name, totalInvoices: 0, invoicesWithCompanyAct: 0, invoicesWithExecutorAct: 0, invoicesWithBothActs: 0, invoicesWithoutActs: 0, invoiceDetails: [] });
     }
@@ -176,7 +178,7 @@ clientsRouter.post("/api/clients/:id/telegram-test", authMiddleware, requireRole
     const { resolveTelegramTarget, sendTelegramMessage, escapeHtml } = await import("../lib/telegram");
     const client = await storage.getClient(String(req.params.id));
     if (!client) return res.status(404).json({ error: "Client not found" });
-    const target = resolveTelegramTarget(client as any);
+    const target = resolveTelegramTarget(client);
     if (!target) {
       return res.status(400).json({
         error: "Не задан Telegram chat_id (и нет глобального бота FALLBACK_TG_BOT_TOKEN)",
@@ -188,9 +190,9 @@ clientsRouter.post("/api/clients/:id/telegram-test", authMiddleware, requireRole
       `Если ты это видишь — интеграция настроена корректно.`;
     await sendTelegramMessage(target, html);
     res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Telegram test error:", error);
-    res.status(500).json({ error: error.message || "Не удалось отправить тестовое сообщение" });
+    res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Не удалось отправить тестовое сообщение" });
   }
 });
 
@@ -334,3 +336,6 @@ clientsRouter.get("/api/client/agency30", authMiddleware, requireRole("client"),
     res.status(500).json({ error: "Failed to get agency30 report" });
   }
 });
+
+return clientsRouter;
+}

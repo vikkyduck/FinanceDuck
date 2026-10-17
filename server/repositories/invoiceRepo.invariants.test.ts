@@ -19,7 +19,7 @@ let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
 let seq = 0;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 const BY = "00000000-0000-0000-0000-000000000001";
 
 beforeEach(async () => {
@@ -30,13 +30,13 @@ beforeEach(async () => {
 afterEach(async () => { await close(); });
 
 async function createInv(
-  scheme: string, bill: number,
+  scheme: import("../../shared/schema").InvoiceScheme, bill: number,
   opts: { commissionRate?: number; partnerCommissionRate?: number } = {},
 ) {
   seq++;
-  const inv: any = { invoiceNumber: `T-${seq}`, clientId, partnerId, scheme, createdBy: BY, status: "sent" };
+  const inv: import("../../shared/schema").InsertInvoice = { invoiceNumber: `T-${seq}`, clientId, partnerId, scheme, createdBy: BY, status: "sent" };
   if (opts.partnerCommissionRate !== undefined) inv.partnerCommissionRate = String(opts.partnerCommissionRate);
-  const calc: any = { clientBill: String(bill) };
+  const calc: Partial<import("../../shared/schema").InvoiceCalculation> = { clientBill: String(bill) };
   if (opts.commissionRate !== undefined) calc.commissionRate = String(opts.commissionRate);
   return createInvoice(asDb(), inv, calc);
 }
@@ -54,7 +54,7 @@ async function assertConsistent(invoiceId: string) {
   const inAmt  = trs.filter(t => t.toInvoiceId === invoiceId).reduce((s, t) => s + parseNum(t.amount), 0);
   const outAmt = trs.filter(t => t.fromInvoiceId === invoiceId).reduce((s, t) => s + parseNum(t.amount), 0);
   const b = parseNum(c.clientBill);
-  const g = (v: any) => parseNum(v);
+  const g = (v: string | number | null) => parseNum(v);
 
   near(g(c.executorExpensesTotal), expSum, "расходы=сумме_строк");
   near(g(c.adminShare50), g(c.netProfitAdmin) / 2, "админ50");
@@ -114,7 +114,7 @@ describe("Создание счёта: расчёт держит формулу 
 describe("Добавление расхода: остаток и сумма расходов сходятся", () => {
   it("agency_30: расход уменьшает остаток на свою величину", async () => {
     const inv = await createInv("agency_30", 100000); // база 70000
-    await createInvoiceExpense(asDb(), { invoiceId: inv.id, description: "расход", amount: "20000", paidByAdmin: false, createdBy: BY } as any);
+    await createInvoiceExpense(asDb(), { invoiceId: inv.id, description: "расход", amount: "20000", paidByAdmin: false, createdBy: BY });
     const c = await assertConsistent(inv.id);
     near(parseNum(c.executorExpensesTotal), 20000, "eet");
     near(parseNum(c.clientRemaining), 50000, "остаток=база−расход"); // 70000 − 20000

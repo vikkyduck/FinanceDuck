@@ -17,7 +17,7 @@ let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
 let seq = 0;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 const BY = "00000000-0000-0000-0000-000000000001";
 
 beforeEach(async () => {
@@ -34,13 +34,13 @@ async function mkAgency(bill: string, targetClientId = clientId) {
     invoiceNumber: `DNS-${seq}`, clientId: targetClientId, partnerId,
     scheme: "agency_30" as const, createdBy: BY,
     status: "paid", paymentDate: "2026-03-01",
-  } as any, { clientBill: bill });
+  }, { clientBill: bill });
 }
 
 async function addExpense(invoiceId: string, amount: string) {
   await db.insert(invoiceExpenses).values({
     invoiceId, description: "расход", amount, date: "2026-03-10", createdBy: BY,
-  } as any);
+  });
   const { recalcInvoice } = await import("./invoiceRepo");
   await recalcInvoice(asDb(), invoiceId);
 }

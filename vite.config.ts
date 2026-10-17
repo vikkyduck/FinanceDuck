@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
@@ -12,16 +13,16 @@ export default defineConfig({
       ignored: ["**/.local/**", "**/node_modules/**"],
     },
   },
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@shared": path.resolve(__dirname, "./shared"),
-      "@assets": path.resolve(__dirname, "./attached_assets"),
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@shared": path.resolve(import.meta.dirname, "./shared"),
+      "@assets": path.resolve(import.meta.dirname, "./attached_assets"),
     },
   },
   build: {
-    target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari14'],
+    target: ['es2020', 'edge111', 'firefox128', 'chrome111', 'safari16.4'],
     cssMinify: true,
     outDir: 'dist',
     emptyOutDir: true,

@@ -34,7 +34,7 @@ let db: TestDb;
 let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 const ACTOR = "00000000-0000-0000-0000-000000000001";
 
 beforeEach(async () => {
@@ -57,7 +57,7 @@ async function makePeriodic() {
     periodsUsed: 0,
     partnerCommissionRate: "15",
     plannedExpenses: "1215000",
-  } as any, { clientBill: "2430000", commissionRate: "15" });
+  }, { clientBill: "2430000", commissionRate: "15" });
 }
 
 const expense = (invoiceId: string) => ({
@@ -95,7 +95,7 @@ describe("periodsUsed следует за расходами (PGlite)", () => {
     await createInvoiceExpense(asDb(), expense(inv.id));
 
     // PATCH periodic-полей идёт через updateInvoice + updateInvoiceCalculations.
-    await updateInvoice(asDb(), inv.id, { periodsUsed: 5 } as any);
+    await updateInvoice(asDb(), inv.id, { periodsUsed: 5 });
     await updateInvoiceCalculations(asDb(), inv.id, {});
     const got = await getInvoice(asDb(), inv.id, "admin");
     expect(got?.periodsUsed).toBe(2);

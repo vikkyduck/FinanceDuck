@@ -1,3 +1,4 @@
+import type { InvoiceDto } from "@shared/contracts";
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { isAgencyScheme } from "@/lib/invoiceHelpers";
@@ -65,6 +66,7 @@ interface DebtDetails {
     totalDebt: number;
     totalPaid: number;
     remainingDebt: number;
+    overpayment: number;
     invoiceCount: number;
   };
   invoices: DebtInvoice[];
@@ -175,20 +177,18 @@ export const PartnerDashboard = () => {
   const { data: invoices = [], isLoading: invoicesLoading } = useQuery<InvoiceData[]>({
     queryKey: ['/api/invoices'],
     queryFn: async () => {
-      const data = await apiGet<any[]>('/invoices');
-      return data.map((inv: any) => ({
+      const data = await apiGet<InvoiceDto[]>('/invoices');
+      return data.map((inv) => ({
         id: inv.id,
         invoiceNumber: inv.invoiceNumber,
         status: inv.status,
         scheme: inv.scheme,
-        paymentDate: inv.paymentDate,
+        paymentDate: inv.paymentDate ?? null,
         createdAt: inv.createdAt,
         calculations: inv.calculations ? {
-          partnerTransferDue: inv.calculations.partnerTransferDue,
-          plannedExpenses: inv.calculations.plannedExpenses,
-          expensesPaidByPartner: inv.calculations.expensesPaidByPartner,
-          commissionAmount: inv.calculations.commissionAmount,
-          partnerShareFromMargin: inv.calculations.partnerShareFromMargin,
+          partnerTransferDue: inv.calculations.partnerTransferDue ?? undefined,
+          commissionAmount: inv.calculations.commissionAmount ?? undefined,
+          partnerShareFromMargin: inv.calculations.partnerShareFromMargin ?? undefined,
         } : undefined,
       }));
     },
@@ -241,7 +241,7 @@ export const PartnerDashboard = () => {
   const loading = debtLoading || invoicesLoading;
   
   const remainingDebt = debtDetails?.summary.remainingDebt ?? 0;
-  const overpayment = (debtDetails?.summary as any)?.overpayment ?? 0;
+  const overpayment = debtDetails?.summary?.overpayment ?? 0;
   const totalPaid = debtDetails?.summary.totalPaid ?? 0;
   const totalDebt = debtDetails?.summary.totalDebt ?? 0;
   const hasDebt = remainingDebt > 0;

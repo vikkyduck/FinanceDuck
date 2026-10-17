@@ -1,5 +1,5 @@
 import type { UserRole } from "../shared/schema";
-import type { IStorage } from "./storage";
+import type { InvoiceRepository } from "./storagePorts";
 
 export interface InvoiceActor {
   role: UserRole;
@@ -7,7 +7,7 @@ export interface InvoiceActor {
   clientId?: string;
 }
 
-type InvoiceAccessStorage = Pick<IStorage, "getInvoiceForRole">;
+type InvoiceAccessStorage = Pick<InvoiceRepository, "getInvoiceForRole">;
 
 /**
  * Единственный route-level шлюз к существующему счёту.
@@ -37,7 +37,7 @@ export function constrainInvoiceWrite<T extends Record<string, unknown>>(
   fields: T,
   operation: "create" | "update",
 ): T {
-  const constrained = { ...fields };
+  const constrained: T & { hideFromAssistant?: boolean } = { ...fields };
 
   if (operation === "create") {
     if (role === "assistant") constrained.hideFromAssistant = false;

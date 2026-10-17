@@ -1,3 +1,4 @@
+import type { InvoiceDto } from "@shared/contracts";
 import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -49,21 +50,21 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
     if (!open) return;
     setClientId(""); setFromId(""); setToId(""); setAmount(""); setNotes("");
     setLoading(true);
-    apiGet<any[]>("/invoices")
+    apiGet<InvoiceDto[]>("/invoices")
       .then((rows) => {
-        const list: InvoiceLite[] = rows.map((r: any) => ({
+        const list: InvoiceLite[] = rows.map((r) => ({
           id: r.id,
-          clientId: r.client_id ?? r.clientId ?? r.client?.id ?? null,
-          clientTitle: r.clientTitle ?? r.client_title ?? null,
-          invoiceNumber: r.invoiceNumber ?? r.invoice_number ?? null,
+          clientId: r.clientId ?? r.client?.id ?? null,
+          clientTitle: r.clientTitle ?? null,
+          invoiceNumber: r.invoiceNumber ?? null,
           scheme: r.scheme,
-          clientBill: Number(r.client_bill ?? r.clientBill ?? r.calculations?.clientBill ?? 0),
+          clientBill: Number(r.clientBill ?? r.calculations?.clientBill ?? 0),
           clientRemaining: Number(r.calculations?.clientRemaining ?? 0),
-          clientName: r.clients?.name ?? r.client?.name ?? r.client_name ?? null,
+          clientName: r.client?.name ?? null,
         }));
         setInvoices(list);
       })
-      .catch((e) => toast.error(e?.message || "Не удалось загрузить счета"))
+      .catch((e) => toast.error((e instanceof Error ? e.message : String(e)) || "Не удалось загрузить счета"))
       .finally(() => setLoading(false));
   }, [open]);
 
@@ -123,8 +124,8 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
       toast.success("Перенос выполнен");
       onTransferred?.();
       onOpenChange(false);
-    } catch (e: any) {
-      toast.error(e?.message || "Не удалось перенести");
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || "Не удалось перенести");
     } finally {
       setSubmitting(false);
     }

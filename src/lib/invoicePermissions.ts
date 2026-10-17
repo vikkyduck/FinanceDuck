@@ -1,12 +1,14 @@
 import { isAgencyScheme } from "./invoiceHelpers";
 
-export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
-export type InvoiceScheme = 'agency_30' | 'agency_40' | 'commission_based' | 'agency';
+import type { UserRole } from "@shared/schema";
+export type { UserRole } from "@shared/schema";
+import type { InvoiceScheme } from "@shared/schema";
+export type { InvoiceScheme } from "@shared/schema";
 
 export interface VisibleFields {
   // Basic info
   showBasicInfo: boolean;
-  
+
   // Financial fields
   showClientBill: boolean;
   showCommissionDetails: boolean;
@@ -19,7 +21,7 @@ export interface VisibleFields {
   showNetProfitAdmin: boolean;
   showAdminCatSplit: boolean;
   showAssistantBonus: boolean;
-  
+
   // Actions
   canEditStatus: boolean;
   canEditPaymentDates: boolean;
@@ -28,14 +30,13 @@ export interface VisibleFields {
   canAddExpenses: boolean;
   canUploadDocuments: boolean;
   canDeleteExpenses: boolean;
-  
+
   // Expense visibility
   showExpensesList: boolean;
 }
 
-export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): VisibleFields {
-  // Admin sees everything
-  if (userRole === 'admin') {
+const VISIBILITY_POLICIES = {
+  admin: (scheme: InvoiceScheme): VisibleFields => {
     return {
       showBasicInfo: true,
       showClientBill: true,
@@ -58,10 +59,8 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       canDeleteExpenses: true,
       showExpensesList: true,
     };
-  }
-
-  // Assistant permissions - видит маржу 30%, НО НЕ видит распределение между партнёром и админом
-  if (userRole === 'assistant') {
+  },
+  assistant: (scheme: InvoiceScheme): VisibleFields => {
     return {
       showBasicInfo: true,
       showClientBill: true,
@@ -84,10 +83,8 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       canDeleteExpenses: true, // Может удалять расходы для обеих схем
       showExpensesList: true, // Видит список расходов для обеих схем
     };
-  }
-
-  // Client permissions - different based on scheme
-  if (userRole === 'client') {
+  },
+  client: (scheme: InvoiceScheme): VisibleFields => {
     if (isAgencyScheme(scheme)) {
       // For agency schemes, show budget and expenses
       return {
@@ -140,10 +137,8 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
         showExpensesList: true, // только описания и даты, без сумм
       };
     }
-  }
-
-  // Accountant permissions - same as assistant but for hidden invoices
-  if (userRole === 'accountant') {
+  },
+  accountant: (scheme: InvoiceScheme): VisibleFields => {
     return {
       showBasicInfo: true,
       showClientBill: true,
@@ -166,10 +161,8 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       canDeleteExpenses: true,
       showExpensesList: true,
     };
-  }
-
-  // Partner permissions - видит свои комиссии и обязательства, НЕ видит внутреннюю кухню админа
-  if (userRole === 'partner') {
+  },
+  partner: (scheme: InvoiceScheme): VisibleFields => {
     return {
       showBasicInfo: true,
       showClientBill: true,
@@ -192,47 +185,53 @@ export function getVisibleFields(userRole: UserRole, scheme: InvoiceScheme): Vis
       canDeleteExpenses: false,
       showExpensesList: true,
     };
-  }
+  },
+} satisfies Record<UserRole, (scheme: InvoiceScheme) => VisibleFields>;
 
-  // Default fallback (shouldn't happen)
-  return {
-    showBasicInfo: true,
-    showClientBill: true,
-    showCommissionDetails: false,
-    showAgencyMargin: false,
-    showClientBudget: false,
-    showExpensesTotal: false,
-    showClientRemaining: false,
-    showPartnerShare: false,
-    showAdminShare: false,
-    showNetProfitAdmin: false,
-    showAdminCatSplit: false,
-    showAssistantBonus: false,
-    canEditStatus: false,
-    canEditPaymentDates: false,
-    canEditNotes: false,
-    canEditInvoiceNumber: false,
-    canAddExpenses: false,
-    canUploadDocuments: false,
-    canDeleteExpenses: false,
-    showExpensesList: false,
-  };
+export function getVisibleFields(
+  userRole: UserRole,
+  scheme: InvoiceScheme,
+): VisibleFields {
+  if (!Object.prototype.hasOwnProperty.call(VISIBILITY_POLICIES, userRole))
+    return {
+      showBasicInfo: true,
+      showClientBill: true,
+      showCommissionDetails: false,
+      showAgencyMargin: false,
+      showClientBudget: false,
+      showExpensesTotal: false,
+      showClientRemaining: false,
+      showPartnerShare: false,
+      showAdminShare: false,
+      showNetProfitAdmin: false,
+      showAdminCatSplit: false,
+      showAssistantBonus: false,
+      canEditStatus: false,
+      canEditPaymentDates: false,
+      canEditNotes: false,
+      canEditInvoiceNumber: false,
+      canAddExpenses: false,
+      canUploadDocuments: false,
+      canDeleteExpenses: false,
+      showExpensesList: false,
+    };
+  return VISIBILITY_POLICIES[userRole](scheme);
 }
 
 export function getDocumentTypeLabel(type: string): string {
   const labels: Record<string, string> = {
-    client_act: 'Акт от Заказчика',
-    executor_receipt: 'Акт/Чек от Исполнителя',
-    act: 'Акт выполненных работ',
-    invoice: 'Счет',
-    contract: 'Договор',
-    other: 'Другое',
+    client_act: "Акт от Заказчика",
+    executor_receipt: "Акт/Чек от Исполнителя",
+    act: "Акт выполненных работ",
+    invoice: "Счет",
+    contract: "Договор",
+    other: "Другое",
   };
   return labels[type] || type;
 }
 
 export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(2) + " MB";
 }

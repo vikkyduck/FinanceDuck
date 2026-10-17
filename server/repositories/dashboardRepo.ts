@@ -98,6 +98,11 @@ export async function getPartnerHeroMetrics(db: DB, partnerId: string): Promise<
     .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
     .where(and(eq(invoices.partnerId, partnerId), eq(invoices.status, 'paid')));
 
+  const expenseTotals = await db.select({ invoiceId: invoiceExpenses.invoiceId, total: sql<string>`COALESCE(SUM(${invoiceExpenses.amount}), 0)` })
+    .from(invoiceExpenses).innerJoin(invoices, eq(invoices.id, invoiceExpenses.invoiceId))
+    .where(and(eq(invoices.partnerId, partnerId), eq(invoices.status, 'paid'), eq(invoiceExpenses.paidByAdmin, false)))
+    .groupBy(invoiceExpenses.invoiceId);
+  const expenseTotalsByInvoice = new Map(expenseTotals.map(row => [row.invoiceId, parseNum(row.total)]));
   let debtToAdmin = 0;
   let reservedForExpenses = 0;
   let yearlyCommission = 0;
@@ -107,11 +112,8 @@ export async function getPartnerHeroMetrics(db: DB, partnerId: string): Promise<
     if (!row.calculations) continue;
 
     const partnerTransferDue = parseNum(row.calculations.partnerTransferDue);
-    // ⚠️ ЛАТЕНТНЫЙ БАГ (сохранён при переносе как есть): полей plannedExpenses /
-    // expensesPaidByPartner НЕТ на invoice_calculations → всегда undefined → 0,
-    // поэтому reservedForExpenses всегда 0. Исправлять отдельной задачей.
-    const plannedExpenses = parseNum((row.calculations as any).plannedExpenses);
-    const expensesPaidByPartner = parseNum((row.calculations as any).expensesPaidByPartner);
+    const plannedExpenses = parseNum(row.invoice.plannedExpenses);
+    const expensesPaidByPartner = expenseTotalsByInvoice.get(row.invoice.id) ?? 0;
 
     if (partnerTransferDue > 0) {
       debtToAdmin += partnerTransferDue;
@@ -129,9 +131,7 @@ export async function getPartnerHeroMetrics(db: DB, partnerId: string): Promise<
 
   for (const row of partnerInvoices) {
     if (!row.calculations) continue;
-    // ⚠️ ТОТ ЖЕ БАГ: поля partnerCommission на invoice_calculations нет →
-    // yearlyCommission всегда 0.
-    yearlyCommission += parseNum((row.calculations as any).partnerCommission);
+    yearlyCommission += parseNum(row.calculations.partnerShareFromMargin ?? row.calculations.commissionAmount);
   }
 
   // Payments reduce the debt
@@ -911,7 +911,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
       return true;
     };
 
-    const active = rows.filter(r => r.invoice.status !== 'cancelled' && inRange(r.invoice.paymentDate as any));
+    const active = rows.filter(r => r.invoice.status !== 'cancelled' && inRange(r.invoice.paymentDate));
 
     // --- Блок 1: агентские (жёсткие 30/40 + гибкая 'agency') ---
     const agencyRows = active.filter(r => isAgencyScheme(r.invoice.scheme));
@@ -934,7 +934,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
           id: e.id,
           description: decodeHtmlEntities(e.description || ''),
           amount: parseNum(e.amount),
-          date: e.date as any || null,
+          date: e.date || null,
         });
         expensesByAgencyInvoice.set(e.invoiceId, list);
       }
@@ -970,7 +970,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
     // шаблону recurring_invoices ИЛИ если у него service_type='periodic'
     // (предоплата за N единиц — месяц/день/час). Без agency.
     const nonAgencyActive = active.filter(r => !isAgencyScheme(r.invoice.scheme));
-    const isPeriodicLike = (inv: any) => !!inv.recurringInvoiceId || inv.serviceType === 'periodic';
+    const isPeriodicLike = (inv: { recurringInvoiceId?: string | null; serviceType?: string | null }) => !!inv.recurringInvoiceId || inv.serviceType === 'periodic';
     const recurringInvoiceRows = nonAgencyActive.filter(r => isPeriodicLike(r.invoice));
 
     // «Использовано» по ШАБЛОНАМ recurring_invoices (блок 2b) = COUNT
@@ -1003,7 +1003,7 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
       bill: number; paymentDate: string | null; actualPaymentDate: string | null;
       notes: string | null;
     };
-    let recurringBlock: Array<{
+    const recurringBlock: Array<{
       kind: 'standalone' | 'template';
       key: string; invoiceNumber: string; description: string; partnerName: string;
       unit: 'month' | 'day' | 'hour'; unitLabel: string; unitPrice: number;
@@ -1051,8 +1051,8 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
           invoiceNumber: inv.invoiceNumber || '',
           status: inv.status,
           bill: parseNum(r.calculations?.clientBill ?? inv.clientBill),
-          paymentDate: inv.paymentDate as any || null,
-          actualPaymentDate: inv.actualPaymentDate as any || null,
+          paymentDate: inv.paymentDate || null,
+          actualPaymentDate: inv.actualPaymentDate || null,
           notes: inv.clientTitle || null,
         }],
       });
@@ -1107,8 +1107,8 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
             invoiceNumber: r.invoice.invoiceNumber || '',
             status: r.invoice.status,
             bill: parseNum(r.calculations?.clientBill ?? r.invoice.clientBill),
-            paymentDate: r.invoice.paymentDate as any || null,
-            actualPaymentDate: r.invoice.actualPaymentDate as any || null,
+            paymentDate: r.invoice.paymentDate || null,
+            actualPaymentDate: r.invoice.actualPaymentDate || null,
             notes: r.invoice.clientTitle || null,
           }));
 
@@ -1153,8 +1153,8 @@ export async function getClientOverviewBuckets(db: DB, clientId: string, dateFro
           invoiceNumber: r.invoice.invoiceNumber || '',
           status: r.invoice.status,
           bill,
-          paymentDate: r.invoice.paymentDate as any || null,
-          actualPaymentDate: r.invoice.actualPaymentDate as any || null,
+          paymentDate: r.invoice.paymentDate || null,
+          actualPaymentDate: r.invoice.actualPaymentDate || null,
           notes: r.invoice.clientTitle || null,
         };
       });
@@ -1244,7 +1244,7 @@ export async function getPartnerInvoicesDetail(db: DB, partnerId: string): Promi
           paid_amount: paidAmount,
           remaining,
           status: row.invoice.status,
-          created_at: row.invoice.createdAt || '',
+          created_at: row.invoice.createdAt?.toISOString() || '',
         };
       })
       .filter(inv => inv.remaining > 0);
@@ -1256,6 +1256,7 @@ export async function getPartnerDebtDetails(db: DB, partnerId: string): Promise<
       totalDebt: number;
       totalPaid: number;
       remainingDebt: number;
+      overpayment: number;
       invoiceCount: number;
     };
     invoices: Array<{
@@ -1289,30 +1290,19 @@ export async function getPartnerDebtDetails(db: DB, partnerId: string): Promise<
         eq(invoices.status, 'paid')
       ));
     
-    // Get all expenses for these invoices
-    const allExpenses = await db.select().from(invoiceExpenses);
-    const expensesByInvoice = new Map<string, { byPartner: number; byAdmin: number }>();
-    
-    for (const exp of allExpenses) {
-      if (!expensesByInvoice.has(exp.invoiceId)) {
-        expensesByInvoice.set(exp.invoiceId, { byPartner: 0, byAdmin: 0 });
-      }
-      const amounts = expensesByInvoice.get(exp.invoiceId)!;
-      const amount = parseNum(exp.amount);
-      if (exp.paidByAdmin) {
-        amounts.byAdmin += amount;
-      } else {
-        amounts.byPartner += amount;
-      }
-    }
-    
-    // Get partner payments
-    const partnerPaymentsList = await db
-      .select()
-      .from(partnerPayments)
-      .where(eq(partnerPayments.partnerId, partnerId))
-      .orderBy(partnerPayments.paymentDate);
-    
+    const expenseTotals = await db.select({
+      invoiceId: invoiceExpenses.invoiceId,
+      byPartner: sql<string>`COALESCE(SUM(${invoiceExpenses.amount}) FILTER (WHERE NOT ${invoiceExpenses.paidByAdmin}), 0)`,
+      byAdmin: sql<string>`COALESCE(SUM(${invoiceExpenses.amount}) FILTER (WHERE ${invoiceExpenses.paidByAdmin}), 0)`,
+    }).from(invoiceExpenses).innerJoin(invoices, eq(invoices.id, invoiceExpenses.invoiceId))
+      .where(and(eq(invoices.partnerId, partnerId), eq(invoices.status, 'paid'))).groupBy(invoiceExpenses.invoiceId);
+    const expensesByInvoice = new Map(expenseTotals.map(row => [row.invoiceId, { byPartner: parseNum(row.byPartner), byAdmin: parseNum(row.byAdmin) }]));
+    const partnerPaymentsList = await db.select({
+      id: partnerPayments.id, amount: partnerPayments.amount, paymentDate: partnerPayments.paymentDate,
+      notes: partnerPayments.notes, invoiceNumber: invoices.invoiceNumber,
+    }).from(partnerPayments).leftJoin(invoices, eq(invoices.id, partnerPayments.invoiceId))
+      .where(eq(partnerPayments.partnerId, partnerId)).orderBy(partnerPayments.paymentDate);
+
     // Calculate totals using stored partnerTransferDue values (single source of truth)
     let totalDebt = 0;
     const invoiceDetails: Array<{
@@ -1355,27 +1345,8 @@ export async function getPartnerDebtDetails(db: DB, partnerId: string): Promise<
     // Calculate total paid
     const totalPaid = partnerPaymentsList.reduce((sum, p) => sum + parseNum(p.amount), 0);
     
-    // Map payments with invoice numbers
-    const paymentDetails = await Promise.all(
-      partnerPaymentsList.map(async (p) => {
-        let invoiceNumber: string | null = null;
-        if (p.invoiceId) {
-          const inv = await db.select({ invoiceNumber: invoices.invoiceNumber })
-            .from(invoices)
-            .where(eq(invoices.id, p.invoiceId))
-            .limit(1);
-          invoiceNumber = inv[0]?.invoiceNumber || null;
-        }
-        return {
-          id: p.id,
-          amount: p.amount,
-          paymentDate: p.paymentDate,
-          notes: p.notes,
-          invoiceNumber,
-        };
-      })
-    );
-    
+    const paymentDetails = partnerPaymentsList;
+
     const balance = totalDebt - totalPaid;
     return {
       summary: {

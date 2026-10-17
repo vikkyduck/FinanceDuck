@@ -5,7 +5,7 @@
 #   DOMAIN=<ваш-домен> sudo -E bash deploy/install.sh
 #
 # Что делает:
-#   1. Обновляет систему, ставит Node.js 20, Postgres 16, nginx, certbot
+#   1. Обновляет систему, ставит Node.js 22, Postgres 16, nginx, certbot
 #   2. Создаёт пользователя financeduck без shell-доступа
 #   3. Создаёт БД finance_duck и пользователя БД
 #   4. Кладёт код в /opt/finance-duck
@@ -35,9 +35,9 @@ apt-get upgrade -y
 echo "==> Установка пакетов"
 apt-get install -y curl ca-certificates gnupg lsb-release ufw nginx postgresql postgresql-contrib certbot python3-certbot-nginx rsync git
 
-echo "==> Установка Node.js 20"
-if ! command -v node &>/dev/null || [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 20 ]]; then
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+echo "==> Установка Node.js 22"
+if ! command -v node &>/dev/null || [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 22 ]]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
 
@@ -47,7 +47,8 @@ if ! id -u "$APP_USER" &>/dev/null; then
 fi
 
 echo "==> Создание директорий"
-install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR" "$DATA_DIR/backups" "$LOG_DIR"
+install -d -o "$APP_USER" -g "$APP_USER" "$APP_DIR" "$LOG_DIR"
+install -d -m 700 -o "$APP_USER" -g "$APP_USER" "$DATA_DIR" "$DATA_DIR/backups" "$DATA_DIR/objects"
 
 echo "==> Настройка Postgres"
 sudo -u postgres psql <<SQL
@@ -98,7 +99,7 @@ echo "Дальше:"
 echo "  1) Скопируйте код на сервер: с локальной машины запустите ./deploy/deploy.sh"
 echo "  2) Создайте /opt/finance-duck/.env (см. /opt/finance-duck/.env.example)"
 echo "     и заполните DATABASE_URL с реальным паролем БД"
-echo "  3) Запустите миграцию: cd /opt/finance-duck && sudo -u $APP_USER npm run db:push"
+echo "  3) Запустите миграцию: cd /opt/finance-duck && sudo -u $APP_USER npm run db:migrate"
 echo "  4) Получите SSL: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
 echo "  5) Запустите приложение: systemctl enable --now finance-duck"
 echo ""

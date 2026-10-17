@@ -183,7 +183,7 @@ export async function getAdminForecast(db: DB, monthsAhead: number): Promise<For
     if (isPaid) {
       dateStr = row.invoice.actualPaymentDate || row.invoice.paymentDate;
     } else {
-      dateStr = row.invoice.plannedPaymentDate || row.invoice.paymentDate || row.invoice.issueDate;
+      dateStr = row.invoice.paymentDate || row.invoice.issueDate;
     }
     
     const paymentDate = dateStr ? new Date(dateStr) : null;

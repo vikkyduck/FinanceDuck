@@ -38,11 +38,20 @@ export async function sendTelegramMessage(
   text: string,
   options: { disableLinkPreview?: boolean } = {},
 ): Promise<void> {
+  try { await sendTelegramMessageStrict(target, text, options); }
+  catch { console.error("[telegram] sendMessage failed"); }
+}
+
+/** Outbox delivery requires failure propagation and a bounded network timeout. */
+export async function sendTelegramMessageStrict(
+  target: TelegramTarget, text: string, options: { disableLinkPreview?: boolean } = {},
+): Promise<void> {
   const url = `${TG_API}/bot${target.botToken}/sendMessage`;
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(10000),
       body: JSON.stringify({
         chat_id: target.chatId,
         text,
@@ -51,11 +60,10 @@ export async function sendTelegramMessage(
       }),
     });
     if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("[telegram] sendMessage failed", res.status, errText.slice(0, 200));
+      throw new Error("Telegram delivery failed");
     }
   } catch (e) {
-    console.error("[telegram] network error", (e as Error).message);
+    throw new Error("Telegram delivery failed");
   }
 }
 

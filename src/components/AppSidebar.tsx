@@ -22,23 +22,12 @@ import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback } from "react";
 import { Badge } from "./ui/badge";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarFooter,
-  SidebarHeader,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar-context";
 import { Button } from "./ui/button";
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar();
   const navigate = useNavigate();
   const location = useLocation();
   const { role } = useUserRole();
@@ -51,13 +40,14 @@ export function AppSidebar() {
   const isCollapsed = state === "collapsed";
 
   const handleNavigation = useCallback((url: string) => {
+    setOpenMobile(false);
     const currentFullPath = location.pathname + location.search;
     if (isNavigating || currentFullPath === url) return;
     
     setIsNavigating(true);
     navigate(url);
     setTimeout(() => setIsNavigating(false), 300);
-  }, [isNavigating, location.pathname, location.search, navigate]);
+  }, [isNavigating, location.pathname, location.search, navigate, setOpenMobile]);
 
   const handleSignOut = useCallback(async () => {
     if (isNavigating) return;
@@ -76,7 +66,7 @@ export function AppSidebar() {
       items: Array<{
         title: string;
         url: string;
-        icon: any;
+        icon: import("lucide-react").LucideIcon;
         badge?: number;
         badgeVariant?: "default" | "destructive" | "secondary";
       }>;

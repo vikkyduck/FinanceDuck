@@ -36,7 +36,7 @@ export function CreateRecurringInvoiceDialog({
   const [formData, setFormData] = useState({
     clientId: "",
     partnerId: "",
-    scheme: "agency_30" as "agency_30" | "agency_40" | "commission_based" | "partner_10" | "partner_15",
+    scheme: "agency_30" as import("@shared/schema").InvoiceScheme,
     partnerCommissionRate: "",
     amount: "",
     defaultExpenses: "",
@@ -131,8 +131,8 @@ export function CreateRecurringInvoiceDialog({
         notes: "",
         hideFromAssistant: false,
       });
-    } catch (error: any) {
-      toast.error("Ошибка", { description: error.message });
+    } catch (error: unknown) {
+      toast.error("Ошибка", { description: (error instanceof Error ? error.message : String(error)) });
     } finally {
       setLoading(false);
     }
@@ -223,7 +223,7 @@ export function CreateRecurringInvoiceDialog({
             <Label>Схема</Label>
             <Select 
               value={formData.scheme} 
-              onValueChange={(v: any) => setFormData({ ...formData, scheme: v })}
+              onValueChange={(v) => setFormData({ ...formData, scheme: v as import("@shared/schema").InvoiceScheme })}
             >
               <SelectTrigger data-testid="select-scheme">
                 <SelectValue />

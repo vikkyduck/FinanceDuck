@@ -1,3 +1,4 @@
+import type { UserRole } from "@shared/schema";
 /**
  * Frontend invoice calculations.
  *
@@ -135,7 +136,7 @@ export { formatMoney as formatCurrency, formatDate } from "./format";
 
 export function getSchemeLabel(
   scheme: import("@shared/financialEngine").InvoiceScheme,
-  role?: 'admin' | 'assistant' | 'partner' | 'client',
+  role?: UserRole,
   commissionRate?: number,
 ): string {
   switch (scheme) {

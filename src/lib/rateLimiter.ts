@@ -128,13 +128,13 @@ export const searchRateLimiter = new RateLimiter({
 /**
  * Debounce function to limit execution frequency
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: never[]) => unknown>(
   func: T,
   waitMs: number
 ): (...args: Parameters<T>) => void {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  return function (this: any, ...args: Parameters<T>) {
+  return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
@@ -148,14 +148,14 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function to ensure execution at most once per interval
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: never[]) => unknown>(
   func: T,
   limitMs: number
 ): (...args: Parameters<T>) => void {
   let lastRun = 0;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-  return function (this: any, ...args: Parameters<T>) {
+  return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
     const now = Date.now();
 
     if (now - lastRun >= limitMs) {

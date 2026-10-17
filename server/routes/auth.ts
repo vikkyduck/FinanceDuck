@@ -1,27 +1,26 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Request, Response } from "express";
-import { storage } from "../storage";
+import type { AuthStore } from "../routeStores";
 import {
   SESSION_COOKIE,
   AuthenticatedRequest,
-  authMiddleware,
   requireRole,
 } from "../middleware";
 import {
-  getLoginAttemptStatus,
-  recordFailedLogin,
-  getIpAttemptStatus,
-  recordFailedLoginIp,
+  reserveLoginAttempt,
+  reserveIpAttempt,
   clearLoginAttempts,
   clearAllLoginAttempts,
   getLockedCodes,
 } from "../rateLimiter";
 
-export const authRouter = Router();
+export function createAuthRouter(storage: AuthStore, authMiddleware: AuthMiddleware) {
+const authRouter = Router();
 
 /**
  * Опции session-cookie. В production ЖЁСТКО secure:true — не полагаемся на
  * то, что прокси проставит x-forwarded-proto (иначе кука могла бы уйти без
- * Secure). sameSite=none требует secure и корректен по HTTPS.
+ * Secure). SameSite=Lax дополняет обязательную проверку CSRF.
  */
 function sessionCookieOptions(req: Request) {
   const isProd    = process.env.NODE_ENV === "production";
@@ -30,7 +29,7 @@ function sessionCookieOptions(req: Request) {
   return {
     httpOnly: true,
     secure,
-    sameSite: (secure ? "none" : "lax") as "none" | "lax",
+    sameSite: "lax" as const,
     maxAge: 30 * 60 * 1000,
     path: "/",
   };
@@ -39,7 +38,7 @@ function sessionCookieOptions(req: Request) {
 authRouter.post("/api/admin/unlock-user", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { code } = req.body;
-    if (!code) return res.status(400).json({ error: "Code is required" });
+    if (typeof code !== "string" || !code || code.length > 128) return res.status(400).json({ error: "Code is required" });
     const cleared = await clearLoginAttempts(code);
     res.json({
       success: true,
@@ -73,16 +72,17 @@ authRouter.post("/api/admin/clear-all-lockouts", authMiddleware, requireRole("ad
 
 authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
   try {
-    const { code } = req.body;
-    if (!code) {
+    const rawCode = req.body?.code;
+    if (typeof rawCode !== "string" || !rawCode.trim() || rawCode.length > 128) {
       return res.status(400).json({ success: false, error: "missing_code", message: "Код доступа обязателен" });
     }
-    const ip = req.ip || (req.headers["x-forwarded-for"] as string) || "unknown";
+    const code = rawCode.trim().toUpperCase();
+    const ip = req.ip || "unknown";
 
     // Блокировка по IP: ловит перебор МНОГИХ кодов с одного адреса (per-code
     // лимита для этого мало — каждый новый код обнуляет счётчик).
-    const ipStatus = await getIpAttemptStatus(ip);
-    if (ipStatus.isLocked) {
+    const ipStatus = await reserveIpAttempt(ip);
+    if (!ipStatus.allowed) {
       return res.status(429).json({
         success: false,
         error: "account_locked",
@@ -92,8 +92,8 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
       });
     }
 
-    const attemptStatus = await getLoginAttemptStatus(code);
-    if (attemptStatus.isLocked) {
+    const attemptStatus = await reserveLoginAttempt(code);
+    if (!attemptStatus.allowed) {
       return res.status(429).json({
         success: false,
         error: "account_locked",
@@ -104,7 +104,7 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
     }
     const token = await storage.verifyAccessCode(code);
     if (!token) {
-      const [result] = await Promise.all([recordFailedLogin(code), recordFailedLoginIp(ip)]);
+      const result = attemptStatus;
       return res.status(401).json({
         success: false,
         error: "invalid_code",
@@ -125,7 +125,7 @@ authRouter.post("/api/auth/login", async (req: Request, res: Response) => {
   }
 });
 
-authRouter.post("/api/auth/logout", async (req: Request, res: Response) => {
+authRouter.post("/api/auth/logout", authMiddleware, async (req: Request, res: Response) => {
   const sessionId = req.cookies[SESSION_COOKIE];
   if (sessionId) await storage.revokeSession(sessionId);
   res.clearCookie(SESSION_COOKIE);
@@ -140,10 +140,11 @@ authRouter.get("/api/auth/validate", async (req: Request, res: Response) => {
     res.clearCookie(SESSION_COOKIE);
     return res.json({ valid: false });
   }
-  res.json({ valid: true, user: { role: result.token.role, partnerId: result.token.partnerId, clientId: result.token.clientId } });
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ valid: true, csrfToken: result.csrfToken, user: { role: result.token.role, partnerId: result.token.partnerId, clientId: result.token.clientId } });
 });
 
-authRouter.post("/api/auth/refresh", async (req: Request, res: Response) => {
+authRouter.post("/api/auth/refresh", authMiddleware, async (req: Request, res: Response) => {
   const sessionId = req.cookies[SESSION_COOKIE];
   if (!sessionId) return res.status(401).json({ error: "Not authenticated" });
   const newExpiresAt = await storage.refreshSession(sessionId);
@@ -154,3 +155,6 @@ authRouter.post("/api/auth/refresh", async (req: Request, res: Response) => {
   res.cookie(SESSION_COOKIE, sessionId, sessionCookieOptions(req));
   res.json({ success: true, expiresAt: newExpiresAt });
 });
+
+return authRouter;
+}

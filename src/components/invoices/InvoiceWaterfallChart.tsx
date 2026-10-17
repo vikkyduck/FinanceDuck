@@ -5,7 +5,7 @@ import { formatCurrency } from "@/lib/invoiceCalculations";
 
 interface WaterfallChartProps {
   clientBill: number;
-  scheme: "agency_30" | "agency_40" | "commission_based";
+  scheme: import("@shared/schema").InvoiceScheme;
   commissionRate?: number;
   executorExpenses: number;
   expensesPaidByPartner?: number;
@@ -174,7 +174,7 @@ export function InvoiceWaterfallChart({
     });
   }, [data]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
     if (!active || !payload?.[0]) return null;
     const item = payload[0].payload;
     return (

@@ -551,7 +551,7 @@ export function ClientBalancesView() {
     }
   };
 
-  const invoices = Array.isArray(data) ? data : [];
+  const invoices = useMemo(() => Array.isArray(data) ? data : [], [data]);
 
   const dateFilteredInvoices = useMemo(() => {
     if (!filterFrom && !filterTo) return invoices;

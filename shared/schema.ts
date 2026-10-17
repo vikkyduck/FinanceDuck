@@ -1,8 +1,9 @@
-import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, integer, bigint } from "drizzle-orm/pg-core";
+import { USER_ROLES, INVOICE_SCHEMES, INVOICE_STATUSES } from "./domainTypes";
+import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, uniqueIndex, integer, bigint } from "drizzle-orm/pg-core";
 
-export const userRoleEnum = pgEnum('user_role', ['assistant', 'partner', 'admin', 'client', 'accountant']);
-export const invoiceSchemeEnum = pgEnum('invoice_scheme', ['partner_10', 'partner_15', 'agency_30', 'agency_40', 'commission_based', 'agency']);
-export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'cancelled']);
+export const userRoleEnum = pgEnum('user_role', USER_ROLES);
+export const invoiceSchemeEnum = pgEnum('invoice_scheme', INVOICE_SCHEMES);
+export const invoiceStatusEnum = pgEnum('invoice_status', INVOICE_STATUSES);
 export const actTypeEnum = pgEnum('act_type', ['executor', 'company']);
 export const serviceTypeEnum = pgEnum('service_type', ['one_time', 'periodic']);
 export const periodUnitEnum = pgEnum('period_unit', ['month', 'day', 'hour']);
@@ -109,6 +110,8 @@ export const invoices = pgTable("invoices", {
   notes: text("notes"),
   hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
   recurringInvoiceId: uuid("recurring_invoice_id"),
+  // Immutable generation identity; legacy duplicate invoices retain a null key.
+  recurringOccurrenceKey: text("recurring_occurrence_key"),
   plannedExpenses: numeric("planned_expenses", { precision: 15, scale: 2 }),
   closingDocumentUrl: text("closing_document_url"),
   // Тип услуги. Для 'periodic' клиент оплачивает pricePerPeriod × totalPeriods
@@ -126,6 +129,7 @@ export const invoices = pgTable("invoices", {
   index("idx_invoices_partner_id").on(table.partnerId),
   index("idx_invoices_client_id").on(table.clientId),
   index("idx_invoices_recurring_id").on(table.recurringInvoiceId),
+  uniqueIndex("uq_invoices_recurring_occurrence").on(table.recurringOccurrenceKey),
   index("idx_invoices_status_payment_date").on(table.status, table.paymentDate),
 ]);
 
@@ -164,7 +168,7 @@ export const invoiceCalculations = pgTable("invoice_calculations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   // Джойнится к invoices в каждом запросе дашборда — без индекса был seq scan.
-  index("idx_invoice_calculations_invoice").on(table.invoiceId),
+  uniqueIndex("idx_invoice_calculations_invoice").on(table.invoiceId),
 ]);
 
 export const invoiceExpenses = pgTable("invoice_expenses", {
@@ -194,6 +198,31 @@ export const invoiceTransfers = pgTable("invoice_transfers", {
   notes: text("notes"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, table => [
+  index("idx_invoice_transfers_from").on(table.fromInvoiceId),
+  index("idx_invoice_transfers_to").on(table.toInvoiceId),
+]);
+
+export const invoiceNumberCounters = pgTable("invoice_number_counters", {
+  year: integer("year").primaryKey(),
+  lastNumber: integer("last_number").notNull(),
+});
+
+export const notificationOutbox = pgTable("notification_outbox", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: 'set null' }),
+  body: text("body").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [index("idx_outbox_pending").on(table.deliveredAt, table.nextAttemptAt)]);
+
+export const commandReceipts = pgTable("command_receipts", {
+  key: text("key").primaryKey(),
+  fingerprint: text("fingerprint").notNull(),
+  result: text("result"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const partnerPayments = pgTable("partner_payments", {
@@ -216,7 +245,8 @@ export const signedActs = pgTable("signed_acts", {
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
   actType: actTypeEnum("act_type").notNull(),
   fileName: text("file_name").notNull(),
-  fileData: text("file_data"),
+  fileData: text("file_data"), // legacy documents, migrated without breaking old backups
+  objectKey: text("object_key"),
   mimeType: text("mime_type"),
   isLink: boolean("is_link").default(false).notNull(),
   url: text("url"),
@@ -367,11 +397,11 @@ export type AssistantActionLog = typeof assistantActionLogs.$inferSelect;
 export type InsertAssistantActionLog = typeof assistantActionLogs.$inferInsert;
 export type InvoiceMessage = typeof invoiceMessages.$inferSelect;
 export type InsertInvoiceMessage = typeof invoiceMessages.$inferInsert;
-export type UserRole = 'admin' | 'assistant' | 'partner' | 'client' | 'accountant';
-export type InvoiceScheme = 'partner_10' | 'partner_15' | 'agency_30' | 'agency_40' | 'commission_based' | 'agency';
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'cancelled';
+export type UserRole = import("./domainTypes").UserRole;
+export type InvoiceScheme = import("./domainTypes").InvoiceScheme;
+export type InvoiceStatus = import("./domainTypes").InvoiceStatus;
 export type ActType = 'executor' | 'company';
 export type ServiceType = 'one_time' | 'periodic';
 export type PeriodUnit = 'month' | 'day' | 'hour';
 export type Frequency = 'monthly' | 'quarterly' | 'yearly';
-export type AssistantActionType = 'create_invoice' | 'update_invoice' | 'delete_invoice' | 'create_expense' | 'update_expense' | 'delete_expense' | 'create_client' | 'update_client' | 'delete_client' | 'create_partner' | 'update_partner' | 'delete_partner' | 'upload_act' | 'delete_act' | 'create_recurring_invoice' | 'update_recurring_invoice' | 'delete_recurring_invoice' | 'other';
+export type AssistantActionType = 'transfer_funds' | 'transfer_funds_delete' | 'create_invoice' | 'update_invoice' | 'delete_invoice' | 'create_expense' | 'update_expense' | 'delete_expense' | 'create_client' | 'update_client' | 'delete_client' | 'create_partner' | 'update_partner' | 'delete_partner' | 'upload_act' | 'delete_act' | 'create_recurring_invoice' | 'update_recurring_invoice' | 'delete_recurring_invoice' | 'other';

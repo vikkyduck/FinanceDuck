@@ -1,10 +1,12 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { storage } from "../storage";
+import type { MyInvoicesStore } from "../routeStores";
 import { UserRole } from "../../shared/schema";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
 
-export const myInvoicesRouter = Router();
+export function createMyInvoicesRouter(storage: MyInvoicesStore, authMiddleware: AuthMiddleware) {
+const myInvoicesRouter = Router();
 
 const statusMap: Record<string, string> = { draft: "Черновик", sent: "Отправлен", paid: "Оплачен", cancelled: "Отменён" };
 const schemeMap: Record<string, string> = { agency: "Агентская", agency_30: "Агентство 30%", agency_40: "Агентство 40%", partner_10: "Партнёрское 10%", partner_15: "Партнёрское 15%", commission_based: "Партнёрское соглашение" };
@@ -27,7 +29,7 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
 
     // exceljs is a CommonJS module — under esbuild's ESM bundle the real
     // exports land on `.default`, so `ExcelJS.Workbook` would be undefined.
-    const ExcelJSModule: any = await import("exceljs");
+    const ExcelJSModule = await import("exceljs");
     const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Invoice Management System";
@@ -87,7 +89,7 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
         clientBill,
         paymentDate: inv.paymentDate ? new Date(inv.paymentDate).toLocaleDateString("ru-RU") : "—",
         notes: inv.notes || "",
-        closingDoc: (inv as any).closingDocumentUrl || "",
+        closingDoc: (inv).closingDocumentUrl || "",
       };
 
       if (isAdmin) {
@@ -149,3 +151,6 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
     res.status(500).json({ error: "Failed to export data" });
   }
 });
+
+return myInvoicesRouter;
+}

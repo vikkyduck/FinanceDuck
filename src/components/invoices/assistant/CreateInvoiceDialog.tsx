@@ -1,3 +1,4 @@
+import { ZodError } from "zod";
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -188,13 +189,13 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
       onOpenChange(false);
       resetForm();
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("CreateInvoiceDialog error:", error);
-      if (error.name === 'ZodError') {
+      if (error instanceof ZodError) {
         console.error("Zod validation error:", error.errors);
         handleValidationError("Форма", error.errors[0]?.message || 'Ошибка валидации данных');
       } else {
-        toast.error(error.message || "Не удалось создать счет");
+        toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось создать счет");
       }
     } finally {
       setLoading(false);
@@ -532,7 +533,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
             <div className="lg:col-span-1">
               {(effectiveRole === 'admin' || effectiveRole === 'accountant') && (
                 <InvoiceCalculator
-                  scheme={scheme as any}
+                  scheme={scheme as import("@shared/schema").InvoiceScheme}
                   clientBill={parseFloat(clientBill) || 0}
                   partnerCommissionRate={parseFloat(partnerCommissionRate) || undefined}
                 />

@@ -30,10 +30,10 @@ export function useReportPreview() {
       setPreview(data);
       setPendingDownload(() => onConfirm);
       setPreviewOpen(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Ошибка",
-        description: error.message || "Не удалось получить данные отчёта",
+        description: (error instanceof Error ? error.message : String(error)) || "Не удалось получить данные отчёта",
         variant: "destructive",
       });
     } finally {

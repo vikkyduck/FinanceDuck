@@ -12,7 +12,7 @@ let partnerId: string;
 let clientId: string;
 
 // Репозитории типизированы под node-postgres; PGlite-инстанс совместим по API.
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 
 const baseInvoice = () => ({
   invoiceNumber: `INV-${Math.round(performance.now() * 1000)}`,

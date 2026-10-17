@@ -18,7 +18,7 @@ const ATTEMPT_WINDOW_MS    = 60 * 60 * 1000; // 1 hr reset window
 // с реальными кодами, без изменения схемы).
 const ipKey = (ip: string) => `IPLOCK:${ip}`;
 
-interface RateLimitRow {
+interface RateLimitRow extends Record<string, unknown> {
   attempt_count: number;
   last_attempt: string;
   locked_until: string | null;
@@ -57,39 +57,32 @@ async function statusForKey(key: string, max: number): Promise<AttemptStatus> {
   }
 
   if ((lockedUntil && now >= lockedUntil) || now - lastAttempt > ATTEMPT_WINDOW_MS) {
-    await db.execute(sql`DELETE FROM login_rate_limits WHERE code = ${key.toUpperCase()}`);
     return { isLocked: false, attemptsRemaining: max };
   }
 
   return { isLocked: false, attemptsRemaining: Math.max(0, max - row.attempt_count) };
 }
 
-async function recordFailForKey(
-  key: string, max: number,
-): Promise<{ attemptsRemaining: number; lockedUntil?: number }> {
-  const upper = key.toUpperCase();
-  const now   = Date.now();
-  const row   = await getRow(upper);
-
-  let newCount = 1;
-  let lockedUntil: number | null = null;
-  if (row) {
-    const lastAttempt = Number(row.last_attempt);
-    newCount = now - lastAttempt > ATTEMPT_WINDOW_MS ? 1 : row.attempt_count + 1;
-  }
-  if (newCount >= max) lockedUntil = now + LOCKOUT_DURATION_MS;
-
-  await db.execute(
-    sql`INSERT INTO login_rate_limits (code, attempt_count, last_attempt, locked_until)
-        VALUES (${upper}, ${newCount}, ${now}, ${lockedUntil})
-        ON CONFLICT (code) DO UPDATE SET
-          attempt_count = ${newCount},
-          last_attempt  = ${now},
-          locked_until  = ${lockedUntil}`,
-  );
-
-  return { attemptsRemaining: Math.max(0, max - newCount), lockedUntil: lockedUntil ?? undefined };
+/** Reserve BEFORE checking credentials; a single SQL statement serializes contenders. */
+export async function consumeAttempt(database: typeof db, key: string, max: number, now = Date.now()): Promise<AttemptStatus & { allowed: boolean }> {
+  const reset = sql`(login_rate_limits.locked_until <= ${now} OR login_rate_limits.last_attempt < ${now - ATTEMPT_WINDOW_MS})`;
+  const count = sql`CASE WHEN ${reset} THEN 1 ELSE login_rate_limits.attempt_count + 1 END`;
+  const result = await database.execute<RateLimitRow>(sql`
+    INSERT INTO login_rate_limits (code, attempt_count, last_attempt, locked_until)
+    VALUES (${key.toUpperCase()}, 1, ${now}, NULL)
+    ON CONFLICT (code) DO UPDATE SET
+      attempt_count = ${count}, last_attempt = ${now},
+      locked_until = CASE WHEN (${count}) >= ${max} THEN ${now + LOCKOUT_DURATION_MS}::bigint ELSE NULL END
+    WHERE login_rate_limits.locked_until IS NULL OR login_rate_limits.locked_until <= ${now}
+    RETURNING attempt_count, last_attempt, locked_until
+  `);
+  const row = result.rows[0];
+  if (!row) return { allowed: false, isLocked: true, attemptsRemaining: 0, lockedUntil: now + LOCKOUT_DURATION_MS };
+  return { allowed: true, isLocked: false, attemptsRemaining: Math.max(0, max - row.attempt_count), lockedUntil: row.locked_until ? Number(row.locked_until) : undefined };
 }
+
+export function reserveLoginAttempt(code: string) { return consumeAttempt(db, code, MAX_LOGIN_ATTEMPTS); }
+export function reserveIpAttempt(ip: string) { return consumeAttempt(db, ipKey(ip), MAX_IP_ATTEMPTS); }
 
 // ─── Public API — по коду ───────────────────────────────────────────────────────
 
@@ -98,7 +91,7 @@ export function getLoginAttemptStatus(code: string): Promise<AttemptStatus> {
 }
 
 export function recordFailedLogin(code: string) {
-  return recordFailForKey(code, MAX_LOGIN_ATTEMPTS);
+  return consumeAttempt(db, code, MAX_LOGIN_ATTEMPTS);
 }
 
 // ─── Public API — по IP (защита от перебора многих кодов с одного адреса) ────────
@@ -108,7 +101,7 @@ export function getIpAttemptStatus(ip: string): Promise<AttemptStatus> {
 }
 
 export function recordFailedLoginIp(ip: string) {
-  return recordFailForKey(ipKey(ip), MAX_IP_ATTEMPTS);
+  return consumeAttempt(db, ipKey(ip), MAX_IP_ATTEMPTS);
 }
 
 export async function clearLoginAttempts(code: string): Promise<boolean> {

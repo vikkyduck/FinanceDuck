@@ -105,7 +105,7 @@ export function RecurringInvoicesManager() {
 
   const processAllMutation = useMutation({
     mutationFn: async () => {
-      return apiPost("/recurring-invoices/process", {});
+      return apiPost<{ created: number; errors: string[] }>("/recurring-invoices/process", {});
     },
     onSuccess: (data: { created: number; errors: string[] }) => {
       if (data.created > 0) {
@@ -126,7 +126,7 @@ export function RecurringInvoicesManager() {
 
   const backdateMutation = useMutation({
     mutationFn: async ({ id, fromDate }: { id: string; fromDate: string }) => {
-      return apiPost(`/recurring-invoices/${id}/backdate`, { fromDate });
+      return apiPost<{ created: number }>(`/recurring-invoices/${id}/backdate`, { fromDate });
     },
     onSuccess: (data: { created: number }) => {
       toast.success(`Создано ${data.created} черновиков задним числом`);

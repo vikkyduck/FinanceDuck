@@ -4,12 +4,12 @@
  */
 
 import { Request, Response, NextFunction } from "express";
-import { storage } from "./storage";
+import type { AuthStore } from "./routeStores";
 import { AccessToken, UserRole } from "../shared/schema";
 
 export const SESSION_COOKIE = "session_id";
 
-export interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends Request<Record<string, string>> {
   user?: {
     token: AccessToken;
     role: UserRole;
@@ -22,25 +22,30 @@ export interface AuthenticatedRequest extends Request {
  * Validates the session cookie and attaches `req.user`.
  * Also validates CSRF token for mutating methods (POST / PUT / PATCH / DELETE).
  */
-export async function authMiddleware(
+export function createAuthMiddleware(storage: Pick<AuthStore, "validateSession">) {
+return async function authMiddleware(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) {
-  const sessionId = req.cookies[SESSION_COOKIE];
+  const sessionId = req.cookies?.[SESSION_COOKIE];
 
   if (!sessionId) {
     return res.status(401).json({ error: "Not authenticated" });
   }
 
-  const csrfToken   = req.headers["x-csrf-token"] as string | undefined;
+  const csrfToken   = req.headers["x-csrf-token"];
   const isModifying = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
 
-  const result = await storage.validateSession(sessionId, isModifying ? csrfToken : undefined);
+  const result = await storage.validateSession(sessionId);
 
   if (!result?.isValid || !result.token) {
     res.clearCookie(SESSION_COOKIE);
     return res.status(401).json({ error: "Session expired" });
+  }
+
+  if (isModifying && (typeof csrfToken !== "string" || !csrfToken || csrfToken !== result.csrfToken)) {
+    return res.status(403).json({ error: "Invalid CSRF token" });
   }
 
   req.user = {
@@ -52,6 +57,9 @@ export async function authMiddleware(
 
   next();
 }
+
+}
+export type AuthMiddleware = ReturnType<typeof createAuthMiddleware>;
 
 /**
  * Guards a route to roles on the allowlist.

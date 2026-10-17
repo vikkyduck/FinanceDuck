@@ -91,7 +91,7 @@ export const MessagesPage = () => {
       queryClient.invalidateQueries({ queryKey: ["/messages/unread-summary"] });
       toast({ title: "Сообщение удалено" });
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toast({ title: "Ошибка", description: e?.message || "Не удалось удалить", variant: "destructive" });
     },
   });
@@ -103,7 +103,7 @@ export const MessagesPage = () => {
       queryClient.invalidateQueries({ queryKey: ["/messages/threads"] });
       queryClient.invalidateQueries({ queryKey: ["/messages/unread-summary"] });
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toast({ title: "Ошибка", description: e?.message || "Не удалось отправить", variant: "destructive" });
     },
   });

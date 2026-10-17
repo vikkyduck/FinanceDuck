@@ -1,0 +1,1 @@
+ALTER TABLE "signed_acts" ADD COLUMN "object_key" text;

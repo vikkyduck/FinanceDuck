@@ -17,7 +17,7 @@ interface SendMessageDialogProps {
   expenseId?: string | null;
   expenseDescription?: string | null;
   expenseAmount?: number | null;
-  currentRole?: 'client' | 'admin' | 'assistant';
+  currentRole?: import("@shared/schema").UserRole;
 }
 
 const roleLabel: Record<string, string> = {
@@ -55,7 +55,7 @@ export const SendMessageDialog = ({
       queryClient.invalidateQueries({ queryKey: ["/messages/unread-summary"] });
       toast({ title: "Сообщение удалено" });
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toast({ title: "Ошибка", description: e?.message || "Не удалось удалить", variant: "destructive" });
     },
   });
@@ -69,7 +69,7 @@ export const SendMessageDialog = ({
       queryClient.invalidateQueries({ queryKey: ["/messages/unread-summary"] });
       toast({ title: "Отправлено" });
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       toast({ title: "Ошибка", description: e?.message || "Не удалось отправить", variant: "destructive" });
     },
   });

@@ -23,12 +23,13 @@ const storageMock = vi.hoisted(() => ({
   getPartners: vi.fn(),
   getPartner: vi.fn(),
   getPartnerClients: vi.fn(),
+  getPartnerPayments: vi.fn(),
   updateClient: vi.fn(),
   setClientPartners: vi.fn(),
   logAssistantAction: vi.fn(),
 }));
 
-vi.mock("../storage", () => ({ storage: storageMock }));
+
 
 vi.mock("../middleware", () => ({
   authMiddleware: (req: TestRequest, res: Response, next: NextFunction) => {
@@ -50,10 +51,13 @@ vi.mock("../middleware", () => ({
   },
 }));
 
-import { clientsRouter } from "./clients";
-import { partnersRouter } from "./partners";
+import { createClientsRouter } from "./clients";
+import { createPartnersRouter } from "./partners";
 import { projectInvoiceForRole } from "../permissions";
 
+import { authMiddleware } from "../middleware";
+const clientsRouter = createClientsRouter(storageMock, authMiddleware);
+const partnersRouter = createPartnersRouter(storageMock, authMiddleware);
 const now = new Date("2026-01-01T00:00:00.000Z");
 
 const partnerA = {
@@ -329,4 +333,14 @@ describe("Telegram secret redaction", () => {
     expect(projected.client.hasTgBotToken).toBe(true);
     expect(projected.client).not.toHaveProperty("tgBotToken");
   });
+});
+
+
+it("partner payments require a role and an explicit partner scope", async () => {
+  storageMock.getPartnerPayments.mockResolvedValue([]);
+  expect((await fetch(`${baseUrl}/api/partner-payments`, { headers: actorHeaders('client', { clientId: clientA.id }) })).status).toBe(403);
+  expect((await fetch(`${baseUrl}/api/partner-payments`, { headers: actorHeaders('partner') })).status).toBe(403);
+  expect((await fetch(`${baseUrl}/api/partner-payments`, { headers: actorHeaders('admin') })).status).toBe(400);
+  expect((await fetch(`${baseUrl}/api/partner-payments?partnerId=${partnerB.id}`, { headers: actorHeaders('partner', { partnerId: partnerA.id }) })).status).toBe(200);
+  expect(storageMock.getPartnerPayments).toHaveBeenCalledWith(partnerA.id);
 });

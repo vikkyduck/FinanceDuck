@@ -1,37 +1,15 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { LoginResult, AuthState, AuthContext } from './auth-context';
+import type { AuthResponse } from "@shared/contracts";
+import { useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type UserRole = 'assistant' | 'partner' | 'admin' | 'client' | 'accountant';
-
-export interface LoginResult {
-  success: boolean;
-  error?: string;
-  message?: string;
-  data?: any;
-  locked_until?: string;
-  attempts_remaining?: number;
-}
-
-interface AuthState {
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  role: UserRole | null;
-  partnerId: string | null;
-  clientId: string | null;
-  csrfToken: string | null;
-}
-
-interface AuthContextValue extends AuthState {
-  login: (code: string) => Promise<LoginResult>;
-  logout: () => Promise<void>;
-  refreshSession: () => Promise<boolean>;
-  validateSession: () => Promise<boolean>;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
+import type { UserRole } from "@shared/schema";
+export type { UserRole } from "@shared/schema";
 
 // ─── Context ──────────────────────────────────────────────────────────────────
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 const INITIAL_STATE: AuthState = {
   isAuthenticated: false,
@@ -54,34 +32,43 @@ const LOGGED_OUT_STATE: AuthState = {
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const authGeneration = useRef(0);
   const [authState, setAuthState] = useState<AuthState>(INITIAL_STATE);
+  // A fresh cache AND a remounted component tree at every session boundary.
+  // Late requests can only populate the old, detached cache.
+  const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { enabled: Boolean(authState.csrfToken) } } }), [authState.csrfToken]);
+  useEffect(() => () => { queryClient.clear(); }, [queryClient]);
 
   const validateSession = useCallback(async (): Promise<boolean> => {
+    const generation = ++authGeneration.current;
     try {
       const response = await fetch('/api/auth/validate', {
         method: 'GET',
         credentials: 'include',
       });
 
-      const data = await response.json();
+      const data: AuthResponse = await response.json();
+      if (generation !== authGeneration.current) return false;
 
-      if (!data?.valid) {
+      if (!data?.valid || !data.csrfToken) {
         localStorage.removeItem('csrf_token');
         setAuthState(LOGGED_OUT_STATE);
         return false;
       }
 
+      localStorage.setItem('csrf_token', data.csrfToken);
       setAuthState({
         isAuthenticated: true,
         isLoading: false,
         role: data.user?.role ?? null,
         partnerId: data.user?.partnerId ?? null,
         clientId: data.user?.clientId ?? null,
-        csrfToken: localStorage.getItem('csrf_token'),
+        csrfToken: data.csrfToken,
       });
 
       return true;
     } catch {
+      if (generation !== authGeneration.current) return false;
       localStorage.removeItem('csrf_token');
       setAuthState(LOGGED_OUT_STATE);
       return false;
@@ -89,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (code: string): Promise<LoginResult> => {
+    const generation = ++authGeneration.current;
     const maxRetries = 3;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -100,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ code: code.toUpperCase() }),
         });
 
-        let data: any;
+        let data: AuthResponse;
         try {
           data = await response.json();
         } catch {
@@ -111,7 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { success: false, error: 'parse_error', message: 'Ошибка обработки ответа сервера' };
         }
 
-        if (!response.ok || !data?.success) {
+        if (generation !== authGeneration.current) return { success: false };
+        if (!response.ok || !data?.success || !data.csrfToken) {
           return {
             success: false,
             error: data?.error ?? 'login_failed',
@@ -143,8 +132,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async (): Promise<void> => {
+    ++authGeneration.current;
+    setAuthState(LOGGED_OUT_STATE);
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') ?? '' } });
     } catch {
       // Best-effort logout; clear local state regardless
     } finally {
@@ -158,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' });
+      const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') ?? '' } });
       const data = await response.json();
       return response.ok && !!data?.success;
     } catch {
@@ -171,19 +162,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     validateSession();
   }, [validateSession]);
 
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === 'csrf_token') {
+        setAuthState(INITIAL_STATE);
+        void validateSession();
+      }
+    };
+    const expired = () => { ++authGeneration.current; setAuthState(LOGGED_OUT_STATE); };
+    window.addEventListener('storage', changed);
+    window.addEventListener('auth-expired', expired);
+    return () => {
+      window.removeEventListener('storage', changed);
+      window.removeEventListener('auth-expired', expired);
+    };
+  }, [validateSession]);
+
   return (
     <AuthContext.Provider value={{ ...authState, login, logout, refreshSession, validateSession }}>
-      {children}
+      <QueryClientProvider client={queryClient} key={authState.csrfToken ?? 'anonymous'}>
+        {children}
+      </QueryClientProvider>
     </AuthContext.Provider>
   );
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
-
-export function useAuthContext(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuthContext must be used within <AuthProvider>');
-  }
-  return ctx;
-}

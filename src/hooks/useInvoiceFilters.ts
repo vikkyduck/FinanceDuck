@@ -1,3 +1,4 @@
+import type { InvoiceListView } from "@/lib/invoiceView";
 import { useState, useMemo, useCallback } from "react";
 
 export type InvoiceStatus = 'all' | 'draft' | 'sent' | 'paid' | 'cancelled' | 'overdue';
@@ -38,7 +39,7 @@ const writeToStorage = (key: string, value: unknown): void => {
 };
 
 export const useInvoiceFilters = (
-  invoices: any[],
+  invoices: Array<Partial<InvoiceListView> & { invoice_calculations?: { client_bill?: number } | { client_bill?: number }[] }>,
   initialStatusFilter?: InvoiceStatus,
   storage?: StorageOptions
 ) => {
@@ -174,7 +175,7 @@ export const useInvoiceFilters = (
           (inv) =>
             inv.status === "sent" &&
             !inv.actual_payment_date &&
-            inv.payment_date < today
+            Boolean(inv.payment_date && inv.payment_date < today)
         );
       } else {
         result = result.filter((inv) => inv.status === statusFilter);
@@ -183,7 +184,7 @@ export const useInvoiceFilters = (
 
     // Sorting
     result.sort((a, b) => {
-      const getClientBill = (inv: any) => {
+      const getClientBill = (inv: typeof invoices[number]) => {
         const calcRaw = inv.invoice_calculations;
         const calc = Array.isArray(calcRaw) ? calcRaw[0] : calcRaw;
         return calc?.client_bill || inv.client_bill || 0;
@@ -191,9 +192,9 @@ export const useInvoiceFilters = (
 
       switch (sortBy) {
         case "date-desc":
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return new Date(b.created_at ?? b.issue_date ?? 0).getTime() - new Date(a.created_at ?? a.issue_date ?? 0).getTime();
         case "date-asc":
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          return new Date(a.created_at ?? a.issue_date ?? 0).getTime() - new Date(b.created_at ?? b.issue_date ?? 0).getTime();
         case "amount-desc":
           return getClientBill(b) - getClientBill(a);
         case "amount-asc":
@@ -219,7 +220,7 @@ export const useInvoiceFilters = (
         (inv) =>
           inv.status === "sent" &&
           !inv.actual_payment_date &&
-          inv.payment_date < today
+          Boolean(inv.payment_date && inv.payment_date < today)
       ).length,
     };
   }, [invoices]);

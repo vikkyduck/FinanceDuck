@@ -15,6 +15,20 @@
       "when": 1783175386068,
       "tag": "0001_clammy_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792252412639,
+      "tag": "0002_financial_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792254980907,
+      "tag": "0003_document_objects",
+      "breakpoints": true
     }
   ]
 }

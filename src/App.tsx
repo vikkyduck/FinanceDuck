@@ -1,7 +1,7 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { PageTransition } from "@/components/PageTransition";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -12,22 +12,23 @@ import { useApiHealthCheck } from "@/hooks/useApiHealthCheck";
 import { ApiStatusBanner } from "@/components/ApiStatusBanner";
 import { TopSearchBar } from "@/components/TopSearchBar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import Index from "./pages/Index";
-import InvoicesDashboard from "./pages/InvoicesDashboard";
-import InvoicesListPage from "./pages/InvoicesListPage";
-import InvoicePage from "./pages/InvoicePage";
-import AccessCodeLogin from "./pages/AccessCodeLogin";
-import NotFound from "./pages/NotFound";
-import ClientsPage from "./pages/ClientsPage";
-import PartnersPage from "./pages/PartnersPage";
-import AccessCodesPage from "./pages/AccessCodesPage";
-import StatsPage from "./pages/StatsPage";
-import AssistantLogsPage from "./pages/AssistantLogsPage";
-import AccountingPage from "./pages/AccountingPage";
-import ClientBalancesPage from "./pages/ClientBalancesPage";
-import MessagesPage from "./pages/MessagesPage";
-import SecurityPage from "./pages/SecurityPage";
-import { AuthProvider, useAuthContext } from "@/contexts/AuthContext";
+const Index = lazy(() => import("./pages/Index"));
+const InvoicesDashboard = lazy(() => import("./pages/InvoicesDashboard"));
+const InvoicesListPage = lazy(() => import("./pages/InvoicesListPage"));
+const InvoicePage = lazy(() => import("./pages/InvoicePage"));
+const AccessCodeLogin = lazy(() => import("./pages/AccessCodeLogin"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const ClientsPage = lazy(() => import("./pages/ClientsPage"));
+const PartnersPage = lazy(() => import("./pages/PartnersPage"));
+const AccessCodesPage = lazy(() => import("./pages/AccessCodesPage"));
+const StatsPage = lazy(() => import("./pages/StatsPage"));
+const AssistantLogsPage = lazy(() => import("./pages/AssistantLogsPage"));
+const AccountingPage = lazy(() => import("./pages/AccountingPage"));
+const ClientBalancesPage = lazy(() => import("./pages/ClientBalancesPage"));
+const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+const SecurityPage = lazy(() => import("./pages/SecurityPage"));
+import { AuthProvider } from "@/contexts/AuthContext";
+import { useAuthContext } from "@/contexts/auth-context";
 
 // Component that routes "/" based on role
 const RoleBasedHome = () => {
@@ -50,13 +51,13 @@ const RoleBasedHome = () => {
   return <Index />;
 };
 
-const queryClient = new QueryClient();
 
 const AnimatedRoutes = () => {
   const location = useLocation();
   
   return (
     <PageTransition key={location.pathname}>
+      <Suspense fallback={<div role="status" className="p-6 text-muted-foreground">Загрузка…</div>}>
       <Routes location={location}>
         <Route 
           path="/" 
@@ -158,6 +159,7 @@ const AnimatedRoutes = () => {
         <Route path="/admin" element={<Navigate to="/invoices" replace />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense>
     </PageTransition>
   );
 };
@@ -205,7 +207,6 @@ const AppContent = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
         <Toaster />
@@ -215,7 +216,6 @@ const App = () => (
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
-  </QueryClientProvider>
 );
 
 export default App;

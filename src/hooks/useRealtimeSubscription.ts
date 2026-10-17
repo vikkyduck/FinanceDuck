@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface UseRealtimeSubscriptionOptions {
   channelName: string;
@@ -6,9 +6,8 @@ interface UseRealtimeSubscriptionOptions {
   filter?: string;
   event?: 'INSERT' | 'UPDATE' | 'DELETE' | '*';
   schema?: string;
-  onUpdate: (payload?: any) => void;
+  onUpdate: (payload?: unknown) => void;
   enabled?: boolean;
-  dependencies?: any[];
 }
 
 export const useRealtimeSubscription = ({
@@ -16,32 +15,33 @@ export const useRealtimeSubscription = ({
   table,
   onUpdate,
   enabled = true,
-  dependencies = [],
 }: UseRealtimeSubscriptionOptions) => {
+  const updateRef = useRef(onUpdate);
+  useEffect(() => { updateRef.current = onUpdate; }, [onUpdate]);
   const [isVisible, setIsVisible] = useState(document.visibilityState === 'visible');
   
   useEffect(() => {
     const handleVisibilityChange = () => {
       const visible = document.visibilityState === 'visible';
       setIsVisible(visible);
-      if (visible && enabled) onUpdate();
+      if (visible && enabled) updateRef.current();
     };
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, onUpdate]);
+  }, [enabled]);
   
   useEffect(() => {
     if (!enabled || !isVisible) return;
 
     const pollInterval = setInterval(() => {
-      onUpdate();
+      updateRef.current();
     }, 120000);
     
     return () => {
       clearInterval(pollInterval);
     };
-  }, [enabled, isVisible, channelName, table, onUpdate, ...dependencies]);
+  }, [enabled, isVisible, channelName, table]);
 };

@@ -11,8 +11,8 @@ let db: TestDb;
 let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
-const asDb = () => db as any;
-const num = (v: any) => Number(v);
+const asDb = () => db as unknown as typeof import("../db").db;
+const num = (v: string | number | null) => Number(v);
 
 beforeEach(async () => {
   ({ db, close } = await createTestDb());
@@ -26,7 +26,7 @@ async function createAgency(clientBill: string, marginRate: string, partnerRate:
     clientId, partnerId, scheme: "agency" as const,
     createdBy: "00000000-0000-0000-0000-000000000001",
     partnerCommissionRate: partnerRate,          // партнёр (скрыт от клиента)
-  } as any, { clientBill, commissionRate: marginRate }); // маржа (видна клиенту)
+  }, { clientBill, commissionRate: marginRate }); // маржа (видна клиенту)
 }
 
 async function getCalc(invoiceId: string) {
@@ -62,7 +62,7 @@ describe("createInvoice — agency (гибкая)", () => {
     await createInvoiceExpense(asDb(), {
       invoiceId: inv.id, description: "работа", amount: "100000",
       createdBy: "00000000-0000-0000-0000-000000000001", paidByAdmin: false,
-    } as any);
+    });
     const c = await getCalc(inv.id);
     expect(num(c.executorExpensesTotal)).toBeCloseTo(100000, 2);
     expect(num(c.clientRemaining)).toBeCloseTo(500000, 2); // 600к − 100к

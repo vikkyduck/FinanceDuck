@@ -63,8 +63,8 @@ export default function SecurityPage() {
       queryClient.invalidateQueries({ queryKey: ["/me/sessions"] });
       toast({ title: "Сессия закрыта" });
     },
-    onError: (e: any) => {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось закрыть сессию", variant: "destructive" });
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: (e instanceof Error ? e.message : String(e)) || "Не удалось закрыть сессию", variant: "destructive" });
     },
   });
 
@@ -74,8 +74,8 @@ export default function SecurityPage() {
       queryClient.invalidateQueries({ queryKey: ["/me/sessions"] });
       toast({ title: "Все другие сессии закрыты" });
     },
-    onError: (e: any) => {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось закрыть сессии", variant: "destructive" });
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: (e instanceof Error ? e.message : String(e)) || "Не удалось закрыть сессии", variant: "destructive" });
     },
   });
 
@@ -101,8 +101,8 @@ export default function SecurityPage() {
       document.body.appendChild(a); a.click();
       setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
       toast({ title: "Данные скачаны", description: filename });
-    } catch (e: any) {
-      toast({ title: "Ошибка", description: e?.message || "Не удалось скачать", variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "Ошибка", description: (e instanceof Error ? e.message : String(e)) || "Не удалось скачать", variant: "destructive" });
     } finally {
       setExporting(false);
     }

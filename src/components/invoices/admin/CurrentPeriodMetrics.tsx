@@ -19,7 +19,7 @@ interface Metric {
   label: string;
   value: number;
   trend: number;
-  icon: any;
+  icon: import("lucide-react").LucideIcon;
   format: "currency" | "percent";
   tooltip: string;
 }

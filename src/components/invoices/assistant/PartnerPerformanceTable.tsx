@@ -1,3 +1,4 @@
+import type { AssistantInvoiceDto } from "@shared/contracts";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronRight, TrendingUp } from "lucide-react";
@@ -21,7 +22,7 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
         { credentials: 'include' }
       );
       if (!response.ok) return [];
-      const invoices: any[] = await response.json();
+      const invoices: AssistantInvoiceDto[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return [];
@@ -42,7 +43,7 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
         const clientId = inv.client_id;
         const amount = inv.client_bill || 0;
 
-        if (!partnerName || !clientName) return;
+        if (!partnerName || !clientName || !partnerId || !clientId) return;
 
         if (!partnerMap.has(partnerId)) {
           partnerMap.set(partnerId, {

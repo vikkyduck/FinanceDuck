@@ -18,8 +18,13 @@ echo "==> [1/6] Тесты + локальная сборка"
 npm ci
 # Барьер: тесты-инварианты денег и пр. Падение = деплой НЕ идёт (set -e),
 # плохой денежный код физически не уезжает на прод.
-npx vitest run
-npm run build
+npm run check
+npm audit --audit-level=moderate
+
+ssh "$SERVER_USER@$SERVER_HOST" "node -e 'const [major,minor] = process.versions.node.split(\".\").map(Number); if(major < 22 || (major === 22 && minor < 12)) process.exit(1)'" || {
+  echo 'Обновите Node.js на сервере до 22.12+ перед загрузкой файлов.'
+  exit 1
+}
 
 echo "==> [2/6] Sync code to $SERVER_USER@$SERVER_HOST:$REMOTE_DIR"
 rsync -avz --delete \
@@ -28,6 +33,8 @@ rsync -avz --delete \
   --exclude '.env' \
   --exclude '_supabase_archive' \
   --exclude 'attached_assets' \
+  --exclude 'backups' \
+  --exclude 'objects' \
   --exclude '.claude' \
   --exclude '.agents' \
   --exclude '.local' \
@@ -43,19 +50,8 @@ ssh "$SERVER_USER@$SERVER_HOST" "
 echo "==> [4/6] Run database migrations"
 ssh "$SERVER_USER@$SERVER_HOST" "
   cd $REMOTE_DIR
-  if [[ -f .env ]]; then
-    # БЕЗ --force: безопасные изменения применяются сами, а на деструктивных
-    # (DROP/TRUNCATE) drizzle спросит подтверждение — stdin закрыт, поэтому
-    # команда УПАДЁТ и оборвёт деплой (set -e). Раньше --force молча применял
-    # любой дрифт схемы, включая потенциальный DROP COLUMN с потерей данных.
-    sudo -u $APP_USER bash -c 'set -a; source .env; set +a; npm run db:push < /dev/null' || {
-      echo '❌ db:push требует подтверждения (деструктивное изменение схемы?).'
-      echo '   Разберись вручную: ssh на сервер, npm run db:push интерактивно.'
-      exit 1
-    }
-  else
-    echo '⚠️  .env not found on server — пропускаю миграцию. Создайте .env и запустите вручную.'
-  fi
+  test -f .env || { echo 'Missing .env: migration aborted'; exit 1; }
+  sudo -u $APP_USER bash -c 'set -a; source .env; set +a; npm run db:migrate'
 "
 
 echo "==> [5/6] Restart service"
@@ -70,6 +66,7 @@ if [[ $AUDIT_RC -ne 0 ]]; then
   echo ""
   echo "   ⚠️⚠️⚠️  АУДИТ ДЕНЕГ НАШЁЛ РАСХОЖДЕНИЯ (код $AUDIT_RC) — разберись по выводу выше!"
   echo "   Повторить вручную: ssh $SERVER_USER@$SERVER_HOST 'cd $REMOTE_DIR && bash scripts/audit-money.sh'"
+  exit "$AUDIT_RC"
 fi
 
 echo ""

@@ -1,8 +1,9 @@
 /* Font is now loaded via index.html for better performance and cyrillic support */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@config "../tailwind.config.ts";
+@source "./";
+@source "../index.html";
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
@@ -462,7 +463,8 @@ All colors MUST be HSL.
 
 /* Interactive Elements */
 .interactive-card {
-  @apply hover-scale hover:border-primary/30 transition-all duration-200;
+  @apply hover:border-primary/30 transition-all duration-200;
+  &:hover { transform: scale(1.01); }
 }
 
 .pulse-gentle {
@@ -844,4 +846,9 @@ All colors MUST be HSL.
     -webkit-backdrop-filter: blur(16px) saturate(1.65);
     backdrop-filter: blur(16px) saturate(1.65);
   }
+}
+
+/* Preserve the v3 control defaults while using the v4 compiler. */
+@layer base {
+  button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
 }

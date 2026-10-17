@@ -171,9 +171,9 @@ export function TopSearchBar() {
     { type: "expense", label: "Затраты", items: results.filter((r) => r.type === "expense") },
     { type: "client", label: "Клиенты", items: results.filter((r) => r.type === "client") },
     { type: "partner", label: "Партнёры", items: results.filter((r) => r.type === "partner") },
-  ].filter((g) => g.items.length > 0);
+  ] satisfies Array<{ type: SearchResult["type"]; label: string; items: SearchResult[] }>;
 
-  const flatItems = groups.flatMap((g) => g.items);
+  const flatItems = groups.filter(g => g.items.length > 0).flatMap((g) => g.items);
 
   return (
     <div ref={containerRef} className="relative w-full sm:max-w-md">

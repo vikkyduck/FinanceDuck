@@ -107,7 +107,7 @@ export async function validateSession(
   db: Db,
   sessionId: string,
   csrfToken?: string,
-): Promise<{ isValid: boolean; token?: AccessToken } | null> {
+): Promise<{ isValid: boolean; token?: AccessToken; csrfToken?: string } | null> {
   const [session] = await db
     .select()
     .from(userSessions)
@@ -120,7 +120,7 @@ export async function validateSession(
     .limit(1);
 
   if (!session) return { isValid: false };
-  if (csrfToken && session.csrfToken !== csrfToken) return { isValid: false };
+  if (csrfToken !== undefined && session.csrfToken !== csrfToken) return { isValid: false };
 
   await db.update(userSessions)
     .set({ lastActivity: new Date() })
@@ -134,7 +134,7 @@ export async function validateSession(
 
   if (!token) return { isValid: false };
   if (isExpired(token)) return { isValid: false }; // C2: истёкший код рвёт сессию
-  return { isValid: true, token };
+  return { isValid: true, token, csrfToken: session.csrfToken };
 }
 
 export async function refreshSession(db: Db, sessionId: string): Promise<Date | null> {

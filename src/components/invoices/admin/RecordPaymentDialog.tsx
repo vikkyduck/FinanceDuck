@@ -109,11 +109,11 @@ export const RecordPaymentDialog = ({
       setInvoiceId(null);
       onSuccess();
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error recording payment:", error);
       toast({
         title: "Ошибка",
-        description: error.message || "Не удалось записать приход",
+        description: (error instanceof Error ? error.message : String(error)) || "Не удалось записать приход",
         variant: "destructive",
       });
     } finally {

@@ -1,3 +1,6 @@
+import type { InvoiceDto, ExpenseDto, Jsonify } from "@shared/contracts";
+import type { PartnerPayment, InvoiceScheme } from "@shared/schema";
+import { parseNum } from "@shared/financialEngine";
 import { apiGet, apiPost, apiPatch, apiPut, apiDelete } from "@/lib/api";
 
 export interface ClientListItem {
@@ -43,9 +46,9 @@ export interface InvoiceExpense {
   id: string;
   invoice_id: string;
   description: string;
-  amount: string;
+  amount?: string;
   date: string | null;
-  paidByAdmin: boolean;
+  paidByAdmin?: boolean;
 }
 
 export interface InvoiceDocument {
@@ -80,7 +83,7 @@ export interface InvoiceViewModel {
   invoice_number: string;
   client_id: string | null;
   partner_id: string | null;
-  scheme: "partner_10" | "partner_15" | "agency_30" | "agency_40" | "commission_based";
+  scheme: InvoiceScheme;
   status: "draft" | "sent" | "paid" | "cancelled";
   payment_date: string | null;
   actual_payment_date: string | null;
@@ -118,83 +121,84 @@ export interface InvoiceListItem {
   partner_transfer_due: number | null;
 }
 
-function normalizeInvoiceFromApi(data: any): InvoiceViewModel {
+function normalizeInvoiceFromApi(data: InvoiceDto): InvoiceViewModel {
   const calculations = data.calculations;
   
   return {
     id: data.id,
     invoice_number: data.invoiceNumber,
-    client_id: data.clientId,
-    partner_id: data.partnerId,
+    client_id: data.clientId ?? null,
+    partner_id: data.partnerId ?? null,
     scheme: data.scheme,
     status: data.status,
-    payment_date: data.paymentDate,
-    actual_payment_date: data.actualPaymentDate,
-    notes: data.notes,
+    payment_date: data.paymentDate ?? null,
+    actual_payment_date: data.actualPaymentDate ?? null,
+    notes: data.notes ?? null,
     created_at: data.createdAt,
     hidden_from_assistant: data.hideFromAssistant || false,
     clients: data.client ? { name: data.client.name } : null,
     partners: data.partner ? { name: data.partner.name } : null,
-    client_bill: calculations?.clientBill || data.clientBill || 0,
-    partner_commission_rate: calculations?.commissionRate || null,
+    client_bill: parseNum(calculations?.clientBill || data.clientBill || 0),
+    partner_commission_rate: parseNum(parseNum(calculations?.commissionRate || null)),
     invoice_calculations: calculations ? {
-      client_bill: calculations.clientBill || 0,
-      commission_rate: calculations.commissionRate,
-      commission_amount: calculations.commissionAmount,
-      partner_share_from_margin: calculations.partnerShareFromMargin,
-      admin_share_from_margin: calculations.adminShareFromMargin,
+      client_bill: parseNum(calculations.clientBill || 0),
+      commission_rate: parseNum(calculations.commissionRate),
+      commission_amount: parseNum(calculations.commissionAmount),
+      partner_share_from_margin: parseNum(calculations.partnerShareFromMargin),
+      admin_share_from_margin: parseNum(calculations.adminShareFromMargin),
       executor_expenses_total: calculations.executorExpensesTotal || "0",
-      net_profit_admin: calculations.netProfitAdmin,
-      client_remaining: calculations.clientRemaining,
-      client_base_after_margin: calculations.clientBaseAfterMargin,
-      agency_margin: calculations.agencyMargin,
-      amount_to_admin: calculations.amountToAdmin,
-      admin_share_50: calculations.adminShare50,
-      cat_share_50: calculations.catShare50,
+      net_profit_admin: parseNum(calculations.netProfitAdmin),
+      client_remaining: parseNum(calculations.clientRemaining),
+      client_base_after_margin: parseNum(calculations.clientBaseAfterMargin),
+      agency_margin: parseNum(calculations.agencyMargin),
+      amount_to_admin: parseNum(calculations.amountToAdmin),
+      admin_share_50: parseNum(calculations.adminShare50),
+      cat_share_50: parseNum(calculations.catShare50),
     } : null,
   };
 }
 
-function normalizeInvoiceListFromApi(data: any): InvoiceListItem {
+function normalizeInvoiceListFromApi(data: InvoiceDto): InvoiceListItem {
   const calculations = data.calculations;
   
   return {
     id: data.id,
     invoice_number: data.invoiceNumber,
-    client_id: data.clientId,
-    partner_id: data.partnerId,
+    client_id: data.clientId ?? null,
+    partner_id: data.partnerId ?? null,
     scheme: data.scheme,
     status: data.status,
-    payment_date: data.paymentDate,
-    notes: data.notes,
+    payment_date: data.paymentDate ?? null,
+    notes: data.notes ?? null,
     created_at: data.createdAt,
     client_name: data.client?.name || null,
     partner_name: data.partner?.name || null,
-    client_bill: calculations?.clientBill || data.clientBill || 0,
-    commission_rate: calculations?.commissionRate || null,
-    commission_amount: calculations?.commissionAmount || null,
-    partner_share_from_margin: calculations?.partnerShareFromMargin || null,
-    admin_share_from_margin: calculations?.adminShareFromMargin || null,
+    client_bill: parseNum(calculations?.clientBill || data.clientBill || 0),
+    commission_rate: parseNum(calculations?.commissionRate || null),
+    commission_amount: parseNum(calculations?.commissionAmount || null),
+    partner_share_from_margin: parseNum(calculations?.partnerShareFromMargin || null),
+    admin_share_from_margin: parseNum(calculations?.adminShareFromMargin || null),
     executor_expenses_total: calculations?.executorExpensesTotal || "0",
-    net_profit_admin: calculations?.netProfitAdmin || null,
-    client_remaining: calculations?.clientRemaining || null,
+    net_profit_admin: parseNum(calculations?.netProfitAdmin || null),
+    client_remaining: parseNum(calculations?.clientRemaining || null),
     hidden_from_assistant: data.hideFromAssistant || false,
     partner_transfer_due: calculations?.partnerTransferDue ? parseFloat(calculations.partnerTransferDue) : null,
   };
 }
 
-function normalizeExpenseFromApi(data: any): InvoiceExpense {
+function normalizeExpenseFromApi(data: ExpenseDto): InvoiceExpense {
   return {
     id: data.id,
     invoice_id: data.invoiceId,
     description: data.description,
     amount: data.amount,
     date: data.date,
-    paidByAdmin: data.paidByAdmin ?? false,
+    paidByAdmin: data.paidByAdmin,
   };
 }
 
-function normalizeDocumentFromApi(data: any): InvoiceDocument {
+interface ApiDocument { id: string; invoiceId: string; fileName: string; fileSize: number; fileType: string; documentType: string; storagePath: string; uploadedAt: string; }
+function normalizeDocumentFromApi(data: ApiDocument): InvoiceDocument {
   return {
     id: data.id,
     invoice_id: data.invoiceId,
@@ -210,7 +214,7 @@ function normalizeDocumentFromApi(data: any): InvoiceDocument {
 export const invoiceService = {
   async fetchInvoices(partnerId?: string): Promise<InvoiceListItem[]> {
     const url = partnerId ? `/invoices?partnerId=${encodeURIComponent(partnerId)}` : "/invoices";
-    const data = await apiGet<any[]>(url);
+    const data = await apiGet<InvoiceDto[]>(url);
     return data.map(normalizeInvoiceListFromApi);
   },
 
@@ -219,7 +223,7 @@ export const invoiceService = {
     expenses: InvoiceExpense[];
     documents: InvoiceDocument[];
   }> {
-    const data = await apiGet<any>(`/invoices/${id}`);
+    const data = await apiGet<InvoiceDto & { expenses?: ExpenseDto[]; documents?: ApiDocument[] }>(`/invoices/${id}`);
     
     const invoice = normalizeInvoiceFromApi(data);
     const expenses = (data.expenses || []).map(normalizeExpenseFromApi);
@@ -232,7 +236,7 @@ export const invoiceService = {
     await apiPatch(`/invoices/${id}`, { status });
   },
 
-  async updateInvoice(id: string, updates: Record<string, any>): Promise<void> {
+  async updateInvoice(id: string, updates: Record<string, unknown>): Promise<void> {
     await apiPatch(`/invoices/${id}`, updates);
   },
 
@@ -249,16 +253,12 @@ export const invoiceService = {
     await apiPost(`/invoices/${invoiceId}/expenses`, expense);
   },
 
-  async updateExpense(expenseId: string, updates: Record<string, any>): Promise<void> {
+  async updateExpense(expenseId: string, updates: Record<string, unknown>): Promise<void> {
     await apiPatch(`/expenses/${expenseId}`, updates);
   },
 
   async deleteExpense(expenseId: string): Promise<void> {
     await apiDelete(`/expenses/${expenseId}`);
-  },
-
-  async deleteDocument(documentId: string): Promise<void> {
-    await apiDelete(`/documents/${documentId}`);
   },
 
   async createInvoice(invoice: {
@@ -273,13 +273,13 @@ export const invoiceService = {
     paymentDate?: string;
     hideFromAssistant?: boolean;
     clientBill: number;
-    calculations: Record<string, any>;
+    calculations: Record<string, unknown>;
     plannedExpenses?: number;
     serviceType?: 'one_time' | 'periodic';
     periodUnit?: 'month' | 'day' | 'hour';
     pricePerPeriod?: number;
     totalPeriods?: number;
-  }): Promise<any> {
+  }): Promise<InvoiceDto> {
     return apiPost("/invoices", {
       invoiceNumber: invoice.invoiceNumber,
       clientId: invoice.clientId,
@@ -304,7 +304,7 @@ export const invoiceService = {
   },
 
   async fetchClients(): Promise<ClientListItem[]> {
-    const data = await apiGet<any[]>("/clients");
+    const data = await apiGet<ClientListItem[]>("/clients");
     return data.map((client) => ({
       id: client.id,
       name: client.name,
@@ -319,7 +319,7 @@ export const invoiceService = {
   },
 
   async fetchPartners(): Promise<PartnerListItem[]> {
-    const data = await apiGet<any[]>("/partners");
+    const data = await apiGet<PartnerListItem[]>("/partners");
     return data.map((partner) => ({
       id: partner.id,
       name: partner.name,
@@ -332,7 +332,7 @@ export const invoiceService = {
   },
 
   async fetchPartnerClients(partnerId: string): Promise<ClientListItem[]> {
-    const data = await apiGet<any[]>(`/partners/${partnerId}/clients`);
+    const data = await apiGet<ClientListItem[]>(`/partners/${partnerId}/clients`);
     return data.map((client) => ({
       id: client.id,
       name: client.name,
@@ -347,7 +347,7 @@ export const invoiceService = {
   },
 
   async fetchClientWithPartner(clientId: string): Promise<ClientWithPartner> {
-    const data = await apiGet<any>(`/clients/${clientId}/with-partner`);
+    const data = await apiGet<ClientWithPartner>(`/clients/${clientId}/with-partner`);
     return {
       id: data.id,
       name: data.name,
@@ -380,7 +380,7 @@ export const invoiceService = {
     tgBotToken?: string | null;
     contactPerson?: string | null;
   }): Promise<ClientListItem> {
-    const data = await apiPost<any>("/clients", client);
+    const data = await apiPost<ClientListItem>("/clients", client);
     return {
       id: data.id,
       name: data.name,
@@ -404,7 +404,7 @@ export const invoiceService = {
     tgBotToken?: string | null;
     contactPerson?: string | null;
   }): Promise<ClientListItem> {
-    const data = await apiPatch<any>(`/clients/${id}`, updates);
+    const data = await apiPatch<ClientListItem>(`/clients/${id}`, updates);
     return {
       id: data.id,
       name: data.name,
@@ -422,13 +422,13 @@ export const invoiceService = {
     try {
       await apiDelete(`/clients/${id}`);
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || "Failed to delete client" };
+    } catch (error: unknown) {
+      return { success: false, error: (error instanceof Error ? error.message : String(error)) || "Failed to delete client" };
     }
   },
 
   async fetchClientPartners(clientId: string): Promise<PartnerListItem[]> {
-    const data = await apiGet<any[]>(`/clients/${clientId}/partners`);
+    const data = await apiGet<PartnerListItem[]>(`/clients/${clientId}/partners`);
     return data.map((partner) => ({
       id: partner.id,
       name: partner.name,
@@ -441,7 +441,7 @@ export const invoiceService = {
   },
 
   async setClientPartners(clientId: string, partnerIds: string[]): Promise<PartnerListItem[]> {
-    const data = await apiPut<any[]>(`/clients/${clientId}/partners`, { partnerIds });
+    const data = await apiPut<PartnerListItem[]>(`/clients/${clientId}/partners`, { partnerIds });
     return data.map((partner) => ({
       id: partner.id,
       name: partner.name,
@@ -454,7 +454,7 @@ export const invoiceService = {
   },
 
   async fetchClientsWithPartners(): Promise<ClientWithPartners[]> {
-    const data = await apiGet<any[]>("/clients-with-partners");
+    const data = await apiGet<ClientWithPartners[]>("/clients-with-partners");
     return data.map((client) => ({
       id: client.id,
       name: client.name,
@@ -465,12 +465,13 @@ export const invoiceService = {
       hasTgBotToken: client.hasTgBotToken === true,
       partnerId: client.partnerId || null,
       createdAt: client.createdAt,
-      partners: (client.partners || []).map((p: any) => ({
+      partners: (client.partners || []).map((p) => ({
         id: p.id,
         name: p.name,
         telegram: p.telegram || null,
         phone: p.phone || null,
         email: p.email || null,
+        leverageRole: p.leverageRole || 'external',
         createdAt: p.createdAt,
       })),
     }));
@@ -483,7 +484,7 @@ export const invoiceService = {
     email?: string;
     leverageRole?: PartnerLeverageRole;
   }): Promise<PartnerListItem> {
-    const data = await apiPost<any>("/partners", partner);
+    const data = await apiPost<PartnerListItem>("/partners", partner);
     return {
       id: data.id,
       name: data.name,
@@ -502,7 +503,7 @@ export const invoiceService = {
     email?: string;
     leverageRole?: PartnerLeverageRole;
   }): Promise<PartnerListItem> {
-    const data = await apiPatch<any>(`/partners/${id}`, updates);
+    const data = await apiPatch<PartnerListItem>(`/partners/${id}`, updates);
     return {
       id: data.id,
       name: data.name,
@@ -518,13 +519,13 @@ export const invoiceService = {
     try {
       await apiDelete(`/partners/${id}`);
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message || "Failed to delete partner" };
+    } catch (error: unknown) {
+      return { success: false, error: (error instanceof Error ? error.message : String(error)) || "Failed to delete partner" };
     }
   },
 
-  async fetchPartnerPayments(): Promise<any[]> {
-    return apiGet<any[]>("/partner-payments");
+  async fetchPartnerPayments(): Promise<Jsonify<PartnerPayment>[]> {
+    return apiGet<Jsonify<PartnerPayment>[]>("/partner-payments");
   },
 
   async createPartnerPayment(payment: {
@@ -533,7 +534,7 @@ export const invoiceService = {
     amount: number;
     paymentDate: string;
     notes?: string;
-  }): Promise<any> {
+  }): Promise<Jsonify<PartnerPayment>> {
     return apiPost("/partner-payments", payment);
   },
 

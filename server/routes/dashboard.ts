@@ -1,10 +1,12 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { storage } from "../storage";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import type { DashboardStore } from "../routeStores";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
 import { projectStatsForRole, projectInvoiceForRole } from "../permissions";
 
-export const dashboardRouter = Router();
+export function createDashboardRouter(storage: DashboardStore, authMiddleware: AuthMiddleware) {
+const dashboardRouter = Router();
 
 dashboardRouter.get("/api/dashboard/stats", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -248,8 +250,8 @@ dashboardRouter.get("/api/financial-summary", authMiddleware, async (req: Authen
     const stats = await storage.getDashboardStats(role, partnerId, clientId);
     const filteredStats = projectStatsForRole(stats, role);
     const invoices = await storage.getInvoices(role, partnerId, clientId);
-    const filteredInvoices = invoices.map(inv => projectInvoiceForRole(inv as Record<string, any>, role));
-    const summary: Record<string, any> = { stats: filteredStats, invoices: filteredInvoices, role, dataSource: "invoice_calculations" };
+    const filteredInvoices = invoices.map(inv => projectInvoiceForRole(inv, role));
+    const summary: Record<string, unknown> = { stats: filteredStats, invoices: filteredInvoices, role, dataSource: "invoice_calculations" };
     if (role === "admin") summary.partnerDebts = await storage.getPartnerDebtSummaries();
     if (role === "partner" && partnerId) {
       const partnerDebts = await storage.getPartnerDebtSummaries();
@@ -299,3 +301,6 @@ dashboardRouter.get("/api/admin/dashboard-recurring", authMiddleware, requireRol
     res.status(500).json({ error: "Failed to get recurring invoices" });
   }
 });
+
+return dashboardRouter;
+}

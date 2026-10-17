@@ -1,3 +1,4 @@
+import type { AssistantInvoiceDto } from "@shared/contracts";
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, Receipt, DollarSign, Calendar, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
       if (!response.ok) {
         return { total: 0, totalExpenses: 0, count: 0, average: 0, bestMonth: null };
       }
-      const invoices: any[] = await response.json();
+      const invoices: AssistantInvoiceDto[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return { total: 0, totalExpenses: 0, count: 0, average: 0, bestMonth: null };

@@ -26,11 +26,11 @@ export const RecalculateInvoicesButton = () => {
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/financial-summary'] });
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[RecalculateButton] Error:', error);
       toast({
         title: "Ошибка пересчёта",
-        description: error.message || "Не удалось пересчитать счета",
+        description: (error instanceof Error ? error.message : String(error)) || "Не удалось пересчитать счета",
         variant: "destructive",
       });
     } finally {

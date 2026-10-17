@@ -23,7 +23,7 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
     queryFn: () => apiGet<ForecastData[]>(`/admin/forecast?months=${monthsAhead}`),
   });
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">

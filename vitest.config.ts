@@ -5,14 +5,14 @@ import path from "path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@shared": path.resolve(__dirname, "./shared"),
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@shared": path.resolve(import.meta.dirname, "./shared"),
     },
   },
   test: {
     environment: "node",
     include: ["**/*.test.ts", "**/*.test.tsx"],
-    exclude: ["node_modules/**", "dist/**", "dist-server/**"],
+    exclude: ["node_modules/**", "dist/**", "dist-server/**", ".claude/**", ".local/**", ".agents/**"],
     // Импорт server/db.ts утверждает наличие DATABASE_URL и создаёт (ленивый,
     // не подключающийся) Pool. Тесты работают с отдельной PGlite-БД, которую
     // передают в функции репозиториев параметром db; этот URL нужен только

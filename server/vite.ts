@@ -1,10 +1,11 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, type ViteDevServer } from "vite";
+import type { ViteDevServer } from "vite";
 import { app } from "./index";
 import { storage } from "./storage";
 import { backupService } from "./backupService";
+import { startOutboxWorker } from "./services/outbox";
 
 const isProduction = process.env.NODE_ENV === "production";
 const RECURRING_CHECK_INTERVAL = 60 * 60 * 1000;
@@ -13,6 +14,7 @@ const BACKUP_CHECK_INTERVAL = 60 * 60 * 1000;
 async function processRecurringInvoicesQuietly() {
   try {
     const result = await storage.processAllDueRecurringInvoices();
+    if (result.errors.length) console.error("[Recurring] Failed occurrences:", result.errors);
     if (result.created > 0) {
       console.log(`[Recurring] Created ${result.created} draft(s)`);
     }
@@ -101,6 +103,7 @@ function serveStatic(server: Express) {
   if (isProduction) {
     serveStatic(server);
   } else {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -108,9 +111,11 @@ function serveStatic(server: Express) {
     await setupVite(server, vite);
   }
 
-  const port = 5000;
-  server.listen(port, "0.0.0.0", () => {
+  const port = Number(process.env.PORT ?? 5000);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT");
+  server.listen(port, process.env.HOST ?? "0.0.0.0", () => {
     console.log(`Server running on port ${port}`);
+    startOutboxWorker();
     startRecurringSchedulerLazy();
     startBackupSchedulerLazy();
   });

@@ -1,8 +1,10 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { storage } from "../storage";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import type { ActionLogStore } from "../routeStores";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 
-export const actionLogRouter = Router();
+export function createActionLogRouter(storage: ActionLogStore, authMiddleware: AuthMiddleware) {
+const actionLogRouter = Router();
 
 actionLogRouter.get("/api/assistant-logs", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -12,9 +14,9 @@ actionLogRouter.get("/api/assistant-logs", authMiddleware, requireRole("admin"),
     const dateFrom = req.query.dateFrom as string | undefined;
     const dateTo = req.query.dateTo as string | undefined;
     res.json(await storage.getAssistantActionLogs({ limit, offset, role: role || null, dateFrom: dateFrom || null, dateTo: dateTo || null }));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Get assistant logs error:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch assistant action logs" });
+    res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to fetch assistant action logs" });
   }
 });
 
@@ -23,8 +25,11 @@ actionLogRouter.get("/api/accountant-logs", authMiddleware, requireRole("account
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
     res.json(await storage.getAssistantActionLogs({ limit, offset, role: "accountant", dateFrom: null, dateTo: null }));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Get accountant logs error:", error);
-    res.status(500).json({ error: error.message || "Failed to fetch accountant action logs" });
+    res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to fetch accountant action logs" });
   }
 });
+
+return actionLogRouter;
+}

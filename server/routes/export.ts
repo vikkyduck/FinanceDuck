@@ -1,11 +1,15 @@
+import { z } from "zod";
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
 import fs from "fs";
 import path from "path";
-import { storage } from "../storage";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { invoiceQueryInput } from "../invoiceQuery";
+import type { ExportStore } from "../routeStores";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import { formatMoney, formatDate, formatDateTime } from "../lib/format";
 
-export const exportRouter = Router();
+export function createExportRouter(storage: ExportStore, authMiddleware: AuthMiddleware) {
+const exportRouter = Router();
 
 // Резолвим путь к TTF-шрифту с поддержкой кириллицы. При запуске через tsx
 // __dirname указывает на server/routes/, при esbuild-бандле — на dist-server/.
@@ -24,28 +28,39 @@ const findFont = (cands: string[]) => cands.find(p => p && fs.existsSync(p)) || 
 
 exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const parsed = invoiceQueryInput.pick({ invoiceId: true, clientId: true, dateFrom: true, dateTo: true }).extend({
+      exportTypes: z.array(z.enum(['invoices', 'clients', 'partners', 'expenses'])).min(1).default(['invoices']),
+      actualDateFrom: z.string().date().optional(), actualDateTo: z.string().date().optional(),
+      statuses: z.array(z.enum(['draft', 'sent', 'paid', 'cancelled'])).default([]),
+      partnerIds: z.array(z.string().uuid()).default([]),
+    }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid export filters' });
+    const { exportTypes, actualDateFrom, actualDateTo, statuses, partnerIds, ...filters } = parsed.data;
+    const query = invoiceQueryInput.parse(filters);
+
     // exceljs is a CommonJS module — under esbuild's ESM bundle the real
     // exports land on `.default`, so `ExcelJS.Workbook` would be undefined.
-    const ExcelJSModule: any = await import("exceljs");
+    const ExcelJSModule = await import("exceljs");
     const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
-    const workbook = new ExcelJS.Workbook();
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=export_${new Date().toISOString().split("T")[0]}.xlsx`);
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
     workbook.creator = "Invoice Management System";
     workbook.created = new Date();
 
-    const { exportTypes = ["invoices"], dateFrom, dateTo, actualDateFrom, actualDateTo, statuses = [], partnerIds = [] } = req.body;
-
-    const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients({ kind: "all" });
-    const allPartners = await storage.getPartners();
-    const allExpenses = await storage.getAllExpenses();
-
-    let filteredInvoices = allInvoices;
-    if (statuses.length > 0) filteredInvoices = filteredInvoices.filter(inv => statuses.includes(inv.status));
-    if (partnerIds.length > 0) filteredInvoices = filteredInvoices.filter(inv => inv.partnerId && partnerIds.includes(inv.partnerId));
-    if (dateFrom) { const fromDate = new Date(dateFrom); filteredInvoices = filteredInvoices.filter(inv => inv.paymentDate && new Date(inv.paymentDate) >= fromDate); }
-    if (dateTo) { const toDate = new Date(dateTo); filteredInvoices = filteredInvoices.filter(inv => inv.paymentDate && new Date(inv.paymentDate) <= toDate); }
-    if (actualDateFrom) { const fromDate = new Date(actualDateFrom); filteredInvoices = filteredInvoices.filter(inv => inv.actualPaymentDate && new Date(inv.actualPaymentDate) >= fromDate); }
-    if (actualDateTo) { const toDate = new Date(actualDateTo); filteredInvoices = filteredInvoices.filter(inv => inv.actualPaymentDate && new Date(inv.actualPaymentDate) <= toDate); }
+    const allClients = exportTypes.includes("clients") ? await storage.getClients({ kind: 'all' }) : [];
+    const pages = async function* (filtered: boolean) {
+      for await (const page of storage.invoiceExportPages(req.user!, query)) {
+        if (res.destroyed) throw new Error('Export cancelled');
+        yield filtered ? page.filter(inv => (!statuses.length || statuses.includes(inv.status)) && (!partnerIds.length || partnerIds.includes(inv.partnerId)) && (!actualDateFrom || (inv.actualPaymentDate && inv.actualPaymentDate >= actualDateFrom)) && (!actualDateTo || (inv.actualPaymentDate && inv.actualPaymentDate <= actualDateTo))) : page;
+      }
+    };
+    const filteredInvoices = async function* () { for await (const page of pages(true)) yield* page; };
+    const clientTotals = new Map<string, { count: number; billed: number }>();
+    if (exportTypes.includes('clients')) for await (const page of pages(false)) for (const inv of page) {
+      const total = clientTotals.get(inv.clientId) ?? { count: 0, billed: 0 };
+      total.count++; total.billed += Number(inv.calculations?.clientBill ?? inv.clientBill ?? 0); clientTotals.set(inv.clientId, total);
+    }
 
     if (exportTypes.includes("invoices")) {
       const sheet = workbook.addWorksheet("Счета");
@@ -71,11 +86,11 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
       headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
       const statusMap: Record<string, string> = { draft: "Черновик", sent: "Отправлен", paid: "Оплачен", cancelled: "Отменён" };
       const schemeMap: Record<string, string> = { partner_10: "Партнёр 10%", partner_15: "Партнёр 15%", agency_30: "Агентский 30%", agency_40: "Агентский 40%", agency: "Агентская", commission_based: "Комиссионный" };
-      for (const inv of filteredInvoices) {
-        const client = allClients.find(c => c.id === inv.clientId);
-        const partner = allPartners.find(p => p.id === inv.partnerId);
+      for await (const inv of filteredInvoices()) {
+        const client = inv.client;
+        const partner = inv.partner;
         const calc = inv.calculations;
-        sheet.addRow({ number: inv.invoiceNumber, client: client?.name || "", partner: partner?.name || "", status: statusMap[inv.status] || inv.status, clientBill: Number(calc?.clientBill || inv.clientBill || 0), scheme: schemeMap[inv.scheme] || inv.scheme, commissionRate: calc?.commissionRate ? `${calc.commissionRate}%` : "", commissionAmount: Number(calc?.commissionAmount || 0), expenses: Number(calc?.executorExpensesTotal || 0), netProfit: Number(calc?.netProfitAdmin || 0), partnerDebt: Number(calc?.partnerTransferDue || 0), clientRemaining: Number(calc?.clientRemaining || 0), paymentDate: formatDate(inv.paymentDate as any), actualPaymentDate: formatDate(inv.actualPaymentDate as any), notes: inv.notes || "" });
+        sheet.addRow({ number: inv.invoiceNumber, client: client?.name || "", partner: partner?.name || "", status: statusMap[inv.status] || inv.status, clientBill: Number(calc?.clientBill || inv.clientBill || 0), scheme: schemeMap[inv.scheme] || inv.scheme, commissionRate: calc?.commissionRate ? `${calc.commissionRate}%` : "", commissionAmount: Number(calc?.commissionAmount || 0), expenses: Number(calc?.executorExpensesTotal || 0), netProfit: Number(calc?.netProfitAdmin || 0), partnerDebt: Number(calc?.partnerTransferDue || 0), clientRemaining: Number(calc?.clientRemaining || 0), paymentDate: formatDate(inv.paymentDate), actualPaymentDate: formatDate(inv.actualPaymentDate), notes: inv.notes || "" }).commit();
       }
     }
 
@@ -93,9 +108,8 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
       headerRow.font = { bold: true };
       headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
       for (const client of allClients) {
-        const clientInvoices = allInvoices.filter(inv => inv.clientId === client.id);
-        const totalBilled = clientInvoices.reduce((sum, inv) => sum + Number(inv.calculations?.clientBill || inv.clientBill || 0), 0);
-        sheet.addRow({ name: client.name, contact: "", email: client.email || "", phone: client.phone || "", invoicesCount: clientInvoices.length, totalBilled });
+        const total = clientTotals.get(client.id) ?? { count: 0, billed: 0 };
+        sheet.addRow({ name: client.name, contact: "", email: client.email || "", phone: client.phone || "", invoicesCount: total.count, totalBilled: total.billed }).commit();
       }
     }
 
@@ -117,7 +131,7 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
       headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
       const partnerDebts = await storage.getPartnerDebtSummaries();
       for (const pd of partnerDebts) {
-        sheet.addRow({ name: pd.partnerName, email: pd.email || "", phone: pd.phone || "", invoicesCount: pd.totalInvoiceCount, paidCount: pd.invoiceCount, paidCommission: pd.paidCommission, totalToTransfer: pd.totalToTransfer, totalPaid: pd.totalPaid, remaining: pd.remaining });
+        sheet.addRow({ name: pd.partnerName, email: pd.email || "", phone: pd.phone || "", invoicesCount: pd.totalInvoiceCount, paidCount: pd.invoiceCount, paidCommission: pd.paidCommission, totalToTransfer: pd.totalToTransfer, totalPaid: pd.totalPaid, remaining: pd.remaining }).commit();
       }
     }
 
@@ -135,20 +149,21 @@ exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), asy
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true };
       headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
-      for (const expense of allExpenses) {
-        const invoice = allInvoices.find(inv => inv.id === expense.invoiceId);
-        const client = allClients.find(c => c.id === invoice?.clientId);
-        sheet.addRow({ invoiceNumber: invoice?.invoiceNumber || "—", client: client?.name || "—", description: expense.description || "—", amount: Number(expense.amount || 0), paidBy: expense.paidByAdmin ? "Администратор" : expense.paidByPartner ? "Партнёр" : "—", date: formatDate(expense.date as any), notes: expense.notes || "" });
+      for await (const batch of pages(true)) {
+        const invoiceById = new Map(batch.map(invoice => [invoice.id, invoice]));
+        for await (const expenses of storage.expenseExportPages(batch.map(invoice => invoice.id))) for (const expense of expenses) {
+        const invoice = invoiceById.get(expense.invoiceId);
+        const client = invoice?.client;
+        sheet.addRow({ invoiceNumber: invoice?.invoiceNumber || "—", client: client?.name || "—", description: expense.description || "—", amount: Number(expense.amount || 0), paidBy: expense.paidByAdmin ? "Администратор" : "Партнёр", date: formatDate(expense.date), notes: "" }).commit();
+        }
       }
     }
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename=export_${new Date().toISOString().split("T")[0]}.xlsx`);
-    res.send(Buffer.from(buffer));
-  } catch (error: any) {
+    await workbook.commit();
+  } catch (error: unknown) {
     console.error("Export error:", error);
-    res.status(500).json({ error: error.message || "Failed to export data" });
+    if (res.headersSent) { res.destroy(); return; }
+    res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to export data" });
   }
 });
 
@@ -156,7 +171,8 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
   try {
     const { invoiceId, clientId, dateFrom, dateTo } = req.body;
 
-    const allInvoices = await storage.getInvoices("admin");
+    const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
+    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
 
     let invoices = allInvoices;
     if (invoiceId) {
@@ -210,9 +226,9 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
     }, 0);
 
     res.json({ count, totalBudget, totalExpenses, totalRemaining });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Client report preview error:", error);
-    res.status(500).json({ error: error.message || "Failed to generate preview" });
+    res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate preview" });
   }
 });
 
@@ -227,8 +243,9 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
       return res.status(400).json({ error: "invoiceId или clientId обязателен" });
     }
 
-    const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients({ kind: "all" });
+    const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
+    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allClients = [...new Map(allInvoices.flatMap(invoice => invoice.client ? [[invoice.client.id, invoice.client] as const] : [])).values()];
 
     let invoices = allInvoices;
     if (invoiceId)      invoices = allInvoices.filter(inv => inv.id === invoiceId);
@@ -261,7 +278,7 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
     // единый Format-сервис.
     const fmtMoney = (n: number) => formatMoney(n);
     const fmtDate  = (d: string | null | undefined) => formatDate(d);
-    const esc = (s: any) => String(s ?? "").replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c] || c));
+    const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c] || c));
 
     const agency  = invoices.filter(inv => inv.scheme === "agency_30" || inv.scheme === "agency_40");
     const closed  = invoices.filter(inv => inv.scheme !== "agency_30" && inv.scheme !== "agency_40");
@@ -339,8 +356,8 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
                   <td>${esc(inv.invoiceNumber || "—")}</td>
                   <td>${esc(statusMap[inv.status] || inv.status)}</td>
                   <td class="num">${fmtMoney(Number(inv.calculations?.clientBill || inv.clientBill || 0))}</td>
-                  <td>${fmtDate(inv.paymentDate as any)}</td>
-                  <td>${fmtDate(inv.actualPaymentDate as any)}</td>
+                  <td>${fmtDate(inv.paymentDate)}</td>
+                  <td>${fmtDate(inv.actualPaymentDate)}</td>
                   <td class="notes">${esc(inv.clientTitle || inv.notes || inv.description || "")}</td>
                 </tr>
               `).join("")}
@@ -441,9 +458,9 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
     res.send(html);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Client report print error:", error);
-    res.status(500).send(`<!doctype html><meta charset="utf-8"><body style="font-family: sans-serif; padding: 32px;">Ошибка: ${(error.message || "").replace(/[<>]/g, "")}</body>`);
+    res.status(500).send(`<!doctype html><meta charset="utf-8"><body style="font-family: sans-serif; padding: 32px;">Ошибка: ${((error instanceof Error ? error.message : String(error)) || "").replace(/[<>]/g, "")}</body>`);
   }
 });
 
@@ -455,8 +472,9 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
       return res.status(400).json({ error: "invoiceId или clientId обязателен" });
     }
 
-    const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients({ kind: "all" });
+    const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
+    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allClients = [...new Map(allInvoices.flatMap(invoice => invoice.client ? [[invoice.client.id, invoice.client] as const] : [])).values()];
     let invoices = allInvoices;
     if (invoiceId)      invoices = allInvoices.filter(inv => inv.id === invoiceId);
     else if (clientId)  invoices = allInvoices.filter(inv => inv.clientId === clientId);
@@ -490,8 +508,8 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
     const agency = invoices.filter(inv => inv.scheme === "agency_30" || inv.scheme === "agency_40");
     const closed = invoices.filter(inv => inv.scheme !== "agency_30" && inv.scheme !== "agency_40");
 
-    const PDFKitModule: any = await import("pdfkit");
-    const PDFDocument = PDFKitModule.default ?? PDFKitModule;
+    const PDFKitModule = await import("pdfkit");
+    const PDFDocument = PDFKitModule.default;
     const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 36, info: { Title: `Бюджетный отчёт — ${clientName}`, Author: "FinanceDuck" } });
 
     const regularFont = findFont(FONT_CANDIDATES);
@@ -657,8 +675,8 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
           inv.invoiceNumber || "—",
           statusMap[inv.status] || inv.status,
           fmtMoney(Number(inv.calculations?.clientBill || inv.clientBill || 0)),
-          fmtDate(inv.paymentDate as any),
-          fmtDate(inv.actualPaymentDate as any),
+          fmtDate(inv.paymentDate),
+          fmtDate(inv.actualPaymentDate),
           inv.clientTitle || inv.notes || inv.description || "",
         ]);
         renderTable("Счета (партнёрские и комиссионные)", headers, rows);
@@ -694,10 +712,10 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
     }
 
     doc.end();
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Client report PDF error:", error);
     if (!res.headersSent) {
-      res.status(500).json({ error: error.message || "Failed to generate PDF" });
+      res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate PDF" });
     } else {
       res.end();
     }
@@ -715,14 +733,15 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
 
     // exceljs is a CommonJS module — under esbuild's ESM bundle the real
     // exports land on `.default`, so `ExcelJS.Workbook` would be undefined.
-    const ExcelJSModule: any = await import("exceljs");
+    const ExcelJSModule = await import("exceljs");
     const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Invoice Management System";
     workbook.created = new Date();
 
-    const allInvoices = await storage.getInvoices("admin");
-    const allClients = await storage.getClients({ kind: "all" });
+    const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
+    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allClients = [...new Map(allInvoices.flatMap(invoice => invoice.client ? [[invoice.client.id, invoice.client] as const] : [])).values()];
 
     let invoices = allInvoices;
     if (invoiceId) {
@@ -857,8 +876,8 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
             number: inv.invoiceNumber || "—",
             status: statusMap[inv.status] || inv.status,
             clientBill,
-            paymentDate: formatDate(inv.paymentDate as any),
-            actualPaymentDate: formatDate(inv.actualPaymentDate as any),
+            paymentDate: formatDate(inv.paymentDate),
+            actualPaymentDate: formatDate(inv.actualPaymentDate),
             notes: inv.clientTitle || inv.notes || inv.description || "",
           });
         } else {
@@ -891,7 +910,7 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
     // и filename*=UTF-8''<percent-encoded> для современных браузеров.
     const fullName = (clientName || "клиент").replace(/[\\/:*?"<>|]/g, "").trim() || "клиент";
     const asciiName = fullName.replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, "_") || "client";
-    const safeDate = (d: string) => d.replace(/[^0-9\-]/g, "").slice(0, 10);
+    const safeDate = (d: string) => d.replace(/[^0-9-]/g, "").slice(0, 10);
     const dateSuffix = dateFrom && dateTo
       ? `_${safeDate(dateFrom)}_${safeDate(dateTo)}`
       : dateFrom
@@ -907,8 +926,11 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
       `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(baseName)}`
     );
     res.send(Buffer.from(buffer));
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Client report export error:", error);
-    res.status(500).json({ error: error.message || "Failed to generate client report" });
+    res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate client report" });
   }
 });
+
+return exportRouter;
+}

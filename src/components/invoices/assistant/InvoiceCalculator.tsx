@@ -71,7 +71,7 @@ export const InvoiceCalculator = ({
                 <span className="text-sm font-medium">Схема</span>
               </div>
               <span className="font-bold text-sm">
-                {getSchemeLabel(scheme as any, 'assistant')}
+                {getSchemeLabel(scheme as import("@shared/schema").InvoiceScheme, 'assistant')}
               </span>
             </motion.div>
 

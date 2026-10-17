@@ -17,9 +17,9 @@ interface EditExpenseDialogProps {
   expense: {
     id: string;
     description: string;
-    amount: number;
-    date: string;
-    paidByAdmin: boolean;
+    amount?: number | string;
+    date?: string;
+    paidByAdmin?: boolean;
   } | null;
   onSuccess?: () => void;
 }
@@ -36,8 +36,8 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
   useEffect(() => {
     if (expense) {
       setDescription(expense.description);
-      setAmount(expense.amount.toString());
-      setDate(expense.date);
+      setAmount((expense.amount ?? 0).toString());
+      setDate(expense.date ?? "");
       setIsAdminExpense(expense.paidByAdmin || false);
     }
   }, [expense]);
@@ -101,11 +101,11 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
 
       onOpenChange(false);
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error updating expense:", error);
       toast({
         title: "Ошибка",
-        description: error.message || "Не удалось обновить расход",
+        description: (error instanceof Error ? error.message : String(error)) || "Не удалось обновить расход",
         variant: "destructive",
       });
     } finally {

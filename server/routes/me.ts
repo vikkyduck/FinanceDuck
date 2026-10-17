@@ -1,3 +1,4 @@
+import type { AuthMiddleware } from "../middleware";
 /**
  * «Безопасность и данные» для текущего пользователя.
  *
@@ -13,14 +14,15 @@
  * авторизованным юзерам.
  */
 import { Router, Response } from "express";
-import { db } from "../db";
+import type { db as Database } from "../db";
 import { and, eq, ne, desc } from "drizzle-orm";
 import { accessTokens, userSessions, invoices, invoiceCalculations, invoiceExpenses, invoiceMessages, clients, partners } from "../../shared/schema";
-import { AuthenticatedRequest, authMiddleware, SESSION_COOKIE } from "../middleware";
-import { storage } from "../storage";
+import { AuthenticatedRequest, SESSION_COOKIE } from "../middleware";
+import type { MeStore } from "../routeStores";
 import { codeForDisplay } from "../lib/accessCode";
 
-export const meRouter = Router();
+export function createMeRouter(storage: MeStore, authMiddleware: AuthMiddleware, db: typeof Database) {
+const meRouter = Router();
 
 // ─── helpers ────────────────────────────────────────────────────────────
 
@@ -133,7 +135,7 @@ meRouter.post("/api/me/sessions/revoke-all", authMiddleware, async (req: Authent
         eq(userSessions.revoked, false),
         currentSessionId ? ne(userSessions.sessionId, currentSessionId) : eq(userSessions.id, ""),
       ));
-    res.json({ ok: true, revoked: (result as any).rowCount ?? null });
+    res.json({ ok: true, revoked: result.rowCount ?? null });
   } catch (error) {
     console.error("[me/sessions/revoke-all]", error);
     res.status(500).json({ error: "Failed to revoke sessions" });
@@ -165,7 +167,7 @@ meRouter.get("/api/me/data-export", authMiddleware, async (req: AuthenticatedReq
   try {
     const me = req.user!;
     const generatedAt = new Date().toISOString();
-    const payload: any = { generatedAt, role: me.role };
+    const payload: Record<string, unknown> = { generatedAt, role: me.role };
 
     if (me.role === "client" && me.clientId) {
       // Профиль клиента.
@@ -278,3 +280,6 @@ meRouter.get("/api/me/data-export", authMiddleware, async (req: AuthenticatedReq
 });
 
 void storage; // явный ref на storage чтобы avoid unused import warning, если хотим его подсасывать
+
+return meRouter;
+}

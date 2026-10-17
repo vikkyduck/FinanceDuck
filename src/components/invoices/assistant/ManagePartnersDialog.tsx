@@ -79,7 +79,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
     try {
       const data = await invoiceService.fetchPartners();
       setPartners(data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[ManagePartnersDialog] Error fetching partners:", error);
       toast.error("Не удалось загрузить партнёров");
     } finally {
@@ -98,7 +98,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
     try {
       const clients = await invoiceService.fetchPartnerClients(partner.id);
       setPartnerClients(clients);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[ManagePartnersDialog] Error fetching partner clients:", error);
       toast.error("Не удалось загрузить клиентов партнёра");
     } finally {
@@ -128,8 +128,8 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
       showSuccess("Успешно", "Партнер добавлен");
       setForm(emptyForm);
       fetchPartners();
-    } catch (error: any) {
-      toast.error(error.message || "Не удалось добавить партнёра");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось добавить партнёра");
     } finally {
       setLoading(false);
     }
@@ -185,8 +185,8 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
           });
         }
       }
-    } catch (error: any) {
-      toast.error(error.message || "Не удалось обновить партнёра");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось обновить партнёра");
     } finally {
       setLoading(false);
     }
@@ -213,8 +213,8 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
       } else {
         toast.error(result.error || "Не удалось удалить партнёра");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Не удалось удалить партнёра");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось удалить партнёра");
     } finally {
       setDeleting(false);
       setDeleteConfirmOpen(false);

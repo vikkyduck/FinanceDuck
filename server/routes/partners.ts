@@ -1,6 +1,7 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { storage } from "../storage";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import type { PartnersStore } from "../routeStores";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
 import { pick, PARTNER_WRITABLE_FIELDS, PARTNER_PAYMENT_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
 import { validateBody, partnerPaymentSchema } from "../lib/validate";
@@ -12,7 +13,8 @@ import {
 } from "../permissions";
 import { canReadPartner, canReadPartnerClients } from "../tenantAccess";
 
-export const partnersRouter = Router();
+export function createPartnersRouter(storage: PartnersStore, authMiddleware: AuthMiddleware) {
+const partnersRouter = Router();
 
 /**
  * Санитизация тела партнёра: whitelist полей (анти-mass-assignment, раньше
@@ -20,12 +22,12 @@ export const partnersRouter = Router();
  * LEVERAGE_ROLES, менять её может ТОЛЬКО админ (роль влияет на владельческую
  * метрику — ассистенту/бухгалтеру её трогать незачем).
  */
-function sanitizePartnerBody(req: AuthenticatedRequest): { ok: true; data: any } | { ok: false; error: string } {
+function sanitizePartnerBody(req: AuthenticatedRequest): { ok: true; data: Partial<import("../../shared/schema").InsertPartner> } | { ok: false; error: string } {
   const data = pick(req.body, PARTNER_WRITABLE_FIELDS);
   if ("leverageRole" in data) {
     if (req.user?.role !== "admin") {
       delete data.leverageRole; // молча вырезаем, как и остальной whitelist
-    } else if (!LEVERAGE_ROLES.includes(data.leverageRole)) {
+    } else if (!LEVERAGE_ROLES.some(role => role === data.leverageRole)) {
       return { ok: false, error: `leverageRole must be one of: ${LEVERAGE_ROLES.join(", ")}` };
     }
   }
@@ -68,7 +70,8 @@ partnersRouter.post("/api/partners", authMiddleware, requireRole("admin", "assis
     const role = req.user?.role || "client";
     const body = sanitizePartnerBody(req);
     if (body.ok === false) return res.status(400).json({ error: body.error });
-    const partner = await storage.createPartner(body.data);
+    if (typeof body.data.name !== "string" || !body.data.name.trim()) return res.status(400).json({ error: "name is required" });
+    const partner = await storage.createPartner({ ...body.data, name: body.data.name.trim() });
     if (role === "assistant" || role === "admin" || role === "accountant") {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "create_partner", entityType: "partner", entityId: partner.id, description: `Создан партнёр: ${partner.name}`, details: JSON.stringify(req.body), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     }
@@ -141,13 +144,14 @@ partnersRouter.get("/api/partners/:id/clients", authMiddleware, async (req: Auth
   }
 });
 
-partnersRouter.get("/api/partner-payments", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+partnersRouter.get("/api/partner-payments", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role;
     if (role === "assistant" || role === "accountant") return res.status(403).json({ error: "Forbidden" });
     let partnerId: string | undefined;
     if (role === "partner") partnerId = req.user?.partnerId;
     else if (role === "admin" && req.query.partnerId) partnerId = req.query.partnerId as string;
+    if (!partnerId) return res.status(role === "admin" ? 400 : 403).json({ error: "Partner scope is required" });
     res.json(await storage.getPartnerPayments(partnerId));
   } catch (error) {
     console.error("Get payments error:", error);
@@ -351,3 +355,6 @@ partnersRouter.get("/api/expected-admin-profit", authMiddleware, requireRole("ad
     res.status(500).json({ error: "Failed to get expected admin profit data" });
   }
 });
+
+return partnersRouter;
+}

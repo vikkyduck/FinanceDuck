@@ -28,8 +28,8 @@ export interface EncBackupEnvelope {
   ciphertext: string;
 }
 
-export function isEncryptedEnvelope(o: any): o is EncBackupEnvelope {
-  return !!o && o.format === "enc1" && typeof o.ciphertext === "string";
+export function isEncryptedEnvelope(o: unknown): o is EncBackupEnvelope {
+  return !!o && typeof o === "object" && "format" in o && o.format === "enc1" && "ciphertext" in o && typeof o.ciphertext === "string";
 }
 
 export function encryptBackup(

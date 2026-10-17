@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Trash2, Plus, Loader2, Key } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "@/lib/format";
 
-type UserRole = 'admin' | 'assistant' | 'partner' | 'client' | 'accountant';
+import type { UserRole } from "@shared/schema";
 
 interface AccessToken {
   id: string;
@@ -49,13 +49,9 @@ export const AccessCodesManager = () => {
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
 
-  useEffect(() => {
-    fetchTokens();
-    fetchPartners();
-    fetchClients();
-  }, []);
 
-  const fetchTokens = async () => {
+
+  const fetchTokens = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch('/api/access-tokens', {
@@ -67,18 +63,18 @@ export const AccessCodesManager = () => {
       } else {
         throw new Error('Не удалось загрузить коды');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Ошибка",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const fetchPartners = async () => {
+  const fetchPartners = useCallback(async () => {
     try {
       const response = await fetch('/api/partners', {
         credentials: 'include',
@@ -90,9 +86,9 @@ export const AccessCodesManager = () => {
     } catch (error) {
       console.error('Failed to fetch partners:', error);
     }
-  };
+  }, []);
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       const response = await fetch('/api/clients', {
         credentials: 'include',
@@ -104,7 +100,13 @@ export const AccessCodesManager = () => {
     } catch (error) {
       console.error('Failed to fetch clients:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchTokens();
+    fetchPartners();
+    fetchClients();
+  }, [fetchTokens, fetchPartners, fetchClients]);
 
   const generateCode = (role: UserRole) => {
     const prefix = ({
@@ -162,11 +164,11 @@ export const AccessCodesManager = () => {
       setSelectedPartnerId("");
       setSelectedClientId("");
       fetchTokens();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Ошибка",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
       });
     }
 
@@ -193,11 +195,11 @@ export const AccessCodesManager = () => {
         description: "Код доступа успешно удален",
       });
       fetchTokens();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Ошибка",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
       });
     }
   };

@@ -229,7 +229,7 @@ export async function globalSearch(db: DB,
        ORDER BY score DESC
        LIMIT 5
     `);
-    for (const p of ((partnerRows.rows ?? partnerRows) as any[])) {
+    for (const p of ((partnerRows.rows ?? partnerRows) as { id: string; name: string; contact_person?: string; score: number }[])) {
       results.push({ id: p.id, type: 'partner', title: p.name, url: '/partners', score: Number(p.score) || 0 });
     }
 
@@ -249,7 +249,7 @@ export async function globalSearch(db: DB,
        ORDER BY score DESC
        LIMIT 5
     `);
-    for (const c of ((clientRows.rows ?? clientRows) as any[])) {
+    for (const c of ((clientRows.rows ?? clientRows) as { id: string; name: string; contact_person?: string; score: number }[])) {
       const title = c.contact_person ? `${c.name} (${c.contact_person})` : c.name;
       results.push({ id: c.id, type: 'client', title, url: '/clients', score: Number(c.score) || 0 });
     }

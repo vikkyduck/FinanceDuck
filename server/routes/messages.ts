@@ -1,10 +1,11 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { db } from "../db";
+import type { db as Database } from "../db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { invoiceMessages, invoiceExpenses, clients } from "../../shared/schema";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import { resolveTelegramTarget, sendTelegramMessage, escapeHtml, publicUrl } from "../lib/telegram";
-import { storage } from "../storage";
+import type { MessagesStore } from "../routeStores";
 import { findAuthorizedInvoice, resolveMessageInvoiceScope } from "../invoiceAccess";
 
 // «Сторона» треда: клиент — одна, admin+assistant — другая. Мы храним
@@ -16,7 +17,8 @@ const sideOfRole = (role?: string): Side | null => {
   return null;
 };
 
-export const messagesRouter = Router();
+export function createMessagesRouter(storage: MessagesStore, authMiddleware: AuthMiddleware, db: typeof Database) {
+const messagesRouter = Router();
 
 /**
  * Список тредов для текущей роли.
@@ -271,8 +273,8 @@ messagesRouter.post("/api/messages", authMiddleware, requireRole("client", "admi
         const link = publicUrl(`/messages?${params.toString()}`);
         const linkPart = link ? `\n\n<a href="${link}">Открыть тред</a>` : "";
         const messageBody = text.length > 700 ? text.slice(0, 700) + "…" : text;
-        const contactSuffix = (client as any)?.contactPerson
-          ? ` (${escapeHtml((client as any).contactPerson)})`
+        const contactSuffix = client?.contactPerson
+          ? ` (${escapeHtml(client.contactPerson)})`
           : "";
         const html =
           `💬 <b>${escapeHtml(invoiceLabel)}</b> · ${escapeHtml(client?.name || "Клиент")}${contactSuffix}\n` +
@@ -292,3 +294,6 @@ messagesRouter.post("/api/messages", authMiddleware, requireRole("client", "admi
     res.status(500).json({ error: "Failed to send message" });
   }
 });
+
+return messagesRouter;
+}

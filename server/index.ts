@@ -1,6 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import { originPolicy } from "./originPolicy";
 import { registerRoutes, registerHealthCheck } from "./routes";
 import { db } from "./db";
 import { migrateAccessCodesAtRest } from "./repositories/userRepo";
@@ -23,18 +24,7 @@ const ALLOWED_ORIGINS = new Set(
   (process.env.CORS_ORIGINS || "http://localhost:5000,http://localhost:5173")
     .split(",").map(s => s.trim()).filter(Boolean),
 );
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token");
-  }
-  res.setHeader("Vary", "Origin");
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
+app.use("/api", originPolicy(ALLOWED_ORIGINS));
 
 // Лимит тела запроса. Базово скромный (анти-DoS), большой — ТОЛЬКО для загрузки
 // актов (base64-файлы, единственный крупный роут). Раньше 20mb висел на ВСЁМ.

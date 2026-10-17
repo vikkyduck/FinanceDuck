@@ -11,7 +11,7 @@ let db: TestDb;
 let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 
 beforeEach(async () => {
   ({ db, close } = await createTestDb());
@@ -25,7 +25,7 @@ async function seedPaidInvoice(num: string, paymentDate: string, clientBill: str
     scheme: "commission_based" as const,
     createdBy: "00000000-0000-0000-0000-000000000001",
     status: "paid", paymentDate,
-  } as any, { clientBill });
+  }, { clientBill });
 }
 
 describe("getAdminMonthlyData", () => {

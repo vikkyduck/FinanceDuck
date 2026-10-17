@@ -1,3 +1,5 @@
+import { schemePolicy } from "@shared/schemePolicies";
+
 /**
  * Небольшие чистые помощники по счетам. Вынесены из god-компонентов
  * (InvoiceDetailsDialog, UnifiedInvoicesList и др.), где дублировались.
@@ -10,7 +12,7 @@
  * в 6 файлах — теперь одна точка правды.
  */
 export function isAgencyScheme(scheme: string | null | undefined): boolean {
-  return scheme === "agency_30" || scheme === "agency_40" || scheme === "agency";
+  return schemePolicy(scheme)?.kind === "agency";
 }
 
 /**
@@ -31,7 +33,7 @@ export const INVOICE_STATUS_LABELS: Record<string, string> = {
  * null. Приводим к «объект или null». Заменяет повторяющийся костыль
  * `Array.isArray(calc) ? calc[0] : calc` (5× в InvoiceDetailsDialog).
  */
-export function normalizeCalculations<T = any>(raw: T | T[] | null | undefined): T | null {
+export function normalizeCalculations<T>(raw: T | T[] | null | undefined): T | null {
   if (Array.isArray(raw)) return (raw[0] as T) ?? null;
   return (raw as T) ?? null;
 }

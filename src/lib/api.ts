@@ -11,6 +11,7 @@ export async function apiRequest<T>(
   
   const headers: HeadersInit = {
     "Content-Type": "application/json",
+    ...(["POST", "PATCH", "PUT", "DELETE"].includes(options.method ?? "GET") ? { "Idempotency-Key": crypto.randomUUID() } : {}),
     ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
     ...options.headers,
   };
@@ -22,6 +23,7 @@ export async function apiRequest<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401 && csrfToken === localStorage.getItem('csrf_token')) window.dispatchEvent(new Event('auth-expired'));
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `Request failed: ${response.status}`);
   }

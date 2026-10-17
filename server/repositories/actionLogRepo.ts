@@ -34,15 +34,15 @@ export async function logAssistantAction(
 
     if (recentLogs.length > 0) {
       const existing = recentLogs[0];
-      let mergedDetails: any = {};
+      let mergedDetails: Record<string, unknown> = {};
       if (existing.details) {
-        try { mergedDetails = JSON.parse(existing.details); } catch {}
+        try { mergedDetails = JSON.parse(existing.details); } catch { /* Keep the original legacy log when details are malformed. */ }
       }
       if (log.details) {
         try {
           const newDetails = JSON.parse(log.details);
           mergedDetails = { ...mergedDetails, ...newDetails };
-        } catch {}
+        } catch { /* Keep the original legacy log when details are malformed. */ }
       }
       const [updated] = await db.update(assistantActionLogs)
         .set({
@@ -105,7 +105,7 @@ export async function getAssistantActionLogs(
         if (parsed.clientId)  clientIds.add(parsed.clientId);
         if (parsed.partnerId) partnerIds.add(parsed.partnerId);
         if (parsed.invoiceId) invoiceIds.add(parsed.invoiceId);
-      } catch {}
+      } catch { /* Keep the original legacy log when details are malformed. */ }
     }
     if (row.log.entityId && row.log.actionType.includes('invoice')) {
       invoiceIds.add(row.log.entityId);
@@ -153,10 +153,10 @@ export async function getAssistantActionLogs(
   const logs: AssistantActionLogWithDetails[] = logsData.map(row => {
     let enrichedDetails     = row.log.details;
     let enrichedDescription = row.log.description;
-    let parsedDetails: any  = null;
+    let parsedDetails: { clientId?: string; partnerId?: string; invoiceId?: string; clientName?: string; partnerName?: string; invoiceNumber?: string; invoiceStatus?: string; status?: string; description?: string } | null = null;
 
     if (row.log.details) {
-      try { parsedDetails = JSON.parse(row.log.details); } catch {}
+      try { parsedDetails = JSON.parse(row.log.details); } catch { /* Keep the original legacy log when details are malformed. */ }
     }
 
     if (parsedDetails) {

@@ -24,7 +24,7 @@ let db: TestDb;
 let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 const noRecurring = async () => ({ monthlyAmount: 0, yearlyTotal: 0 });
 
 beforeEach(async () => {
@@ -39,7 +39,7 @@ async function seedPaidInvoice(num: string, clientBill: string) {
     scheme: "commission_based" as const,
     createdBy: "00000000-0000-0000-0000-000000000001",
     status: "paid", paymentDate: "2026-03-15",
-  } as any, { clientBill });
+  }, { clientBill });
 }
 
 describe("dashboardRepo — вынесенные методы: пустая БД (обвязка не падает)", () => {
@@ -112,7 +112,7 @@ describe("Деньги месяца — по дате фактической о�
       scheme: "commission_based" as const,
       createdBy: "00000000-0000-0000-0000-000000000001",
       status: "paid", paymentDate: "2026-07-17",
-    } as any, { clientBill: "150000" });
+    }, { clientBill: "150000" });
     await db.update(invoices)
       .set({ actualPaymentDate: "2026-08-06" })
       .where(eq(invoices.id, inv.id));
@@ -137,7 +137,7 @@ describe("Клиентский обзор — гибкая схема 'agency' �
       createdBy: "00000000-0000-0000-0000-000000000001",
       status: "paid", paymentDate: "2026-07-23",
       partnerCommissionRate: "8",              // партнёр (скрыт от клиента)
-    } as any, { clientBill: "300000", commissionRate: "40" }); // маржа (видна клиенту)
+    }, { clientBill: "300000", commissionRate: "40" }); // маржа (видна клиенту)
 
     const r = await getClientOverviewBuckets(asDb(), clientId);
     expect(r.agency.count).toBe(1);
@@ -161,7 +161,7 @@ describe("Коэффициент эффективности — котлы по 
       scheme: "commission_based" as const,
       createdBy: "00000000-0000-0000-0000-000000000001",
       status: "paid", paymentDate: "2026-03-15",
-    } as any, { clientBill: bill });
+    }, { clientBill: bill });
 
     await mk("LEV-1", ownerP.id,   "1000"); // владелец лично → знаменатель
     await mk("LEV-2", managedP.id, "2000"); // актив под управлением → числитель
@@ -185,7 +185,7 @@ describe("Продажи месяца — по дате создания, а н�
       scheme: "commission_based" as const,
       createdBy: "00000000-0000-0000-0000-000000000001",
       status: "sent", paymentDate: "2026-09-14",
-    } as any, { clientBill: "40000" });
+    }, { clientBill: "40000" });
     await db.update(invoices)
       .set({ createdAt: new Date("2026-08-14T17:13:04Z") })
       .where(eq(invoices.id, inv.id));
@@ -202,7 +202,7 @@ describe("Продажи месяца — по дате создания, а н�
       scheme: "commission_based" as const,
       createdBy: "00000000-0000-0000-0000-000000000001",
       status: "draft", paymentDate: "2026-08-20",
-    } as any, { clientBill: "500000" });
+    }, { clientBill: "500000" });
     await db.update(invoices)
       .set({ createdAt: new Date("2026-08-04T10:00:00Z") })
       .where(eq(invoices.id, big.id));

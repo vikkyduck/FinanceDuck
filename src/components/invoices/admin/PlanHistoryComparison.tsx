@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -45,7 +45,7 @@ export const PlanHistoryComparison = () => {
   });
 
   // Transform data to the expected format
-  const history: MonthlyPlanFact[] = (plansData || []).map(plan => {
+  const history = useMemo<MonthlyPlanFact[]>(() => (plansData || []).map(plan => {
     const plannedAdmin = parseFloat(plan.plannedAdminShare || "0");
     const plannedCat = parseFloat(plan.plannedCatShare || "0");
     const actualAdmin = plan.actualAdminShare || 0;
@@ -66,15 +66,17 @@ export const PlanHistoryComparison = () => {
       adminAchieved: actualAdmin >= plannedAdmin,
       catAchieved: actualCat >= plannedCat,
     };
-  });
+  }), [plansData]);
 
-  // Auto-select last 3 months on data load
+  // Auto-select once; clearing the selection is an intentional user action.
+  const initialized = useRef(false);
   useEffect(() => {
-    if (history.length > 0 && selectedMonths.length === 0) {
+    if (history.length > 0 && !initialized.current) {
+      initialized.current = true;
       const lastThree = history.slice(0, Math.min(3, history.length)).map(h => `${h.year}-${h.month}`);
       setSelectedMonths(lastThree);
     }
-  }, [history.length]);
+  }, [history]);
 
   const toggleMonth = (year: number, month: number) => {
     const key = `${year}-${month}`;
@@ -97,12 +99,12 @@ export const PlanHistoryComparison = () => {
       }));
   };
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
           <p className="font-semibold mb-2">{payload[0].payload.month}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index: number) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
               {entry.name}: {formatCurrency(entry.value)}
             </p>

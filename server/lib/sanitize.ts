@@ -8,16 +8,14 @@
  * (в отличие от строгой схемы), а именно вырезает лишнее.
  */
 
-// Возвращаем any: результат — динамический срез, который скармливается в
-// storage.createX/updateX с их точными Insert-типами; жёсткая типизация
-// здесь только мешала бы без пользы (роуты и так на нестрогих типах).
-export function pick(body: unknown, allowed: readonly string[]): any {
-  const src = (body && typeof body === "object") ? (body as Record<string, any>) : {};
-  const out: Record<string, any> = {};
-  for (const key of allowed) {
-    if (Object.prototype.hasOwnProperty.call(src, key)) out[key] = src[key];
-  }
-  return out;
+import type { InsertInvoice, InsertClient, InsertPartner, InsertInvoiceExpense, InsertPartnerPayment } from '../../shared/schema';
+type WritableFields = InsertInvoice & InsertClient & InsertPartner & InsertInvoiceExpense & InsertPartnerPayment;
+
+export function pick<K extends keyof WritableFields>(body: unknown, allowed: readonly K[]): Pick<WritableFields, K> {
+  const source = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const result: Record<string, unknown> = {};
+  for (const key of allowed) if (Object.prototype.hasOwnProperty.call(source, key)) result[key] = source[key];
+  return result as Pick<WritableFields, K>;
 }
 
 // Поля счёта, которые клиент вправе задавать. Исключены серверные:
@@ -65,7 +63,7 @@ export function decodeHtmlEntities(text: string): string {
   return cur;
 }
 
-export function pickExpense(body: unknown): any {
+export function pickExpense(body: unknown) {
   const out = pick(body, EXPENSE_WRITABLE_FIELDS);
   if (typeof out.description === "string") out.description = decodeHtmlEntities(out.description).trim();
   return out;

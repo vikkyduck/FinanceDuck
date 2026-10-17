@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 let db: TestDb;
 let close: () => Promise<void>;
 let p1: string, p2: string, c1: string, c2: string;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 
 beforeEach(async () => {
   ({ db, close } = await createTestDb());

@@ -1,3 +1,4 @@
+import type { AssistantInvoiceDto } from "@shared/contracts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, TrendingUp, Lightbulb, Target } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -18,7 +19,7 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
         { credentials: 'include' }
       );
       if (!response.ok) return [];
-      const invoices: any[] = await response.json();
+      const invoices: AssistantInvoiceDto[] = await response.json();
 
       if (!invoices || invoices.length === 0) {
         return [];
@@ -47,7 +48,7 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
 
       const averageCheck = totalAmount / invoices.length;
 
-      const insightsList = [];
+      const insightsList: { icon: typeof Trophy; color: string; bg: string; text: string }[] = [];
 
       if (topPartner) {
         const percentage = ((topPartner[1] / totalAmount) * 100).toFixed(0);

@@ -1,3 +1,4 @@
+import type { InvoiceDto } from "@shared/contracts";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,7 +61,7 @@ export const AccountantDashboard = () => {
     enabled: activeTab === 'logs',
   });
 
-  const { data: invoicesData } = useQuery<any[]>({
+  const { data: invoicesData } = useQuery<InvoiceDto[]>({
     queryKey: ['/api/invoices'],
     queryFn: () => apiGet('/api/invoices'),
   });
@@ -172,7 +173,7 @@ export const AccountantDashboard = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {invoicesData.map((invoice: any) => (
+                      {invoicesData.map((invoice) => (
                         <TableRow key={invoice.id} data-testid={`row-closing-doc-${invoice.id}`}>
                           <TableCell className="font-medium">
                             {invoice.invoiceNumber || '—'}

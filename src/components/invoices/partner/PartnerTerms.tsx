@@ -70,7 +70,7 @@ export const PartnerTerms = () => {
             className="table-row-hover"
           >
             <TableCell className="font-medium table-cell-highlight">
-              {getSchemeLabel(term.scheme as any, 'partner', term.partnerCommissionRate ?? undefined)}
+              {getSchemeLabel(term.scheme as import("@shared/schema").InvoiceScheme, 'partner', term.partnerCommissionRate ?? undefined)}
             </TableCell>
             <TableCell className="text-primary font-semibold table-cell-highlight">
               {term.scheme === 'agency_30' 

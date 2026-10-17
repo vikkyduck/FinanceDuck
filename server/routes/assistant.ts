@@ -1,10 +1,13 @@
+import type { AuthMiddleware } from "../middleware";
+import { parseNum } from "../../shared/financialEngine";
 import { Router, Response } from "express";
 import { eq, and, sql } from "drizzle-orm";
-import { db } from "../db";
+import type { db as Database } from "../db";
 import { invoices, invoiceCalculations, partners, clients } from "../../shared/schema";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 
-export const assistantRouter = Router();
+export function createAssistantRouter(authMiddleware: AuthMiddleware, db: typeof Database) {
+const assistantRouter = Router();
 
 assistantRouter.get(
   "/api/assistant/stats-invoices",
@@ -55,10 +58,18 @@ assistantRouter.get(
         .where(and(...conditions))
         .orderBy(invoices.actualPaymentDate);
 
-      res.json(rows);
+      res.json(rows.map(row => ({
+        id: row.id, invoice_number: row.invoice_number, client_id: row.client_id, partner_id: row.partner_id,
+        scheme: row.scheme, status: row.status, actual_payment_date: row.actual_payment_date,
+        created_at: row.created_at, client_name: row.client_name, partner_name: row.partner_name,
+        client_bill: parseNum(row.client_bill), executor_expenses_total: parseNum(row.executor_expenses_total),
+      })));
     } catch (error) {
       console.error("Get assistant stats-invoices error:", error);
       res.status(500).json({ error: "Failed to load assistant stats invoices" });
     }
   }
 );
+
+return assistantRouter;
+}

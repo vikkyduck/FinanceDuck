@@ -21,7 +21,7 @@ interface PriorityAction {
   actionType: string;
 }
 
-const iconMap: Record<string, any> = {
+const iconMap: Record<string, import("lucide-react").LucideIcon> = {
   overdue: AlertCircle,
   draft: FileText,
   long_sent: Clock,

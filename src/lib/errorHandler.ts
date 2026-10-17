@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 interface ErrorContext {
   operation: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 }
 
 type ApiErrorLike = { code?: string; message?: string } | Error | null;

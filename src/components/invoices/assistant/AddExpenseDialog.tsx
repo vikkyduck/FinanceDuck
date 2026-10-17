@@ -104,10 +104,10 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
       setIsAdminExpense(false);
       onOpenChange(false);
       onSuccess?.();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error adding expense:", error);
       
-      if (error.message?.includes("403") || error.message?.includes("Forbidden")) {
+      if ((error instanceof Error ? error.message : String(error))?.includes("403") || (error instanceof Error ? error.message : String(error))?.includes("Forbidden")) {
         toast({
           title: "Доступ запрещен",
           description: "У вас нет прав на добавление расходов к этому счету.",
@@ -116,7 +116,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
       } else {
         toast({
           title: "Ошибка",
-          description: error.message || "Не удалось добавить расход",
+          description: (error instanceof Error ? error.message : String(error)) || "Не удалось добавить расход",
           variant: "destructive",
         });
       }

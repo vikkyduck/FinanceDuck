@@ -1,3 +1,4 @@
+import type { UserRole } from "@shared/schema";
 import { useSwipeable } from "react-swipeable";
 import { motion, AnimatePresence } from "framer-motion";
 import { isAgencyScheme } from "@/lib/invoiceHelpers";
@@ -13,12 +14,12 @@ import { Progress } from "@/components/ui/progress";
 type InvoiceStatus = "draft" | "sent" | "paid" | "cancelled";
 
 interface InvoiceCardProps {
-  invoice: any;
+  invoice: import("@/lib/invoiceView").InvoiceListView & { clients?: { name?: string; contactPerson?: string }; partners?: { name?: string }; description?: string };
   onViewDetails: (id: string) => void;
   onMarkPaid?: (id: string) => void;
   onSend?: (id: string) => void;
   onDelete?: (id: string, number: string) => void;
-  role: 'admin' | 'assistant' | 'client' | 'partner';
+  role: UserRole;
   enableDelete?: boolean;
 }
 
@@ -75,7 +76,7 @@ export const InvoiceCard = ({
     ...(enableDelete && onDelete ? [{
       icon: Trash2,
       label: "Удалить",
-      onClick: () => onDelete(invoice.id, invoice.invoice_number),
+      onClick: () => onDelete(invoice.id, invoice.invoice_number ?? invoice.id),
       variant: "destructive" as const,
     }] : []),
   ];
@@ -118,9 +119,9 @@ export const InvoiceCard = ({
             <div>
               <p className="text-xs text-muted-foreground">Клиент</p>
               <p className="font-medium text-sm">{invoice.clients?.name || invoice.client_name}</p>
-              {(invoice.clients as any)?.contactPerson && (
+              {invoice.clients?.contactPerson && (
                 <p className="text-xs text-muted-foreground">
-                  Контакт: {(invoice.clients as any).contactPerson}
+                  Контакт: {invoice.clients.contactPerson}
                 </p>
               )}
             </div>

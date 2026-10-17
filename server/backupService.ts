@@ -1,17 +1,31 @@
+import { objectStore, objectDigest, type ObjectStore } from "./services/objectStore";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { db } from "./db";
 import { backupCryptoEnabled, encryptBackup, decryptBackup, isEncryptedEnvelope } from "./lib/backupCrypto";
-import {
-  invoices,
-  clients,
-  partners,
-  partnerPayments,
-  invoiceExpenses,
-  invoiceCalculations,
-  accessTokens,
-  recurringInvoices,
-} from "../shared/schema";
+import { randomUUID } from "node:crypto";
+import { getTableColumns, sql } from "drizzle-orm";
+import { createSelectSchema } from "drizzle-zod";
+import * as schema from "../shared/schema";
+
+// Foreign-key order. Every persisted application table belongs here.
+export const backupTables = {
+  partners: schema.partners, clients: schema.clients,
+  clientPartners: schema.clientPartners, accessTokens: schema.accessTokens,
+  recurringInvoices: schema.recurringInvoices, invoices: schema.invoices,
+  invoiceCalculations: schema.invoiceCalculations, invoiceExpenses: schema.invoiceExpenses,
+  invoiceTransfers: schema.invoiceTransfers, partnerPayments: schema.partnerPayments,
+  signedActs: schema.signedActs, invoiceMessages: schema.invoiceMessages,
+  assistantBonusPayments: schema.assistantBonusPayments,
+  monthlyFinancialPlans: schema.monthlyFinancialPlans,
+  assistantActionLogs: schema.assistantActionLogs, loginRateLimits: schema.loginRateLimits,
+  userSessions: schema.userSessions,
+  invoiceNumberCounters: schema.invoiceNumberCounters,
+  notificationOutbox: schema.notificationOutbox,
+  commandReceipts: schema.commandReceipts,
+} as const;
+type TableKey = keyof typeof backupTables;
+type Rows = Record<string, unknown>[];
 
 const BACKUP_DIR = process.env.BACKUP_DIR || "/var/finance-duck/backups";
 // 30 ночных копий (~месяц). Было 7: «тихая» порча данных, не замеченная за
@@ -27,139 +41,88 @@ export interface BackupInfo {
 }
 
 export interface BackupData {
-  version: string;
+  version: "3.0";
+  objects: Record<string, string>;
   createdAt: string;
   type: "auto" | "manual";
-  data: {
-    invoices: any[];
-    clients: any[];
-    partners: any[];
-    partnerPayments: any[];
-    invoiceExpenses: any[];
-    invoiceCalculations: any[];
-    accessTokens: any[];
-    recurringInvoices: any[];
-  };
+  data: Record<TableKey, Rows>;
 }
 
-async function ensureBackupDir(): Promise<void> {
-  await fs.mkdir(BACKUP_DIR, { recursive: true });
-}
-
-// JSON serializes Dates as ISO strings. Drizzle's timestamp columns expect
-// Date objects on insert (it calls .toISOString() internally). Walk the row
-// and convert ISO-looking strings back to Date so restore round-trips cleanly.
-const ISO_DATE_RX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
-function reviveDates<T extends Record<string, any>>(row: T): T {
-  for (const key of Object.keys(row)) {
-    const v = row[key];
-    if (typeof v === "string" && ISO_DATE_RX.test(v)) {
-      (row as any)[key] = new Date(v);
-    }
+/** Schema-directed revival: a date-shaped message or filename remains text. */
+export function validateBackup(backup: unknown): BackupData {
+  if (!backup || typeof backup !== "object") throw new Error("Неверный формат бэкапа");
+  const value = backup as BackupData;
+  if (!["2.0", "3.0"].includes(value.version)) throw new Error("Неполный или устаревший формат бэкапа. Автоматическое восстановление версии 1 запрещено");
+  if (!value.data || !Number.isFinite(Date.parse(value.createdAt)) || !["auto", "manual"].includes(value.type)) {
+    throw new Error("Неверные метаданные бэкапа");
   }
-  return row;
+  const data = {} as BackupData["data"];
+  for (const [key, table] of Object.entries(backupTables)) {
+    const rows = value.data[key as TableKey];
+    if (!Array.isArray(rows)) throw new Error(`Отсутствует таблица ${key}`);
+    const columns = getTableColumns(table);
+    const validator = createSelectSchema(table).strict();
+    data[key as TableKey] = rows.map(row => {
+      const revived = { ...row };
+      if (String(value.version) === "2.0" && key === "signedActs" && !("objectKey" in revived)) revived.objectKey = null;
+      for (const [name, column] of Object.entries(columns)) {
+        if (column.dataType === "date" && typeof revived[name] === "string") {
+          revived[name] = new Date(revived[name] as string);
+        }
+      }
+      return validator.parse(revived);
+    });
+  }
+  const objects = value.objects ?? {};
+  for (const row of data.signedActs) {
+    if (typeof row.objectKey !== 'string') continue;
+    if (!/^[a-f0-9]{64}$/.test(row.objectKey) || typeof objects[row.objectKey] !== 'string' || objectDigest(Buffer.from(objects[row.objectKey], 'base64')) !== row.objectKey) throw new Error('Missing or corrupt document in backup');
+  }
+  return { ...value, version: '3.0', data, objects };
 }
 
 function parseBackupType(filename: string): "auto" | "manual" {
   return filename.startsWith("backup-auto-") ? "auto" : "manual";
 }
 
-// Таблицы, которые обязаны присутствовать (массивами) в валидном бэкапе.
-const REQUIRED_BACKUP_TABLES = [
-  "invoices", "clients", "partners", "partnerPayments",
-  "invoiceExpenses", "invoiceCalculations", "accessTokens", "recurringInvoices",
-] as const;
-
-/**
- * Проверка структуры бэкапа ПЕРЕД деструктивным restore. Возвращает текст
- * ошибки или null. Нужна потому, что restore сначала стирает все таблицы —
- * битый/обрезанный/подменённый файл иначе оставил бы прод пустым.
- */
-function validateBackupStructure(backup: any): string | null {
-  if (!backup || typeof backup !== "object") return "файл не является объектом бэкапа";
-  if (!backup.data || typeof backup.data !== "object") return "отсутствует секция data";
-  for (const table of REQUIRED_BACKUP_TABLES) {
-    if (!Array.isArray(backup.data[table])) return `таблица «${table}» отсутствует или не массив`;
-  }
-  return null;
-}
-
 export class BackupService {
+  constructor(private readonly database = db, private readonly directory = BACKUP_DIR, private readonly objects: ObjectStore = objectStore) {}
+
+  private async ensureDirectory() { await fs.mkdir(this.directory, { recursive: true, mode: 0o700 }); }
+
   async createBackup(type: "auto" | "manual" = "manual"): Promise<BackupInfo> {
-    await ensureBackupDir();
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `backup-${type}-${timestamp}.json`;
-    const filePath = path.join(BACKUP_DIR, filename);
-
-    const [
-      allInvoices,
-      allClients,
-      allPartners,
-      allPayments,
-      allExpenses,
-      allCalculations,
-      allTokens,
-      allRecurring,
-    ] = await Promise.all([
-      db.select().from(invoices),
-      db.select().from(clients),
-      db.select().from(partners),
-      db.select().from(partnerPayments),
-      db.select().from(invoiceExpenses),
-      db.select().from(invoiceCalculations),
-      db.select().from(accessTokens),
-      db.select().from(recurringInvoices),
-    ]);
-
-    const backupData: BackupData = {
-      version: "1.0",
-      createdAt: new Date().toISOString(),
-      type,
-      data: {
-        invoices: allInvoices,
-        clients: allClients,
-        partners: allPartners,
-        partnerPayments: allPayments,
-        invoiceExpenses: allExpenses,
-        invoiceCalculations: allCalculations,
-        accessTokens: allTokens,
-        recurringInvoices: allRecurring,
-      },
-    };
-
-    const jsonContent = JSON.stringify(backupData, null, 2);
-    // Шифруем содержимое, если задан секрет. Конверт хранит createdAt/type
-    // открыто (для списка), а сами данные — в ciphertext.
-    const fileContent = backupCryptoEnabled
-      ? JSON.stringify(encryptBackup(jsonContent, { createdAt: backupData.createdAt, type }))
-      : jsonContent;
-    await fs.writeFile(filePath, fileContent, "utf8");
-
-    console.log(`[Backup] Created backup: ${filename}${backupCryptoEnabled ? " (encrypted)" : ""}`);
-
-    if (type === "auto") {
-      await this.cleanupOldBackups();
-    }
-
-    return {
-      id: filename,
-      filename,
-      createdAt: backupData.createdAt,
-      sizeBytes: Buffer.byteLength(fileContent, "utf8"),
-      type,
-    };
+    await this.ensureDirectory();
+    const createdAt = new Date().toISOString();
+    const filename = `backup-${type}-${createdAt.replace(/[:.]/g, "-")}-${randomUUID()}.json`;
+    const data = await this.database.transaction(async tx => {
+      const snapshot = {} as BackupData["data"];
+      for (const [key, table] of Object.entries(backupTables)) {
+        snapshot[key as TableKey] = await tx.select().from(table);
+      }
+      return snapshot;
+    }, { isolationLevel: "repeatable read", accessMode: "read only" });
+    const objects: Record<string, string> = {};
+    for (const row of data.signedActs) if (typeof row.objectKey === 'string' && !objects[row.objectKey]) objects[row.objectKey] = (await this.objects.get(row.objectKey)).toString('base64');
+    const backup: BackupData = { version: "3.0", createdAt, type, data, objects };
+    const json = JSON.stringify(backup);
+    const content = backupCryptoEnabled ? JSON.stringify(encryptBackup(json, { createdAt, type })) : json;
+    // Atomic publish: an interrupted write never appears as a restorable file.
+    const temporary = path.join(this.directory, `${filename}.tmp`);
+    await fs.writeFile(temporary, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    await fs.rename(temporary, path.join(this.directory, filename));
+    if (type === "auto") await this.cleanupOldBackups();
+    return { id: filename, filename, createdAt, type, sizeBytes: Buffer.byteLength(content) };
   }
 
   async listBackups(): Promise<BackupInfo[]> {
     try {
-      await ensureBackupDir();
-      const entries = await fs.readdir(BACKUP_DIR);
+      await this.ensureDirectory();
+      const entries = await fs.readdir(this.directory);
       const backups: BackupInfo[] = [];
 
       for (const filename of entries) {
         if (!filename.startsWith("backup-") || !filename.endsWith(".json")) continue;
-        const filePath = path.join(BACKUP_DIR, filename);
+        const filePath = path.join(this.directory, filename);
         const stat = await fs.stat(filePath);
 
         let createdAt = stat.mtime.toISOString();
@@ -193,7 +156,7 @@ export class BackupService {
 
   async downloadBackup(backupId: string): Promise<BackupData | null> {
     try {
-      const filePath = path.join(BACKUP_DIR, path.basename(backupId));
+      const filePath = path.join(this.directory, path.basename(backupId));
       const content = await fs.readFile(filePath, "utf8");
       const parsed = JSON.parse(content);
       // Зашифрованный конверт → расшифровать; легаси открытый JSON → как есть.
@@ -220,56 +183,31 @@ export class BackupService {
         return { success: false, message: "Бэкап не найден или повреждён (не удалось прочитать)" };
       }
 
-      // ВАЛИДАЦИЯ ДО удаления: не стираем прод из-за битого файла.
-      const structErr = validateBackupStructure(backupData);
-      if (structErr) {
-        return { success: false, message: `Восстановление отменено: ${structErr}` };
+      const validated = validateBackup(backupData);
+      // Keep a complete recovery point before replacing any records.
+      await this.createBackup("manual");
+      // Publish immutable, hash-verified files before making database references live.
+      for (const [key, encoded] of Object.entries(validated.objects)) {
+        const data = Buffer.from(encoded, 'base64');
+        if (objectDigest(data) !== key) throw new Error('Corrupt document object');
+        await this.objects.put(data);
       }
-
-      console.log(`[Backup] Starting restore from: ${backupId}`);
-
-      await db.transaction(async (tx) => {
-        await tx.delete(invoiceCalculations);
-        await tx.delete(invoiceExpenses);
-        await tx.delete(partnerPayments);
-        await tx.delete(recurringInvoices);
-        await tx.delete(invoices);
-        await tx.delete(clients);
-        await tx.delete(partners);
-        await tx.delete(accessTokens);
-
-        if (backupData.data.partners?.length) {
-          await tx.insert(partners).values(backupData.data.partners.map(reviveDates));
-        }
-        if (backupData.data.clients?.length) {
-          await tx.insert(clients).values(backupData.data.clients.map(reviveDates));
-        }
-        if (backupData.data.accessTokens?.length) {
-          await tx.insert(accessTokens).values(backupData.data.accessTokens.map(reviveDates));
-        }
-        if (backupData.data.invoices?.length) {
-          await tx.insert(invoices).values(backupData.data.invoices.map(reviveDates));
-        }
-        if (backupData.data.invoiceExpenses?.length) {
-          await tx.insert(invoiceExpenses).values(backupData.data.invoiceExpenses.map(reviveDates));
-        }
-        if (backupData.data.invoiceCalculations?.length) {
-          await tx
-            .insert(invoiceCalculations)
-            .values(backupData.data.invoiceCalculations.map(reviveDates));
-        }
-        if (backupData.data.partnerPayments?.length) {
-          await tx.insert(partnerPayments).values(backupData.data.partnerPayments.map(reviveDates));
-        }
-        if (backupData.data.recurringInvoices?.length) {
-          await tx
-            .insert(recurringInvoices)
-            .values(backupData.data.recurringInvoices.map(reviveDates));
+      await this.database.transaction(async tx => {
+        const tables = Object.values(backupTables);
+        await tx.execute(sql`LOCK TABLE ${sql.join(tables.map(table => sql`${table}`), sql`, `)} IN ACCESS EXCLUSIVE MODE`);
+        for (const table of [...tables].reverse()) await tx.delete(table);
+        for (const [key, table] of Object.entries(backupTables)) {
+          const rows = validated.data[key as TableKey];
+          // Restoring data must not resurrect old authenticated sessions.
+          const restored = key === "userSessions" ? rows.map(row => ({ ...row, revoked: true })) : rows;
+          for (let offset = 0; offset < restored.length; offset += 250) {
+            await tx.insert(table).values(restored.slice(offset, offset + 250));
+          }
         }
       });
 
       console.log(`[Backup] Restore completed successfully`);
-      return { success: true, message: "Данные успешно восстановлены" };
+      return { success: true, message: "Данные успешно восстановлены. Все сессии отозваны; войдите заново" };
     } catch (error) {
       console.error("[Backup] Error restoring backup:", error);
       return { success: false, message: `Ошибка восстановления: ${error}` };
@@ -278,7 +216,7 @@ export class BackupService {
 
   async deleteBackup(backupId: string): Promise<boolean> {
     try {
-      const filePath = path.join(BACKUP_DIR, path.basename(backupId));
+      const filePath = path.join(this.directory, path.basename(backupId));
       await fs.unlink(filePath);
       console.log(`[Backup] Deleted backup: ${backupId}`);
       return true;

@@ -9,7 +9,8 @@
  *   role, partnerId, clientId — same names
  */
 import { useCallback } from 'react';
-import { useAuthContext, type UserRole } from '@/contexts/AuthContext';
+import { type UserRole } from "@/contexts/AuthContext";
+import { useAuthContext } from "@/contexts/auth-context";
 
 export type { UserRole };
 

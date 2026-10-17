@@ -1,3 +1,4 @@
+import { schemePolicy } from "../shared/schemePolicies";
 /**
  * Role-based field visibility rules for invoice data.
  * Extracted from routes.ts for single-responsibility.
@@ -13,15 +14,8 @@ import { UserRole, InvoiceScheme } from "../shared/schema";
 // показывается ТОЛЬКО по агентским 30%/40% — у них % зашит в названии и
 // согласован с клиентом. По commission_based, partner_10 и partner_15
 // конкретный процент клиенту не показываем (это внутренние условия).
-const CLIENT_FINANCIAL_VISIBLE_SCHEMES: ReadonlySet<InvoiceScheme> = new Set([
-  'agency_30',
-  'agency_40',
-  'agency',
-]);
-
 export function isClientFinancialVisible(scheme: unknown): boolean {
-  return typeof scheme === 'string'
-    && CLIENT_FINANCIAL_VISIBLE_SCHEMES.has(scheme as InvoiceScheme);
+  return schemePolicy(scheme)?.kind === "agency";
 }
 
 /**
@@ -246,13 +240,13 @@ export function projectPartnersForRole(
  * including nested `calculations`, `partner`, and `client` objects.
  */
 export function projectInvoiceForRole(
-  invoice: Record<string, any>,
+  invoice: Record<string, unknown> & { scheme?: unknown; serviceType?: unknown; calculations?: Record<string, unknown>; partner?: Record<string, unknown>; client?: Record<string, unknown> },
   role: UserRole,
-): Record<string, any> {
+): Record<string, unknown> {
   const allowedInvoiceFields = ROLE_INVOICE_PERMISSIONS[role];
   const allowedCalcFields    = ROLE_CALCULATION_PERMISSIONS[role];
 
-  const result: Record<string, any> = {};
+  const result: Record<string, unknown> = {};
 
   for (const field of allowedInvoiceFields) {
     if (field in invoice) result[field] = invoice[field];
@@ -268,8 +262,8 @@ export function projectInvoiceForRole(
     && typeof invoice.calculations === 'object'
     && (role !== 'client' || isClientUsageVisible(invoice));
 
-  if (includeCalculations) {
-    const calc: Record<string, any> = {};
+  if (includeCalculations && invoice.calculations) {
+    const calc: Record<string, unknown> = {};
     const hideExecutorExpenses =
       role === 'client'
       && !isClientFinancialVisible(invoice.scheme)
@@ -298,18 +292,18 @@ export function projectInvoiceForRole(
   return result;
 }
 
-export function createAssistantInvoiceProjection(invoice: Record<string, any>) {
+export function createAssistantInvoiceProjection(invoice: Parameters<typeof projectInvoiceForRole>[0]) {
   return projectInvoiceForRole(invoice, 'assistant');
 }
 
-export function stripSensitiveFieldsForRole<T extends Record<string, any>>(
+export function stripSensitiveFieldsForRole<T extends Parameters<typeof projectInvoiceForRole>[0]>(
   data: T,
   role: UserRole,
 ): T {
   return projectInvoiceForRole(data, role) as T;
 }
 
-export function stripSensitiveFieldsFromList<T extends Record<string, any>>(
+export function stripSensitiveFieldsFromList<T extends Parameters<typeof projectInvoiceForRole>[0]>(
   data: T[],
   role: UserRole,
 ): T[] {
@@ -317,13 +311,13 @@ export function stripSensitiveFieldsFromList<T extends Record<string, any>>(
 }
 
 export function projectStatsForRole(
-  stats: Record<string, any>,
+  stats: object,
   role: UserRole,
-): Record<string, any> {
+): Record<string, unknown> {
   const allowedFields = ROLE_STATS_PERMISSIONS[role];
-  const result: Record<string, any> = {};
+  const result: Record<string, unknown> = {};
   for (const field of allowedFields) {
-    if (field in stats) result[field] = stats[field];
+    if (field in stats) result[field] = (stats as Record<string, unknown>)[field];
   }
   return result;
 }

@@ -1,6 +1,7 @@
+import { CommandError } from "../lib/commandError";
 /**
  * Invoice Repository
- * Core CRUD for invoices, invoice_calculations, invoice_expenses, invoice_documents.
+ * Core CRUD for invoices, invoice_calculations, invoice_expenses.
  * Includes row-level ownership enforcement (IDOR protection) in getInvoice().
  * All functions accept `db` as first parameter — no class dependency.
  */
@@ -14,15 +15,16 @@ import {
   UserRole, InvoiceScheme,
 } from "../../shared/schema";
 import {
-  eq, and, desc, isNull, or, isNotNull, sql,
+  eq, and, desc, asc, inArray, isNull, or, isNotNull, sql,
 } from "drizzle-orm";
+import { invoiceFilters, invoiceOrder, invoiceScope, type InvoiceQuery } from "../invoiceQuery";
 import { calculateFinancials, parseNum } from "../../shared/financialEngine";
 
 type DB = typeof _db;
 // Тип транзакции Drizzle. Хелперы принимают DB | Tx, чтобы одинаково
 // работать и вне, и внутри db.transaction(...).
 type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
-type DBorTx = DB | Tx;
+export type DBorTx = DB | Tx;
 type InvoiceWithRelations = Invoice & {
   calculations?: InvoiceCalculation;
   partner?: Partner;
@@ -80,7 +82,7 @@ export function applyTransferOverrides(
 
 /** Сумма всех приходов и расходов по переносам — нетто для счёта. */
 export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise<number> {
-  const res: any = await db.execute(sql`
+  const res = await db.execute<{ balance: string }>(sql`
     SELECT
       COALESCE((SELECT SUM(amount)::numeric FROM invoice_transfers WHERE to_invoice_id   = ${invoiceId}), 0) -
       COALESCE((SELECT SUM(amount)::numeric FROM invoice_transfers WHERE from_invoice_id = ${invoiceId}), 0)
@@ -174,6 +176,10 @@ export function calculateInvoiceServer(
   );
 
   const r: Partial<InvoiceCalculation> = {
+    commissionRate: null, commissionAmount: null, amountToAdmin: null,
+    agencyMargin: null, partnerShareFromMargin: null, adminShareFromMargin: null,
+    clientBaseAfterMargin: null, clientRemaining: null,
+    clientSpent: (f.clientSpent ?? executorExpenses).toFixed(2),
     clientBill:            f.clientBill.toString(),
     executorExpensesTotal: f.executorExpensesTotal.toString(),
     partnerTransferDue:    f.partnerTransferDue.toString(),
@@ -229,69 +235,44 @@ async function _getInvoiceRaw(db: DBorTx, id: string): Promise<InvoiceWithRelati
   };
 }
 
-/** Recalculate stored calculations after expense changes */
-async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<void> {
-  const expenses = await _getInvoiceExpenses(db, invoiceId);
-  const total                = expenses.reduce((s, e) => s + parseNum(e.amount), 0);
-  const expensesPaidByPartner = expenses.filter(e => e.paidByAdmin !== true).reduce((s, e) => s + parseNum(e.amount), 0);
-  const expensesPaidByAdmin   = expenses.filter(e => e.paidByAdmin === true).reduce((s, e) => s + parseNum(e.amount), 0);
-
-  const invoiceRaw = await _getInvoiceRaw(db, invoiceId);
-  if (!invoiceRaw) return;
-  // Прожитые периоды следуют за расходами — до оверрайда, чтобы остаток
-  // считался от актуального periodsUsed.
-  const invoice = await _syncPeriodsUsed(db, invoiceRaw, expenses.length);
-
-  const [existing] = await db
-    .select()
-    .from(invoiceCalculations)
-    .where(eq(invoiceCalculations.invoiceId, invoiceId))
-    .limit(1);
-  if (!existing) return;
-
-  const storedBill     = parseNum(existing.clientBill);
-  const commissionRate = existing.commissionRate ? parseNum(existing.commissionRate) : undefined;
-  const plannedExp     = parseNum(invoice.plannedExpenses);
-
-  // Для periodic сумма счёта могла измениться (цена за период или
-  // количество периодов) — пересчитываем clientBill и в invoices, и в
-  // invoice_calculations.
-  const periodicBill = derivePeriodicClientBill(invoice);
-  const effectiveBill = periodicBill ?? storedBill;
-
-  // Гибкая agency: партнёр из invoices.partnerCommissionRate, маржа из calc.commissionRate.
-  const isAgencyFlex = invoice.scheme === 'agency';
-  const partnerRate  = isAgencyFlex ? parseNum(invoice.partnerCommissionRate) : commissionRate;
-  const marginRate   = isAgencyFlex ? (commissionRate ?? 0) : 0;
-
-  let computed = calculateInvoiceServer(
-    invoice.scheme as InvoiceScheme,
-    effectiveBill,
-    partnerRate,
-    total,
-    expensesPaidByPartner,
-    expensesPaidByAdmin,
-    plannedExp,
-    marginRate,
-  );
-  computed = applyPeriodicOverrides(invoice, computed);
-  const transferBalance = await getTransferBalance(db, invoiceId);
-  computed = applyTransferOverrides(transferBalance, computed);
-
-  await db.update(invoiceCalculations)
-    .set({ ...computed, updatedAt: new Date() })
-    .where(eq(invoiceCalculations.invoiceId, invoiceId));
-
-  if (periodicBill !== undefined && periodicBill !== storedBill) {
-    await db.update(invoices)
-      .set({ clientBill: periodicBill.toString(), updatedAt: new Date() })
-      .where(eq(invoices.id, invoiceId));
-  }
+/** All writers lock parent rows in UUID order BEFORE reading financial facts. */
+export async function lockInvoices(db: DBorTx, ids: string[]) {
+  return db.select({ id: invoices.id }).from(invoices)
+    .where(inArray(invoices.id, [...new Set(ids)]))
+    .orderBy(asc(invoices.id)).for("update");
 }
 
-/** Пересчитать счёт по последним переносам — публичная обёртка над _recalculateInvoiceExpenses. */
-export async function recalcInvoice(db: DB, invoiceId: string): Promise<void> {
-  await _recalculateInvoiceExpenses(db, invoiceId);
+/** Sole persisted projection: terms + expense ledger + transfers. Caller holds parent lock. */
+async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<InvoiceCalculation | null> {
+  const invoiceRaw = await _getInvoiceRaw(db, invoiceId);
+  if (!invoiceRaw) return null;
+  const expenses = await _getInvoiceExpenses(db, invoiceId);
+  const invoice = await _syncPeriodsUsed(db, invoiceRaw, expenses.length);
+  const total = expenses.reduce((sum, e) => sum + parseNum(e.amount), 0);
+  const byPartner = expenses.filter(e => !e.paidByAdmin).reduce((sum, e) => sum + parseNum(e.amount), 0);
+  const byAdmin = expenses.filter(e => e.paidByAdmin).reduce((sum, e) => sum + parseNum(e.amount), 0);
+  const existing = invoice.calculations;
+  const bill = derivePeriodicClientBill(invoice) ?? parseNum(invoice.clientBill ?? existing?.clientBill);
+  const partnerRate = parseNum(invoice.partnerCommissionRate ?? existing?.commissionRate);
+  const marginRate = invoice.scheme === 'agency' ? parseNum(existing?.commissionRate) : 0;
+  let computed = calculateInvoiceServer(invoice.scheme, bill, partnerRate, total, byPartner, byAdmin, parseNum(invoice.plannedExpenses), marginRate);
+  computed = applyPeriodicOverrides(invoice, computed);
+  computed = applyTransferOverrides(await getTransferBalance(db, invoiceId), computed);
+  await db.update(invoices).set({ clientBill: bill.toFixed(2), updatedAt: new Date() }).where(eq(invoices.id, invoiceId));
+  if (existing) {
+    const [updated] = await db.update(invoiceCalculations).set({ ...computed, updatedAt: new Date() })
+      .where(eq(invoiceCalculations.invoiceId, invoiceId)).returning();
+    return updated;
+  }
+  const [created] = await db.insert(invoiceCalculations).values({ invoiceId, clientBill: bill.toFixed(2), ...computed }).returning();
+  return created;
+}
+
+export async function recalcInvoice(db: DBorTx, invoiceId: string): Promise<void> {
+  await db.transaction(async tx => {
+    await lockInvoices(tx, [invoiceId]);
+    await _recalculateInvoiceExpenses(tx, invoiceId);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -302,46 +283,31 @@ export async function recalcInvoice(db: DB, invoiceId: string): Promise<void> {
  * List invoices with role-based row filtering.
  * Partners see only their own; clients see only theirs; assistants exclude hidden; accountants see only hidden.
  */
-export async function getInvoices(
-  db: DB,
-  role: UserRole,
-  partnerId?: string,
-  clientId?: string,
-): Promise<InvoiceWithRelations[]> {
-  // Deny-by-default: роли partner/client ОБЯЗАНЫ иметь свой scope-id.
-  // Без него нельзя проваливаться в общий (неотфильтрованный) запрос —
-  // иначе токен без partnerId/clientId увидел бы ВСЕ счета (IDOR).
-  if ((role === 'partner' && !partnerId) || (role === 'client' && !clientId)) {
-    return [];
-  }
+export async function getInvoices(db: DBorTx, role: UserRole, partnerId?: string, clientId?: string, filters: Partial<InvoiceQuery> = {}): Promise<InvoiceWithRelations[]> {
+  const actor = { role, partnerId, clientId };
+  const query = db.select({ invoice: invoices, calculations: invoiceCalculations, partner: partners, client: clients })
+    .from(invoices).leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+    .leftJoin(partners, eq(invoices.partnerId, partners.id)).leftJoin(clients, eq(invoices.clientId, clients.id))
+    .where(invoiceFilters(actor, { ...filters, ...(role === 'admin' && partnerId ? { partnerId } : {}) })).orderBy(invoiceOrder(filters)).$dynamic();
+  if (filters.page) query.limit(Math.min(filters.limit ?? 100, 200)).offset((filters.page - 1) * Math.min(filters.limit ?? 100, 200));
+  const rows = await query;
+  return rows.map(r => ({ ...r.invoice, calculations: r.calculations ?? undefined, partner: r.partner ?? undefined, client: r.client ?? undefined }));
+}
 
-  const baseQuery = db
-    .select({ invoice: invoices, calculations: invoiceCalculations, partner: partners, client: clients })
-    .from(invoices)
-    .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-    .leftJoin(partners, eq(invoices.partnerId, partners.id))
-    .leftJoin(clients, eq(invoices.clientId, clients.id))
-    .orderBy(desc(invoices.createdAt));
-
-  let results;
-  if (partnerId) {
-    results = await baseQuery.where(eq(invoices.partnerId, partnerId));
-  } else if (role === 'client' && clientId) {
-    results = await baseQuery.where(eq(invoices.clientId, clientId));
-  } else if (role === 'assistant') {
-    results = await baseQuery.where(or(isNull(invoices.hideFromAssistant), eq(invoices.hideFromAssistant, false)));
-  } else if (role === 'accountant') {
-    results = await baseQuery.where(eq(invoices.hideFromAssistant, true));
-  } else {
-    results = await baseQuery;
-  }
-
-  return results.map(r => ({
-    ...r.invoice,
-    calculations: r.calculations || undefined,
-    partner:      r.partner      || undefined,
-    client:       r.client       || undefined,
-  }));
+export async function getInvoiceListMetadata(db: DBorTx, actor: { role: UserRole; partnerId?: string; clientId?: string }, filters: Partial<InvoiceQuery>) {
+  const [count] = await db.select({ total: sql<number>`COUNT(*)::int` }).from(invoices)
+    .leftJoin(clients, eq(clients.id, invoices.clientId)).leftJoin(partners, eq(partners.id, invoices.partnerId)).where(invoiceFilters(actor, filters));
+  const [counts] = await db.select({
+    all: sql<number>`COUNT(*)::int`, draft: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'draft')::int`,
+    sent: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'sent')::int`, paid: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'paid')::int`,
+    cancelled: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'cancelled')::int`,
+    overdue: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'sent' AND ${invoices.actualPaymentDate} IS NULL AND ${invoices.paymentDate} < CURRENT_DATE)::int`,
+  }).from(invoices).where(invoiceScope(actor));
+  const clientOptions = await db.selectDistinct({ id: clients.id, name: clients.name }).from(invoices)
+    .innerJoin(clients, eq(clients.id, invoices.clientId)).where(invoiceScope(actor)).orderBy(clients.name);
+  const partnerOptions = actor.role === 'client' ? [] : await db.selectDistinct({ id: partners.id, name: partners.name }).from(invoices)
+    .innerJoin(partners, eq(partners.id, invoices.partnerId)).where(invoiceScope(actor)).orderBy(partners.name);
+  return { total: count.total, statusCounts: counts, clients: clientOptions, partners: partnerOptions };
 }
 
 /**
@@ -353,7 +319,7 @@ export async function getInvoices(
  * Admin/no-role: unrestricted.
  */
 export async function getInvoice(
-  db: DB,
+  db: DBorTx,
   id: string,
   role?: UserRole,
   partnerId?: string,
@@ -435,144 +401,87 @@ export async function getInvoicesWithCalculations(db: DB): Promise<Array<{
 }
 
 export async function createInvoice(
-  db: DB,
+  db: DBorTx,
   invoice: InsertInvoice,
-  calculations: Partial<InvoiceCalculation>,
+  calculations: Partial<InvoiceCalculation> = {},
 ): Promise<Invoice> {
-  // Для periodic сумма счёта = price × periods (предоплата за всё) —
-  // переписываем clientBill ДО вставки строки счёта и расчёта.
-  const periodicBill = derivePeriodicClientBill(invoice);
-  if (periodicBill !== undefined) {
-    invoice = { ...invoice, clientBill: periodicBill.toString() };
-  }
-
-  // Счёт и строка расчётов пишутся атомарно: либо оба, либо ни одного —
-  // иначе при сбое между вставками остаётся счёт-сирота без calculations.
-  return db.transaction(async (tx) => {
-    const [created] = await tx.insert(invoices).values(invoice).returning();
-
-    const clientBill     = periodicBill ?? parseNum(calculations.clientBill);
-    const commissionRate = calculations.commissionRate ? parseNum(calculations.commissionRate) : undefined;
-    const executorExpenses = parseNum(calculations.executorExpensesTotal);
-    const plannedExp     = parseNum(created.plannedExpenses);
-
-    // Гибкая agency: маржа приходит в calculations.commissionRate, а процент
-    // партнёра — в invoices.partnerCommissionRate (скрыт от клиента).
-    const isAgencyFlex = created.scheme === 'agency';
-    const partnerRate  = isAgencyFlex ? parseNum(created.partnerCommissionRate) : commissionRate;
-    const marginRate   = isAgencyFlex ? (commissionRate ?? 0) : 0;
-
-    let computed = calculateInvoiceServer(
-      created.scheme as InvoiceScheme,
-      clientBill,
-      partnerRate,
-      executorExpenses,
-      0,
-      0,
-      plannedExp,
-      marginRate,
-    );
-    computed = applyPeriodicOverrides(created, computed);
-
-    await tx.insert(invoiceCalculations).values({ invoiceId: created.id, clientBill: computed.clientBill || "0", ...computed });
-    return created;
+  return db.transaction(async tx => {
+    const [created] = await tx.insert(invoices).values({
+      ...invoice,
+      clientBill: invoice.clientBill ?? calculations.clientBill ?? "0",
+      partnerCommissionRate: invoice.partnerCommissionRate ?? (invoice.scheme === "commission_based" ? calculations.commissionRate : null),
+    }).returning();
+    await tx.insert(invoiceCalculations).values({
+      invoiceId: created.id, clientBill: created.clientBill ?? "0",
+      commissionRate: calculations.commissionRate ?? null,
+    });
+    await _recalculateInvoiceExpenses(tx, created.id);
+    const [result] = await tx.select().from(invoices).where(eq(invoices.id, created.id));
+    return result;
   });
 }
 
+/** Change terms and projection in ONE transaction, including legacy calculation input. */
 export async function updateInvoice(
-  db: DB,
+  db: DBorTx,
   id: string,
-  invoice: Partial<InsertInvoice>,
+  changes: Partial<InsertInvoice>,
+  calculations: Partial<InvoiceCalculation> = {},
 ): Promise<Invoice | null> {
-  const [updated] = await db.update(invoices)
-    .set({ ...invoice, updatedAt: new Date() })
-    .where(eq(invoices.id, id))
-    .returning();
-  return updated || null;
+  return db.transaction(async tx => {
+    await lockInvoices(tx, [id]);
+    const current = await _getInvoiceRaw(tx, id);
+    if (!current) return null;
+    if (changes.clientId && changes.clientId !== current.clientId) {
+      const [transfer] = await tx.select({ id: invoiceTransfers.id }).from(invoiceTransfers)
+        .where(or(eq(invoiceTransfers.fromInvoiceId, id), eq(invoiceTransfers.toInvoiceId, id))).limit(1);
+      if (transfer) throw new CommandError("Сначала отмените переносы бюджета перед сменой клиента");
+    }
+    const scheme = changes.scheme ?? current.scheme;
+    const terms = { ...changes };
+    if (terms.clientBill === undefined && calculations.clientBill != null) terms.clientBill = calculations.clientBill;
+    if (scheme === "commission_based" && terms.partnerCommissionRate === undefined && calculations.commissionRate != null) {
+      terms.partnerCommissionRate = calculations.commissionRate;
+    }
+    await tx.update(invoices).set({ ...terms, updatedAt: new Date() }).where(eq(invoices.id, id));
+    if (scheme === "agency" && calculations.commissionRate != null) {
+      await tx.update(invoiceCalculations).set({ commissionRate: calculations.commissionRate }).where(eq(invoiceCalculations.invoiceId, id));
+    }
+    await _recalculateInvoiceExpenses(tx, id);
+    const [updated] = await tx.select().from(invoices).where(eq(invoices.id, id));
+    return updated;
+  });
 }
 
-export async function updateInvoiceCalculations(
-  db: DB,
-  invoiceId: string,
-  calculations: Partial<InvoiceCalculation>,
-): Promise<InvoiceCalculation | null> {
-  const invoice = await _getInvoiceRaw(db, invoiceId);
-  if (!invoice) return null;
-
-  const [existing] = await db
-    .select()
-    .from(invoiceCalculations)
-    .where(eq(invoiceCalculations.invoiceId, invoiceId))
-    .limit(1);
-
-  const clientBill      = parseNum(calculations.clientBill ?? existing?.clientBill);
-  const commissionRate  = calculations.commissionRate
-    ? parseNum(calculations.commissionRate)
-    : (existing?.commissionRate ? parseNum(existing.commissionRate) : undefined);
-  const executorExpenses = parseNum(calculations.executorExpensesTotal ?? existing?.executorExpensesTotal);
-
-  const expenses              = await _getInvoiceExpenses(db, invoiceId);
-  const expensesPaidByPartner = expenses.filter(e => e.paidByAdmin !== true).reduce((s, e) => s + parseNum(e.amount), 0);
-  const expensesPaidByAdmin   = expenses.filter(e => e.paidByAdmin === true).reduce((s, e) => s + parseNum(e.amount), 0);
-  const plannedExp            = parseNum(invoice.plannedExpenses);
-  // periodsUsed — производное от расходов и здесь тоже (PATCH periodic-полей).
-  const invoiceSynced = await _syncPeriodsUsed(db, invoice, expenses.length);
-
-  // Для periodic clientBill = price × periods, перекрываем вход в расчёт.
-  const periodicBill = derivePeriodicClientBill(invoice);
-  const effectiveBill = periodicBill ?? clientBill;
-
-  // Гибкая agency: partnerCommRate — из invoices.partnerCommissionRate,
-  // маржа (agencyMarginRate) — из commissionRate (calc/вход).
-  const isAgencyFlex = invoice.scheme === 'agency';
-  const partnerRate  = isAgencyFlex ? parseNum(invoice.partnerCommissionRate) : commissionRate;
-  const marginRate   = isAgencyFlex ? (commissionRate ?? 0) : 0;
-
-  let computed = calculateInvoiceServer(
-    invoice.scheme as InvoiceScheme,
-    effectiveBill,
-    partnerRate,
-    executorExpenses,
-    expensesPaidByPartner,
-    expensesPaidByAdmin,
-    plannedExp,
-    marginRate,
-  );
-  computed = applyPeriodicOverrides(invoiceSynced, computed);
-
-  if (existing) {
-    const [updated] = await db.update(invoiceCalculations)
-      .set({ ...computed, updatedAt: new Date() })
-      .where(eq(invoiceCalculations.invoiceId, invoiceId))
-      .returning();
-    return updated || null;
-  } else {
-    const [created] = await db.insert(invoiceCalculations)
-      .values({ invoiceId, clientBill: computed.clientBill || "0", ...computed })
-      .returning();
-    return created;
-  }
+export async function updateInvoiceCalculations(db: DBorTx, invoiceId: string, calculations: Partial<InvoiceCalculation>): Promise<InvoiceCalculation | null> {
+  return db.transaction(async tx => {
+    if (!await updateInvoice(tx, invoiceId, {}, calculations)) return null;
+    const [result] = await tx.select().from(invoiceCalculations).where(eq(invoiceCalculations.invoiceId, invoiceId));
+    return result;
+  });
 }
 
-export async function getInvoiceExpenses(db: DB, invoiceId: string): Promise<InvoiceExpense[]> {
+export async function getInvoiceExpenses(db: DBorTx, invoiceId: string): Promise<InvoiceExpense[]> {
   return _getInvoiceExpenses(db, invoiceId);
 }
 
-export async function getInvoiceExpense(db: DB, id: string): Promise<InvoiceExpense | null> {
+export async function getInvoiceExpense(db: DBorTx, id: string): Promise<InvoiceExpense | null> {
   const [expense] = await db.select().from(invoiceExpenses)
     .where(eq(invoiceExpenses.id, id)).limit(1);
   return expense ? plainExpense(expense) : null;
 }
 
-export async function getAllExpenses(db: DB): Promise<InvoiceExpense[]> {
-  const rows = await db.select().from(invoiceExpenses).orderBy(desc(invoiceExpenses.date));
+export async function getAllExpenses(db: DB, invoiceIds?: string[]): Promise<InvoiceExpense[]> {
+  if (invoiceIds?.length === 0) return [];
+  const rows = await db.select().from(invoiceExpenses).where(invoiceIds ? inArray(invoiceExpenses.invoiceId, invoiceIds) : undefined).orderBy(desc(invoiceExpenses.date));
   return rows.map(plainExpense);
 }
 
-export async function createInvoiceExpense(db: DB, expense: InsertInvoiceExpense): Promise<InvoiceExpense> {
+export async function createInvoiceExpense(db: DBorTx, expense: InsertInvoiceExpense): Promise<InvoiceExpense> {
   // Вставка расхода + пересчёт calculations — одна транзакция, чтобы счёт
   // не остался с расходом, но без обновлённого остатка.
   return db.transaction(async (tx) => {
+    await lockInvoices(tx, [expense.invoiceId]);
     const [created] = await tx.insert(invoiceExpenses).values(expense).returning();
     await _recalculateInvoiceExpenses(tx, expense.invoiceId);
     return created;
@@ -580,7 +489,7 @@ export async function createInvoiceExpense(db: DB, expense: InsertInvoiceExpense
 }
 
 export async function updateInvoiceExpense(
-  db: DB,
+  db: DBorTx,
   id: string,
   updates: Partial<InsertInvoiceExpense>,
 ): Promise<InvoiceExpense | null> {
@@ -588,8 +497,10 @@ export async function updateInvoiceExpense(
   if (!expense) return null;
 
   return db.transaction(async (tx) => {
+    await lockInvoices(tx, [expense.invoiceId]);
+    const { invoiceId: _immutableParent, ...editable } = updates;
     const [updated] = await tx.update(invoiceExpenses)
-      .set(updates)
+      .set(editable)
       .where(eq(invoiceExpenses.id, id))
       .returning();
 
@@ -598,10 +509,11 @@ export async function updateInvoiceExpense(
   });
 }
 
-export async function deleteInvoiceExpense(db: DB, id: string): Promise<void> {
+export async function deleteInvoiceExpense(db: DBorTx, id: string): Promise<void> {
   const [expense] = await db.select().from(invoiceExpenses).where(eq(invoiceExpenses.id, id)).limit(1);
   if (expense) {
     await db.transaction(async (tx) => {
+      await lockInvoices(tx, [expense.invoiceId]);
       await tx.delete(invoiceExpenses).where(eq(invoiceExpenses.id, id));
       await _recalculateInvoiceExpenses(tx, expense.invoiceId);
     });
@@ -614,7 +526,7 @@ export async function deleteInvoiceExpense(db: DB, id: string): Promise<void> {
  * не больше «доступно» на счёте-источнике (clientRemaining).
  */
 export async function createInvoiceTransfer(
-  db: DB,
+  db: DBorTx,
   args: { fromInvoiceId: string; toInvoiceId: string; amount: number; notes?: string | null; createdBy: string },
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const { fromInvoiceId, toInvoiceId, amount, notes, createdBy } = args;
@@ -625,6 +537,7 @@ export async function createInvoiceTransfer(
   // под FOR UPDATE, поэтому параллельные переносы сериализуются и не могут
   // оба пройти проверку остатка и увести счёт в минус (TOCTOU-гонка).
   return db.transaction(async (tx) => {
+    await lockInvoices(tx, [fromInvoiceId, toInvoiceId]);
     const fromInv = await _getInvoiceRaw(tx, fromInvoiceId);
     const toInv   = await _getInvoiceRaw(tx, toInvoiceId);
     if (!fromInv || !toInv) return { ok: false, error: "Счёт не найден" };
@@ -659,17 +572,18 @@ export async function createInvoiceTransfer(
   });
 }
 
-export async function deleteInvoiceTransfer(db: DB, id: string): Promise<void> {
+export async function deleteInvoiceTransfer(db: DBorTx, id: string): Promise<void> {
   const [row] = await db.select().from(invoiceTransfers).where(eq(invoiceTransfers.id, id)).limit(1);
   if (!row) return;
   await db.transaction(async (tx) => {
+    await lockInvoices(tx, [row.fromInvoiceId, row.toInvoiceId]);
     await tx.delete(invoiceTransfers).where(eq(invoiceTransfers.id, id));
     await _recalculateInvoiceExpenses(tx, row.fromInvoiceId);
     await _recalculateInvoiceExpenses(tx, row.toInvoiceId);
   });
 }
 
-export async function getInvoiceTransfers(db: DB, invoiceId: string) {
+export async function getInvoiceTransfers(db: DBorTx, invoiceId: string) {
   // Все переносы, в которых счёт участвует как источник или получатель.
   // Возвращаем direction: 'out' (со счёта) или 'in' (на счёт), счёт-партнёр.
   const rows = await db.execute(sql`
@@ -686,23 +600,27 @@ export async function getInvoiceTransfers(db: DB, invoiceId: string) {
     WHERE t.from_invoice_id = ${invoiceId} OR t.to_invoice_id = ${invoiceId}
     ORDER BY t.created_at DESC
   `);
-  return (rows.rows ?? rows) as any[];
+  return (rows.rows ?? rows) as { id: string; amount: string; notes: string | null; created_at: Date; direction: "in" | "out"; counterparty_id: string; counterparty_number: string; counterparty_title: string | null }[];
 }
 
-export async function deleteInvoice(db: DB, id: string): Promise<void> {
-  await db.delete(invoiceExpenses).where(eq(invoiceExpenses.invoiceId, id));
-  await db.delete(invoiceCalculations).where(eq(invoiceCalculations.invoiceId, id));
-  await db.delete(invoices).where(eq(invoices.id, id));
+export async function deleteInvoice(db: DBorTx, id: string): Promise<void> {
+  await db.transaction(async tx => {
+    await lockInvoices(tx, [id]);
+    const [transfer] = await tx.select({ id: invoiceTransfers.id }).from(invoiceTransfers)
+      .where(or(eq(invoiceTransfers.fromInvoiceId, id), eq(invoiceTransfers.toInvoiceId, id))).limit(1);
+    if (transfer) throw new CommandError("Сначала отмените переносы бюджета перед удалением счёта");
+    await tx.delete(invoices).where(eq(invoices.id, id));
+  });
 }
 
-export async function deleteDocument(db: DB, id: string): Promise<void> {
-  await db.execute(sql`DELETE FROM invoice_documents WHERE id = ${id}`);
-}
-
-export async function generateInvoiceNumber(db: DB): Promise<string> {
-  const result = await db.select({ count: sql<number>`count(*)` }).from(invoices);
-  const n = Number(result[0]?.count || 0) + 1;
-  return `INV-${new Date().getFullYear()}-${String(n).padStart(4, '0')}`;
+export async function generateInvoiceNumber(db: DBorTx): Promise<string> {
+  const year = new Date().getFullYear();
+  const result = await db.execute<{ last_number: number }>(sql`
+    INSERT INTO invoice_number_counters (year, last_number) VALUES (${year}, 1)
+    ON CONFLICT (year) DO UPDATE SET last_number = invoice_number_counters.last_number + 1
+    RETURNING last_number
+  `);
+  return `INV-${year}-${String(result.rows[0].last_number).padStart(4, '0')}`;
 }
 
 /**
@@ -712,7 +630,7 @@ export async function generateInvoiceNumber(db: DB): Promise<string> {
  * пересчёт. Возвращает число починенных.
  */
 export async function healPeriodicUsage(db: DB): Promise<number> {
-  const res: any = await db.execute(sql`
+  const res = await db.execute<{ id: string }>(sql`
     SELECT i.id
     FROM invoices i
     WHERE i.service_type = 'periodic'
@@ -722,7 +640,7 @@ export async function healPeriodicUsage(db: DB): Promise<number> {
         (SELECT COUNT(*) FROM invoice_expenses e WHERE e.invoice_id = i.id)
       )
   `);
-  const rows: Array<{ id: string }> = res.rows ?? res;
+  const rows = res.rows;
   for (const r of rows) await recalcInvoice(db, r.id);
   return rows.length;
 }

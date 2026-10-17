@@ -1,3 +1,4 @@
+import { objectStore, decodeDocument, type ObjectStore } from "../services/objectStore";
 /**
  * Signed Acts & Assistant Bonus Repository
  * Covers signed acts (executor/company) and bonus payment tracking.
@@ -11,7 +12,7 @@ import {
   ActType,
 } from "../../shared/schema";
 import {
-  eq, and, desc, isNull, or, inArray, sql,
+  eq, and, desc, isNull, or, inArray, sql, getTableColumns,
 } from "drizzle-orm";
 import { parseNum } from "../../shared/financialEngine";
 
@@ -21,8 +22,9 @@ type DB = typeof _db;
 // Signed Acts
 // ---------------------------------------------------------------------------
 
-export async function createSignedAct(db: DB, act: InsertSignedAct): Promise<SignedAct> {
-  const [created] = await db.insert(signedActs).values(act).returning();
+export async function createSignedAct(db: DB, act: InsertSignedAct, objects: ObjectStore = objectStore): Promise<SignedAct> {
+  const objectKey = !act.isLink && act.fileData ? await objects.put(decodeDocument(act.fileData)) : null;
+  const [created] = await db.insert(signedActs).values({ ...act, objectKey, fileData: null }).returning();
   return created;
 }
 
@@ -30,13 +32,14 @@ export async function getSignedActsByInvoice(
   db: DB,
   invoiceId: string,
   actType?: ActType,
-): Promise<SignedAct[]> {
+): Promise<Omit<SignedAct, "fileData" | "objectKey">[]> {
+  const { fileData: _binary, objectKey: _key, ...metadata } = getTableColumns(signedActs);
   if (actType) {
-    return db.select().from(signedActs)
+    return db.select(metadata).from(signedActs)
       .where(and(eq(signedActs.invoiceId, invoiceId), eq(signedActs.actType, actType)))
       .orderBy(desc(signedActs.createdAt));
   }
-  return db.select().from(signedActs)
+  return db.select(metadata).from(signedActs)
     .where(eq(signedActs.invoiceId, invoiceId))
     .orderBy(desc(signedActs.createdAt));
 }
@@ -168,3 +171,31 @@ export async function getUnpaidBonusTotal(db: DB): Promise<{
 
 /** No-op — kept for backwards compatibility. Payments tracked via assistant_bonus_payments table. */
 export async function markBonusesAsPaid(_db: DB, _invoiceIds: string[]): Promise<void> {}
+
+/** Read bytes only after the HTTP layer has authorized the parent invoice. */
+export async function openSignedActFile(db: DB, id: string, objects: ObjectStore = objectStore) {
+  const act = await getSignedAct(db, id);
+  if (!act || act.isLink) return null;
+  const stream = act.objectKey ? await objects.open(act.objectKey)
+    : act.fileData ? (await import('node:stream')).Readable.from(decodeDocument(act.fileData)) : null;
+  return stream ? { stream, fileName: act.fileName, mimeType: act.mimeType } : null;
+}
+export async function readSignedActData(db: DB, id: string, objects: ObjectStore = objectStore) {
+  const act = await getSignedAct(db, id);
+  if (!act) return null;
+  return act.objectKey ? `data:${act.mimeType || 'application/octet-stream'};base64,${(await objects.get(act.objectKey)).toString('base64')}` : act.fileData;
+}
+export async function migrateDocumentObjects(db: DB, objects: ObjectStore = objectStore) {
+  let migrated = 0;
+  for (;;) {
+    const changed = await db.transaction(async tx => {
+      const [act] = await tx.select().from(signedActs).where(and(isNull(signedActs.objectKey), sql`${signedActs.fileData} IS NOT NULL`)).limit(1).for('update', { skipLocked: true });
+      if (!act) return false;
+      const key = await objects.put(decodeDocument(act.fileData!));
+      await tx.update(signedActs).set({ objectKey: key, fileData: null }).where(eq(signedActs.id, act.id));
+      return true;
+    });
+    if (!changed) return { migrated };
+    migrated++;
+  }
+}

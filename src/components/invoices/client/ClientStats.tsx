@@ -737,7 +737,7 @@ export const ClientStats = ({ dateFrom, dateTo }: ClientStatsProps) => {
           onOpenChange={(o) => { if (!o) setMsgTarget(null); }}
           invoiceId={msgTarget.invoiceId}
           invoiceNumber={msgTarget.invoiceNumber}
-          currentRole={currentRole as any}
+          currentRole={currentRole ?? undefined}
         />
       )}
     </div>

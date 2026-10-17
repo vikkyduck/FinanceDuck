@@ -4,16 +4,13 @@ import { createInvoice } from "./invoiceRepo";
 import { getPartnerHeroMetrics } from "./dashboardRepo";
 import { partners, partnerPayments, signedActs } from "../../shared/schema";
 
-// Интеграционные тесты для getPartnerHeroMetrics, вынесенного из storage.ts.
-// Перенос дословный, поэтому тесты фиксируют ТЕКУЩЕЕ поведение, включая два
-// «мёртвых» поля (reservedForExpenses / yearlyCommission всегда 0 — латентный
-// баг: читаются несуществующие поля invoice_calculations, см. отдельную задачу).
+// Проверяем долг, резерв на расходы и годовую комиссию по первичным данным.
 
 let db: TestDb;
 let close: () => Promise<void>;
 let partnerId: string;
 let clientId: string;
-const asDb = () => db as any;
+const asDb = () => db as unknown as typeof import("../db").db;
 const CREATED_BY = "00000000-0000-0000-0000-000000000001";
 
 beforeEach(async () => {
@@ -27,7 +24,7 @@ async function seedPaidInvoice(num: string, clientBill: string, pId = partnerId)
     invoiceNumber: num, clientId, partnerId: pId,
     scheme: "commission_based" as const, createdBy: CREATED_BY,
     status: "paid",
-  } as any, { clientBill });
+  }, { clientBill });
 }
 
 describe("getPartnerHeroMetrics", () => {
@@ -74,12 +71,16 @@ describe("getPartnerHeroMetrics", () => {
     expect(m.signedActsCount).toBe(1);
   });
 
-  it("ДОКУМЕНТИРУЕТ баг: reservedForExpenses и yearlyCommission всегда 0", async () => {
-    await seedPaidInvoice("INV-6", "1000");
+  it("считает резерв по плану и расходам партнёра, комиссию по действующей ставке", async () => {
+    const invoice = await createInvoice(asDb(), {
+      invoiceNumber: "INV-6", clientId, partnerId, scheme: "commission_based",
+      partnerCommissionRate: "20", clientBill: "1000", plannedExpenses: "300",
+      createdBy: CREATED_BY, status: "paid",
+    });
+    const { createInvoiceExpense } = await import("./invoiceRepo");
+    await createInvoiceExpense(asDb(), { invoiceId: invoice.id, description: "cost", amount: "100", paidByAdmin: false, createdBy: CREATED_BY });
     const m = await getPartnerHeroMetrics(asDb(), partnerId);
-    // Эти поля читают несуществующие колонки calc → всегда 0. Тест зафиксирует,
-    // если баг случайно «оживёт» при будущем исправлении.
-    expect(m.reservedForExpenses).toBe(0);
-    expect(m.yearlyCommission).toBe(0);
+    expect(m.reservedForExpenses).toBe(200);
+    expect(m.yearlyCommission).toBe(200);
   });
 });

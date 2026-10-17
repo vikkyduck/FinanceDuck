@@ -109,7 +109,7 @@ export async function setClientPartners(
 ): Promise<void> {
   // dedupe на всякий случай
   const ids = Array.from(new Set(partnerIds.filter(Boolean)));
-  await (db as any).transaction(async (tx: any) => {
+  await db.transaction(async (tx) => {
     await tx.delete(clientPartners).where(eq(clientPartners.clientId, clientId));
     if (ids.length > 0) {
       await tx.insert(clientPartners).values(ids.map(partnerId => ({ clientId, partnerId })));

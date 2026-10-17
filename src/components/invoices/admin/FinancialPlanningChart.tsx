@@ -35,7 +35,7 @@ export const FinancialPlanningChart = ({ year }: FinancialPlanningChartProps) =>
     queryFn: () => apiGet<PlanFactData[]>(`/api/admin/plan-fact?year=${year}`),
   });
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">

@@ -238,7 +238,7 @@ export async function getPartnerTerms(db: Db, partnerId: string): Promise<Array<
     if (!termsMap.has(key)) {
       termsMap.set(key, {
         scheme: inv.scheme,
-        partnerCommissionRate: inv.partnerCommissionRate,
+        partnerCommissionRate: inv.partnerCommissionRate == null ? null : Number(inv.partnerCommissionRate),
       });
     }
   }

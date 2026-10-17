@@ -84,7 +84,7 @@ export const KeyMetricsCards = () => {
     title: string; 
     value: number; 
     trend?: number; 
-    icon: any; 
+    icon: import("lucide-react").LucideIcon;
     delay: number;
     showTrend?: boolean;
     tooltip?: string;

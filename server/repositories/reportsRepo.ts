@@ -519,8 +519,8 @@ export async function getInvoicesByMonth(db: DB, month: number, year: number, ty
       type === 'forecast' 
         ? and(
             or(eq(invoices.status, 'sent'), eq(invoices.status, 'paid')),
-            sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date, ${invoices.plannedPaymentDate}::date, ${invoices.issueDate}::date) >= ${startDateStr}::date`,
-            sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date, ${invoices.plannedPaymentDate}::date, ${invoices.issueDate}::date) <= ${endDateStr}::date`
+            sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date, ${invoices.issueDate}::date) >= ${startDateStr}::date`,
+            sql`COALESCE(${invoices.actualPaymentDate}::date, ${invoices.paymentDate}::date, ${invoices.issueDate}::date) <= ${endDateStr}::date`
           )
         : and(
             eq(invoices.status, 'paid'),

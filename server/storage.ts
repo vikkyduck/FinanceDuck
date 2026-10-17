@@ -1,10 +1,14 @@
+import * as exportRepo from "./repositories/exportRepo";
+import type { StorageOperations } from "./storagePorts";
+import type { RecurringInvoiceForMonth, AssistantActionLogFilters, AssistantActionLogWithDetails, WorkingCapitalData, ClientLTVData, PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData, PartnerHeroMetricsData, DashboardInvoiceDetail, MonthlyData, MonthInvoiceDetail, DraftsStats, ForecastData, OverdueInvoice, PaymentHistoryEntry, PlanFactData, MonthlyPlanInput, DashboardStats } from "./storageTypes";
+export type * from "./storageTypes";
 import { db } from "./db";
 import { 
   partners, clients, accessTokens, userSessions, invoices, 
   invoiceCalculations, invoiceExpenses, partnerPayments, clientPartners, monthlyFinancialPlans, signedActs, assistantBonusPayments, recurringInvoices, assistantActionLogs,
   Partner, Client, Invoice, InvoiceCalculation, InvoiceExpense, PartnerPayment, MonthlyFinancialPlan, SignedAct, AssistantBonusPayment, AssistantActionLog,
   InsertPartner, InsertClient, InsertInvoice, InsertInvoiceExpense, InsertPartnerPayment, InsertMonthlyFinancialPlan, InsertSignedAct, InsertAssistantBonusPayment, InsertAssistantActionLog,
-  AccessToken, UserSession, UserRole, InvoiceScheme, ActType, AssistantActionType
+  RecurringInvoice, InsertRecurringInvoice, AccessToken, UserSession, UserRole, InvoiceScheme, ActType, AssistantActionType
 } from "../shared/schema";
 import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or, sum, count, type SQL } from "drizzle-orm";
 import { calculateFinancials, parseNum, type FinancialResult } from "../shared/financialEngine";
@@ -24,370 +28,77 @@ import * as searchRepo from "./repositories/searchRepo";
 import { calculateInvoiceServer } from "./repositories/invoiceRepo";
 import type { ClientCollectionScope } from "./tenantAccess";
 
-
-export interface IStorage {
-  verifyAccessCode(code: string): Promise<AccessToken | null>;
-  createSession(tokenId: string, ipAddress?: string, userAgent?: string): Promise<{ sessionId: string; csrfToken: string; expiresAt: Date }>;
-  validateSession(sessionId: string, csrfToken?: string): Promise<{ isValid: boolean; token?: AccessToken } | null>;
-  refreshSession(sessionId: string): Promise<Date | null>;
-  revokeSession(sessionId: string): Promise<void>;
-  
-  getPartners(): Promise<Partner[]>;
-  getPartner(id: string): Promise<Partner | null>;
-  createPartner(partner: InsertPartner): Promise<Partner>;
-  updatePartner(id: string, partner: Partial<InsertPartner>): Promise<Partner | null>;
-  deletePartner(id: string): Promise<{ success: boolean; error?: string }>;
-  getPartnerClients(partnerId: string): Promise<Client[]>;
-  
-  getClients(scope: ClientCollectionScope): Promise<Client[]>;
-  getClient(id: string): Promise<Client | null>;
-  getClientWithPartner(id: string): Promise<(Client & { partner?: Partner }) | null>;
-  getClientPartners(clientId: string): Promise<Partner[]>;
-  getClientsWithPartners(scope: ClientCollectionScope): Promise<(Client & { partners: Partner[] })[]>;
-  setClientPartners(clientId: string, partnerIds: string[]): Promise<void>;
-  createClient(client: InsertClient): Promise<Client>;
-  updateClient(id: string, client: Partial<InsertClient>): Promise<Client | null>;
-  deleteClient(id: string): Promise<{ success: boolean; error?: string }>;
-  
-  getInvoices(role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client })[]>;
-  getInvoice(id: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client }) | null>;
-  /** IDOR-safe variant: filters by ownership based on role/partnerId/clientId */
-  getInvoiceForRole(id: string, role: UserRole, partnerId?: string, clientId?: string): Promise<(Invoice & { calculations?: InvoiceCalculation; partner?: Partner; client?: Client }) | null>;
-  getInvoicesWithCalculations(): Promise<Array<{ id: string; status: string; paymentDate: string | null; adminShare50: string | null; catShare50: string | null; netProfitAdmin: string | null }>>;
-  createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>): Promise<Invoice>;
-  updateInvoice(id: string, invoice: Partial<InsertInvoice>): Promise<Invoice | null>;
-  updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>): Promise<InvoiceCalculation | null>;
-  deleteInvoice(id: string): Promise<void>;
-  
-  getInvoiceExpenses(invoiceId: string): Promise<InvoiceExpense[]>;
-  getInvoiceExpense(id: string): Promise<InvoiceExpense | null>;
-  getAllExpenses(): Promise<InvoiceExpense[]>;
-  createInvoiceExpense(expense: InsertInvoiceExpense): Promise<InvoiceExpense>;
-  updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>): Promise<InvoiceExpense | null>;
-  deleteInvoiceExpense(id: string): Promise<void>;
-  
-  deleteDocument(id: string): Promise<void>;
-  
-  getPartnerPayments(partnerId: string): Promise<Array<{ id: string; amount: number; paymentDate: string; notes: string | null; invoiceId: string | null; invoiceNumber: string | null }>>;
-  getPartnerPayment(id: string): Promise<PartnerPayment | null>;
-  createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment>;
-  updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>): Promise<PartnerPayment | null>;
-  deletePartnerPayment(id: string): Promise<void>;
-  getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]>;
-  
-  getAccessTokens(): Promise<AccessToken[]>;
-  createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string): Promise<AccessToken>;
-  deleteAccessToken(id: string): Promise<void>;
-  
-  getDashboardStats(role: UserRole, partnerId?: string, clientId?: string): Promise<DashboardStats>;
-  
-  // Analytics methods
-  getAdminMonthlyData(year: number): Promise<MonthlyData[]>;
-  getAdminForecast(monthsAhead: number): Promise<ForecastData[]>;
-  getInvoicesByMonth(month: number, year: number, type?: string): Promise<MonthInvoiceDetail[]>;
-  getOverdueInvoices(): Promise<OverdueInvoice[]>;
-  getAdminPlanFact(year: number): Promise<PlanFactData[]>;
-  
-  getMonthlyPlans(year: number): Promise<MonthlyFinancialPlan[]>;
-  getMonthlyPlan(year: number, month: number): Promise<MonthlyFinancialPlan | null>;
-  upsertMonthlyPlan(input: MonthlyPlanInput): Promise<MonthlyFinancialPlan>;
-  
-  // Recalculate all invoices with correct expensesPaidByAdmin
-  recalculateAllInvoices(): Promise<{ updated: number; errors: number }>;
-  
-  // Assistant bonus payments
-  getAssistantBonusPayments(): Promise<AssistantBonusPayment[]>;
-  createAssistantBonusPayment(payment: InsertAssistantBonusPayment): Promise<AssistantBonusPayment>;
-  getUnpaidBonusTotal(): Promise<{ total: number; invoiceCount: number; invoiceIds: string[]; executorActs: number; companyActs: number; totalEarned: number; totalPaid: number }>;
-  markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
-  
-  // Signed acts methods
-  createSignedAct(act: InsertSignedAct): Promise<SignedAct>;
-  getSignedActsByInvoice(invoiceId: string, actType?: ActType): Promise<SignedAct[]>;
-  getSignedAct(id: string): Promise<SignedAct | null>;
-  deleteSignedAct(id: string): Promise<void>;
-  getActsStatistics(excludeHidden?: boolean): Promise<{ executorActs: number; companyActs: number; totalPaidInvoices: number }>;
-  
-  // Draft invoices statistics (sales funnel)
-  getDraftsStats(): Promise<DraftsStats>;
-  
-  // Recurring invoices
-  getRecurringInvoices(): Promise<any[]>;
-  getRecurringInvoice(id: string): Promise<any | null>;
-  createRecurringInvoice(data: any): Promise<any>;
-  updateRecurringInvoice(id: string, data: any): Promise<any | null>;
-  deleteRecurringInvoice(id: string): Promise<void>;
-  
-  // Partner-specific methods
-  getPartnerClientStats(partnerId: string, year: number): Promise<PartnerClientStatsData[]>;
-  getPartnerDocumentRisk(partnerId: string): Promise<PartnerDocumentRiskData>;
-  getPartnerAgency30Funds(partnerId: string): Promise<PartnerAgency30FundsData[]>;
-  getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData>;
-  
-  // Working capital
-  getWorkingCapital(): Promise<WorkingCapitalData | null>;
-  updateWorkingCapital(amount: number, notes: string | null, updatedBy: string): Promise<WorkingCapitalData>;
-  
-  // Client LTV
-  getClientLTV(year?: number): Promise<{ data: ClientLTVData[]; availableYears: number[] }>;
-  
-  // Assistant action logs
-  logAssistantAction(log: InsertAssistantActionLog): Promise<AssistantActionLog>;
-  getAssistantActionLogs(filters: AssistantActionLogFilters): Promise<{ logs: AssistantActionLogWithDetails[]; total: number }>;
-  
-  // Dashboard invoice details for expandable cards
-  getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts' | 'overdue' | 'drafts_no_date'): Promise<DashboardInvoiceDetail[]>;
-  
-  // Recurring invoices for month display
-  getRecurringInvoicesForMonth(year: number, month: number): Promise<RecurringInvoiceForMonth[]>;
-}
-
-export interface RecurringInvoiceForMonth {
-  id: string;
-  clientName: string | null;
-  partnerName: string | null;
-  amount: number;
-  expectedProfit: number;
-  frequency: string;
-  dayOfMonth: number;
-  scheme: string;
-}
-
-export interface AssistantActionLogFilters {
-  limit?: number;
-  offset?: number;
-  role?: 'admin' | 'assistant' | null;
-  dateFrom?: string | null;
-  dateTo?: string | null;
-}
-
-export interface AssistantActionLogWithDetails extends AssistantActionLog {
-  tokenCode?: string;
-  tokenRole?: string;
-}
-
-export interface WorkingCapitalData {
-  id: string;
-  amount: number;
-  notes: string | null;
-  updated_at: string | null;
-}
-
-export interface ClientLTVData {
-  client_id: string;
-  client_name: string;
-  total_invoices: number;
-  paid_invoices: number;
-  total_admin_profit: number;
-  potential_profit: number;
-}
-
-export interface PartnerClientStatsData {
-  clientId: string;
-  clientName: string;
-  month: number;
-  monthName: string;
-  clientBill: number;
-  partnerCommission: number;
-  clientRemaining: number;
-  invoiceCount: number;
-}
-
-export interface PartnerDocumentRiskData {
-  status: 'green' | 'red';
-  missingActsCount: number;
-  missingActsInvoices: { id: string; invoiceNumber: string }[];
-}
-
-export interface PartnerAgency30FundsData {
-  clientId: string;
-  clientName: string;
-  totalBudget: number;
-  totalSpent: number;
-  remaining: number;
-  invoiceCount: number;
-}
-
-export interface PartnerHeroMetricsData {
-  debtToAdmin: number;
-  reservedForExpenses: number;
-  yearlyCommission: number;
-  signedActsCount: number;
-  totalPaidInvoices: number;
-  invoicesWithDebt: { id: string; number: string; amount: number }[];
-}
-
-export interface DashboardInvoiceDetail {
-  id: string;
-  invoiceNumber: string;
-  clientName: string | null;
-  netProfitAdmin: number;
-  clientBill: number;
-  status: string;
-  paymentDate: string | null;
-}
-
-export interface MonthlyData {
-  monthNumber: number;
-  totalSales: number;
-  totalProfit: number;
-  invoiceCount: number;
-  expenses: number;
-}
-
-export interface MonthInvoiceDetail {
-  id: string;
-  invoiceNumber: string | null;
-  clientName: string | null;
-  clientBill: number;
-  netProfitAdmin: number;
-  status: string;
-  paymentDate: string | null;
-  isExpected: boolean;
-  isPaid: boolean;
-}
-
-export interface DraftsStats {
-  totalDrafts: number;
-  totalDraftAmount: number;
-  currentMonthDrafts: number;
-  currentMonthAmount: number;
-  fromRecurring: number;
-  fromRecurringAmount: number;
-}
-
-export interface ForecastData {
-  monthIndex: number;
-  monthName: string;
-  yearNum: number;
-  expectedAmount: number;
-  receivedAmount: number;
-  recurringAmount?: number;
-}
-
-export interface OverdueInvoice {
-  id: string;
-  invoiceNumber: string;
-  paymentDate: string;
-  clientName: string;
-  partnerName: string;
-  amount: number;
-  daysOverdue: number;
-}
-
-export interface PaymentHistoryEntry {
-  id: string;
-  paymentDate: string;
-  amount: number;
-  notes: string | null;
-  runningBalance: number;
-}
-
-export interface PlanFactData {
-  monthNumber: number;
-  monthName: string;
-  salesTarget: number;
-  receiptsTarget: number;
-  actualSales: number;
-  actualReceipts: number;
-}
-
-export interface MonthlyPlanInput {
-  year: number;
-  month: number;
-  salesTarget?: number;
-  profitTarget?: number;
-  receiptsTarget?: number;
-}
-
-export interface DashboardStats {
-  totalInvoices: number;
-  paidInvoices: number;
-  pendingInvoices: number;
-  overdueInvoices: number;
-  totalClientBill: number;
-  paidClientBill: number;
-  pendingClientBill: number;
-  totalExpenses: number;
-  totalPartnerCommission?: number;
-  totalAdminShare?: number;
-  totalNetProfit?: number;
-  partnerDebt?: number;
-  clientRemaining?: number;
-  recurringExpectedMonthly?: number;
-  recurringExpectedYearly?: number;
-}
-
-export class DatabaseStorage implements IStorage {
+export class DatabaseStorage implements StorageOperations {
+  constructor(private readonly database = db) {}
   async verifyAccessCode(code: string): Promise<AccessToken | null> {
-    return userRepo.verifyAccessCode(db, code);
+    return userRepo.verifyAccessCode(this.database, code);
   }
 
   async createSession(tokenId: string, ipAddress?: string, userAgent?: string) {
-    return userRepo.createSession(db, tokenId, ipAddress, userAgent);
+    return userRepo.createSession(this.database, tokenId, ipAddress, userAgent);
   }
 
   async validateSession(sessionId: string, csrfToken?: string) {
-    return userRepo.validateSession(db, sessionId, csrfToken);
+    return userRepo.validateSession(this.database, sessionId, csrfToken);
   }
 
   async refreshSession(sessionId: string): Promise<Date | null> {
-    return userRepo.refreshSession(db, sessionId);
+    return userRepo.refreshSession(this.database, sessionId);
   }
 
   async revokeSession(sessionId: string): Promise<void> {
-    return userRepo.revokeSession(db, sessionId);
+    return userRepo.revokeSession(this.database, sessionId);
   }
 
-  async getPartners() { return partnerRepo.getPartners(db); }
-  async getPartner(id: string) { return partnerRepo.getPartner(db, id); }
-  async createPartner(partner: InsertPartner) { return partnerRepo.createPartner(db, partner); }
-  async updatePartner(id: string, partner: Partial<InsertPartner>) { return partnerRepo.updatePartner(db, id, partner); }
-  async deletePartner(id: string) { return partnerRepo.deletePartner(db, id); }
-  async getPartnerClients(partnerId: string) { return partnerRepo.getPartnerClients(db, partnerId); }
+  async getPartners() { return partnerRepo.getPartners(this.database); }
+  async getPartner(id: string) { return partnerRepo.getPartner(this.database, id); }
+  async createPartner(partner: InsertPartner) { return partnerRepo.createPartner(this.database, partner); }
+  async updatePartner(id: string, partner: Partial<InsertPartner>) { return partnerRepo.updatePartner(this.database, id, partner); }
+  async deletePartner(id: string) { return partnerRepo.deletePartner(this.database, id); }
+  async getPartnerClients(partnerId: string) { return partnerRepo.getPartnerClients(this.database, partnerId); }
 
-  async getClients(scope: ClientCollectionScope) { return clientRepo.getClients(db, scope); }
-  async getClient(id: string) { return clientRepo.getClient(db, id); }
-  async createClient(client: InsertClient) { return clientRepo.createClient(db, client); }
-  async updateClient(id: string, client: Partial<InsertClient>) { return clientRepo.updateClient(db, id, client); }
-  async getClientWithPartner(id: string) { return clientRepo.getClientWithPartner(db, id); }
-  async getClientPartners(clientId: string) { return clientRepo.getClientPartners(db, clientId); }
-  async getClientsWithPartners(scope: ClientCollectionScope) { return clientRepo.getClientsWithPartners(db, scope); }
-  async setClientPartners(clientId: string, partnerIds: string[]) { return clientRepo.setClientPartners(db, clientId, partnerIds); }
-  async deleteClient(id: string) { return clientRepo.deleteClient(db, id); }
+  async getClients(scope: ClientCollectionScope) { return clientRepo.getClients(this.database, scope); }
+  async getClient(id: string) { return clientRepo.getClient(this.database, id); }
+  async createClient(client: InsertClient) { return clientRepo.createClient(this.database, client); }
+  async updateClient(id: string, client: Partial<InsertClient>) { return clientRepo.updateClient(this.database, id, client); }
+  async getClientWithPartner(id: string) { return clientRepo.getClientWithPartner(this.database, id); }
+  async getClientPartners(clientId: string) { return clientRepo.getClientPartners(this.database, clientId); }
+  async getClientsWithPartners(scope: ClientCollectionScope) { return clientRepo.getClientsWithPartners(this.database, scope); }
+  async setClientPartners(clientId: string, partnerIds: string[]) { return clientRepo.setClientPartners(this.database, clientId, partnerIds); }
+  async deleteClient(id: string) { return clientRepo.deleteClient(this.database, id); }
 
-  async getInvoices(role: UserRole, partnerId?: string, clientId?: string) { return invoiceRepo.getInvoices(db, role, partnerId, clientId); }
-  async getInvoice(id: string) { return invoiceRepo.getInvoice(db, id); }
-  async getInvoiceForRole(id: string, role: UserRole, partnerId?: string, clientId?: string) { return invoiceRepo.getInvoice(db, id, role, partnerId, clientId); }
-  async getInvoicesWithCalculations() { return invoiceRepo.getInvoicesWithCalculations(db); }
-  async createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.createInvoice(db, invoice, calculations); }
-  async updateInvoice(id: string, invoice: Partial<InsertInvoice>) { return invoiceRepo.updateInvoice(db, id, invoice); }
-  async updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.updateInvoiceCalculations(db, invoiceId, calculations); }
-  async getInvoiceExpenses(invoiceId: string) { return invoiceRepo.getInvoiceExpenses(db, invoiceId); }
-  async getInvoiceExpense(id: string) { return invoiceRepo.getInvoiceExpense(db, id); }
-  async getAllExpenses() { return invoiceRepo.getAllExpenses(db); }
-  async createInvoiceExpense(expense: InsertInvoiceExpense) { return invoiceRepo.createInvoiceExpense(db, expense); }
-  async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>) { return invoiceRepo.updateInvoiceExpense(db, id, updates); }
-  async deleteInvoiceExpense(id: string) { return invoiceRepo.deleteInvoiceExpense(db, id); }
-  async createInvoiceTransfer(args: Parameters<typeof invoiceRepo.createInvoiceTransfer>[1]) { return invoiceRepo.createInvoiceTransfer(db, args); }
-  async deleteInvoiceTransfer(id: string) { return invoiceRepo.deleteInvoiceTransfer(db, id); }
-  async getInvoiceTransfers(invoiceId: string) { return invoiceRepo.getInvoiceTransfers(db, invoiceId); }
-  async deleteInvoice(id: string) { return invoiceRepo.deleteInvoice(db, id); }
-  async deleteDocument(id: string) { return invoiceRepo.deleteDocument(db, id);
-  }
+  invoiceExportPages(actor: import('./invoiceAccess').InvoiceActor, query: Partial<import('./invoiceQuery').InvoiceQuery>) { return exportRepo.invoiceExportPages(this.database, actor, query); }
+  expenseExportPages(invoiceIds: string[]) { return exportRepo.expenseExportPages(this.database, invoiceIds); }
+  async getInvoices(role: UserRole, partnerId?: string, clientId?: string, filters?: import("./invoiceQuery").InvoiceQuery) { return invoiceRepo.getInvoices(this.database, role, partnerId, clientId, filters); }
+  async getInvoice(id: string) { return invoiceRepo.getInvoice(this.database, id); }
+  async getInvoiceForRole(id: string, role: UserRole, partnerId?: string, clientId?: string) { return invoiceRepo.getInvoice(this.database, id, role, partnerId, clientId); }
+  async getInvoicesWithCalculations() { return invoiceRepo.getInvoicesWithCalculations(this.database); }
+  async createInvoice(invoice: InsertInvoice, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.createInvoice(this.database, invoice, calculations); }
+  async updateInvoice(id: string, invoice: Partial<InsertInvoice>, calculations?: Partial<InvoiceCalculation>) { return invoiceRepo.updateInvoice(this.database, id, invoice, calculations); }
+  async updateInvoiceCalculations(invoiceId: string, calculations: Partial<InvoiceCalculation>) { return invoiceRepo.updateInvoiceCalculations(this.database, invoiceId, calculations); }
+  async getInvoiceExpenses(invoiceId: string) { return invoiceRepo.getInvoiceExpenses(this.database, invoiceId); }
+  async getInvoiceExpense(id: string) { return invoiceRepo.getInvoiceExpense(this.database, id); }
+  async getAllExpenses(invoiceIds?: string[]) { return invoiceRepo.getAllExpenses(this.database, invoiceIds); }
+  async createInvoiceExpense(expense: InsertInvoiceExpense) { return invoiceRepo.createInvoiceExpense(this.database, expense); }
+  async updateInvoiceExpense(id: string, updates: Partial<InsertInvoiceExpense>) { return invoiceRepo.updateInvoiceExpense(this.database, id, updates); }
+  async deleteInvoiceExpense(id: string) { return invoiceRepo.deleteInvoiceExpense(this.database, id); }
+  async createInvoiceTransfer(args: Parameters<typeof invoiceRepo.createInvoiceTransfer>[1]) { return invoiceRepo.createInvoiceTransfer(this.database, args); }
+  async deleteInvoiceTransfer(id: string) { return invoiceRepo.deleteInvoiceTransfer(this.database, id); }
+  async getInvoiceTransfers(invoiceId: string) { return invoiceRepo.getInvoiceTransfers(this.database, invoiceId); }
+  async deleteInvoice(id: string) { return invoiceRepo.deleteInvoice(this.database, id); }
 
-  async getPartnerPayment(id: string) { return partnerRepo.getPartnerPayment(db, id); }
-  async createPartnerPayment(payment: InsertPartnerPayment) { return partnerRepo.createPartnerPayment(db, payment); }
-  async updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>) { return partnerRepo.updatePartnerPayment(db, id, updates); }
-  async deletePartnerPayment(id: string) { return partnerRepo.deletePartnerPayment(db, id); }
-  async getPartnerPaymentHistory(partnerId: string) { return partnerRepo.getPartnerPaymentHistory(db, partnerId); }
+  async getPartnerPayment(id: string) { return partnerRepo.getPartnerPayment(this.database, id); }
+  async createPartnerPayment(payment: InsertPartnerPayment) { return partnerRepo.createPartnerPayment(this.database, payment); }
+  async updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>) { return partnerRepo.updatePartnerPayment(this.database, id, updates); }
+  async deletePartnerPayment(id: string) { return partnerRepo.deletePartnerPayment(this.database, id); }
+  async getPartnerPaymentHistory(partnerId: string) { return partnerRepo.getPartnerPaymentHistory(this.database, partnerId); }
 
-  async getAccessTokens() { return userRepo.getAccessTokens(db); }
-  async createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string) { return userRepo.createAccessToken(db, code, role, partnerId, clientId); }
-  async deleteAccessToken(id: string) { return userRepo.deleteAccessToken(db, id); }
+  async getAccessTokens() { return userRepo.getAccessTokens(this.database); }
+  async createAccessToken(code: string, role: UserRole, partnerId?: string, clientId?: string) { return userRepo.createAccessToken(this.database, code, role, partnerId, clientId); }
+  async deleteAccessToken(id: string) { return userRepo.deleteAccessToken(this.database, id); }
 
   async getDashboardStats(role: UserRole, partnerId?: string, clientId?: string): Promise<DashboardStats> {
-    let query = db
+    const query = this.database
       .select({
         invoice: invoices,
         calculations: invoiceCalculations,
@@ -446,7 +157,7 @@ export class DatabaseStorage implements IStorage {
         pendingInvoices++;
         pendingClientBill += clientBill;
         
-        if (inv.paymentDueDate && new Date(inv.paymentDueDate) < today) {
+        if (inv.paymentDate && new Date(inv.paymentDate) < today) {
           overdueInvoices++;
         }
       }
@@ -537,43 +248,43 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getRecurringExpectedAmounts() {
-    return recurringRepo.getRecurringExpectedAmounts(db);
+    return recurringRepo.getRecurringExpectedAmounts(this.database);
   }
 
   async getPartnerDebtSummaries() {
-    return dashboardRepo.getPartnerDebtSummaries(db);
+    return dashboardRepo.getPartnerDebtSummaries(this.database);
   }
 
   async getDoNotSpendData(partnerId?: string) {
-    return reportsRepo.getDoNotSpendData(db, partnerId);
+    return reportsRepo.getDoNotSpendData(this.database, partnerId);
   }
 
   async getPartnerSchemeDoNotSpendData(partnerId?: string, role?: string) {
-    return dashboardRepo.getPartnerSchemeDoNotSpendData(db, partnerId, role);
+    return dashboardRepo.getPartnerSchemeDoNotSpendData(this.database, partnerId, role);
   }
 
   async getExpectedCommission(partnerId?: string) {
-    return reportsRepo.getExpectedCommission(db, partnerId);
+    return reportsRepo.getExpectedCommission(this.database, partnerId);
   }
 
   async getExpectedAdminProfit() {
-    return reportsRepo.getExpectedAdminProfit(db);
+    return reportsRepo.getExpectedAdminProfit(this.database);
   }
   
   async getAdminDashboardStats(year?: number, month?: number) {
-    return dashboardRepo.getAdminDashboardStats(db, (y: number, m: number) => this.getRecurringExpectedForMonth(y, m), year, month);
+    return dashboardRepo.getAdminDashboardStats(this.database, (y: number, m: number) => this.getRecurringExpectedForMonth(y, m), year, month);
   }
   
   async getRecurringExpectedForMonth(year: number, month: number) {
-    return recurringRepo.getRecurringExpectedForMonth(db, year, month);
+    return recurringRepo.getRecurringExpectedForMonth(this.database, year, month);
   }
   
   async getRecurringInvoicesForMonth(year: number, month: number) {
-    return recurringRepo.getRecurringInvoicesForMonth(db, year, month);
+    return recurringRepo.getRecurringInvoicesForMonth(this.database, year, month);
   }
   
   async getAlertCounts(role: string) {
-    return alertsRepo.getAlertCounts(db, role);
+    return alertsRepo.getAlertCounts(this.database, role);
   }
 
   async globalSearch(
@@ -581,27 +292,27 @@ export class DatabaseStorage implements IStorage {
     role: string,
     options: { clientId?: string } = {},
   ) {
-    return searchRepo.globalSearch(db, query, role, options);
+    return searchRepo.globalSearch(this.database, query, role, options);
   }
 
   async getPriorityActions() {
-    return alertsRepo.getPriorityActions(db);
+    return alertsRepo.getPriorityActions(this.database);
   }
 
   async getOverdueInvoicesDetailed() {
-    return alertsRepo.getOverdueInvoicesDetailed(db);
+    return alertsRepo.getOverdueInvoicesDetailed(this.database);
   }
 
   async getPartnerTerms(partnerId: string) {
-    return partnerRepo.getPartnerTerms(db, partnerId);
+    return partnerRepo.getPartnerTerms(this.database, partnerId);
   }
 
   async getPartnerPayments(partnerId: string) {
-    return partnerRepo.getPartnerPayments(db, partnerId);
+    return partnerRepo.getPartnerPayments(this.database, partnerId);
   }
 
   async getClientBudget(clientId: string) {
-    return dashboardRepo.getClientBudget(db, clientId);
+    return dashboardRepo.getClientBudget(this.database, clientId);
   }
 
   /**
@@ -612,94 +323,96 @@ export class DatabaseStorage implements IStorage {
    * Любая сумма приходит как number с защитой от NaN.
    */
   async getClientOverviewBuckets(clientId: string, dateFrom?: string, dateTo?: string) {
-    return dashboardRepo.getClientOverviewBuckets(db, clientId, dateFrom, dateTo);
+    return dashboardRepo.getClientOverviewBuckets(this.database, clientId, dateFrom, dateTo);
   }
 
   async getPartnerInvoicesDetail(partnerId: string) {
-    return dashboardRepo.getPartnerInvoicesDetail(db, partnerId);
+    return dashboardRepo.getPartnerInvoicesDetail(this.database, partnerId);
   }
 
   async getClientAgency30Report(clientId: string) {
-    return reportsRepo.getClientAgency30Report(db, clientId);
+    return reportsRepo.getClientAgency30Report(this.database, clientId);
   }
 
-  async getAdminMonthlyData(year: number): Promise<MonthlyData[]> { return dashboardRepo.getAdminMonthlyData(db, year); }
+  async getAdminMonthlyData(year: number): Promise<MonthlyData[]> { return dashboardRepo.getAdminMonthlyData(this.database, year); }
   
   async getAdminForecast(monthsAhead: number) {
-    return planningRepo.getAdminForecast(db, monthsAhead);
+    return planningRepo.getAdminForecast(this.database, monthsAhead);
   }
   
   async getInvoicesByMonth(month: number, year: number, type?: string) {
-    return reportsRepo.getInvoicesByMonth(db, month, year, type);
+    return reportsRepo.getInvoicesByMonth(this.database, month, year, type);
   }
   
   async getOverdueInvoices() {
-    return alertsRepo.getOverdueInvoices(db);
+    return alertsRepo.getOverdueInvoices(this.database);
   }
   
   async getPartnerDebtDetails(partnerId: string) {
-    return dashboardRepo.getPartnerDebtDetails(db, partnerId);
+    return dashboardRepo.getPartnerDebtDetails(this.database, partnerId);
   }
 
   async getAdminPlanFact(year: number) {
-    return planningRepo.getAdminPlanFact(db, year);
+    return planningRepo.getAdminPlanFact(this.database, year);
   }
 
   async getMonthlyPlans(year: number) {
-    return planningRepo.getMonthlyPlans(db, year);
+    return planningRepo.getMonthlyPlans(this.database, year);
   }
 
   async getMonthlyPlan(year: number, month: number) {
-    return planningRepo.getMonthlyPlan(db, year, month);
+    return planningRepo.getMonthlyPlan(this.database, year, month);
   }
 
   async upsertMonthlyPlan(input: MonthlyPlanInput) {
-    return planningRepo.upsertMonthlyPlan(db, input);
+    return planningRepo.upsertMonthlyPlan(this.database, input);
   }
   
-  async recalculateAllInvoices() { return invoiceRepo.recalculateAllInvoices(db); }
+  async recalculateAllInvoices() { return invoiceRepo.recalculateAllInvoices(this.database); }
 
   // Signed Acts methods
-  async createSignedAct(act: InsertSignedAct)                        { return actsRepo.createSignedAct(db, act); }
-  async getSignedActsByInvoice(invoiceId: string, actType?: ActType)  { return actsRepo.getSignedActsByInvoice(db, invoiceId, actType); }
-  async getSignedAct(id: string)                                      { return actsRepo.getSignedAct(db, id); }
-  async deleteSignedAct(id: string)                                   { return actsRepo.deleteSignedAct(db, id); }
-  async getActsStatistics(excludeHidden = false)                      { return actsRepo.getActsStatistics(db, excludeHidden); }
-  async getAssistantStats()                                           { return actsRepo.getAssistantStats(db); }
-  async getAssistantBonusPayments()                                   { return actsRepo.getAssistantBonusPayments(db); }
-  async createAssistantBonusPayment(payment: InsertAssistantBonusPayment) { return actsRepo.createAssistantBonusPayment(db, payment); }
-  async getUnpaidBonusTotal()                                         { return actsRepo.getUnpaidBonusTotal(db); }
-  async markBonusesAsPaid(invoiceIds: string[])                       { return actsRepo.markBonusesAsPaid(db, invoiceIds); }
+  async createSignedAct(act: InsertSignedAct)                        { return actsRepo.createSignedAct(this.database, act); }
+  async getSignedActsByInvoice(invoiceId: string, actType?: ActType)  { return actsRepo.getSignedActsByInvoice(this.database, invoiceId, actType); }
+  async openSignedActFile(id: string) { return actsRepo.openSignedActFile(this.database, id); }
+  async readSignedActData(id: string) { return actsRepo.readSignedActData(this.database, id); }
+  async getSignedAct(id: string)                                      { return actsRepo.getSignedAct(this.database, id); }
+  async deleteSignedAct(id: string)                                   { return actsRepo.deleteSignedAct(this.database, id); }
+  async getActsStatistics(excludeHidden = false)                      { return actsRepo.getActsStatistics(this.database, excludeHidden); }
+  async getAssistantStats()                                           { return actsRepo.getAssistantStats(this.database); }
+  async getAssistantBonusPayments()                                   { return actsRepo.getAssistantBonusPayments(this.database); }
+  async createAssistantBonusPayment(payment: InsertAssistantBonusPayment) { return actsRepo.createAssistantBonusPayment(this.database, payment); }
+  async getUnpaidBonusTotal()                                         { return actsRepo.getUnpaidBonusTotal(this.database); }
+  async markBonusesAsPaid(invoiceIds: string[])                       { return actsRepo.markBonusesAsPaid(this.database, invoiceIds); }
 
   async getDraftsStats() {
-    return reportsRepo.getDraftsStats(db);
+    return reportsRepo.getDraftsStats(this.database);
   }
 
-  async getRecurringInvoices()                                           { return recurringRepo.getRecurringInvoices(db); }
-  async getRecurringInvoice(id: string)                                  { return recurringRepo.getRecurringInvoice(db, id); }
-  async createRecurringInvoice(data: any)                                { return recurringRepo.createRecurringInvoice(db, data); }
-  async getDueRecurringInvoices(upToDate?: Date)                         { return recurringRepo.getDueRecurringInvoices(db, upToDate); }
-  async getActiveRecurringInvoicesForCashFlow()                          { return recurringRepo.getActiveRecurringInvoicesForCashFlow(db); }
-  async generateInvoiceNumber()                                          { return invoiceRepo.generateInvoiceNumber(db); }
-  async createDraftFromRecurring(recurringId: string, invoiceDate?: string) { return recurringRepo.createDraftFromRecurring(db, recurringId, invoiceDate); }
-  async processAllDueRecurringInvoices()                                 { return recurringRepo.processAllDueRecurringInvoices(db); }
-  async generateBackdatedInvoices(recurringId: string, fromDate: string) { return recurringRepo.generateBackdatedInvoices(db, recurringId, fromDate); }
-  async updateRecurringInvoice(id: string, data: any)                    { return recurringRepo.updateRecurringInvoice(db, id, data); }
-  async deleteRecurringInvoice(id: string)                               { return recurringRepo.deleteRecurringInvoice(db, id); }
+  async getRecurringInvoices(scope?: recurringRepo.RecurringScope)                                           { return recurringRepo.getRecurringInvoices(this.database, scope); }
+  async getRecurringInvoice(id: string, scope?: recurringRepo.RecurringScope)                                  { return recurringRepo.getRecurringInvoice(this.database, id, scope); }
+  async createRecurringInvoice(data: InsertRecurringInvoice)                                { return recurringRepo.createRecurringInvoice(this.database, data); }
+  async getDueRecurringInvoices(upToDate?: Date, scope?: recurringRepo.RecurringScope)                         { return recurringRepo.getDueRecurringInvoices(this.database, upToDate, scope); }
+  async getActiveRecurringInvoicesForCashFlow(scope?: recurringRepo.RecurringScope)                          { return recurringRepo.getActiveRecurringInvoicesForCashFlow(this.database, scope); }
+  async generateInvoiceNumber()                                          { return invoiceRepo.generateInvoiceNumber(this.database); }
+  async createDraftFromRecurring(recurringId: string, invoiceDate?: string, scope?: recurringRepo.RecurringScope) { return recurringRepo.createDraftFromRecurring(this.database, recurringId, invoiceDate, scope); }
+  async processAllDueRecurringInvoices()                                 { return recurringRepo.processAllDueRecurringInvoices(this.database); }
+  async generateBackdatedInvoices(recurringId: string, fromDate: string) { return recurringRepo.generateBackdatedInvoices(this.database, recurringId, fromDate); }
+  async updateRecurringInvoice(id: string, data: Partial<InsertRecurringInvoice>, scope?: recurringRepo.RecurringScope)                    { return recurringRepo.updateRecurringInvoice(this.database, id, data, scope); }
+  async deleteRecurringInvoice(id: string)                               { return recurringRepo.deleteRecurringInvoice(this.database, id); }
 
   async getPartnerClientStats(partnerId: string, year: number) {
-    return partnerRepo.getPartnerClientStats(db, partnerId, year);
+    return partnerRepo.getPartnerClientStats(this.database, partnerId, year);
   }
 
   async getPartnerDocumentRisk(partnerId: string) {
-    return partnerRepo.getPartnerDocumentRisk(db, partnerId);
+    return partnerRepo.getPartnerDocumentRisk(this.database, partnerId);
   }
 
   async getPartnerAgency30Funds(partnerId: string) {
-    return partnerRepo.getPartnerAgency30Funds(db, partnerId);
+    return partnerRepo.getPartnerAgency30Funds(this.database, partnerId);
   }
 
-  async getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData> { return dashboardRepo.getPartnerHeroMetrics(db, partnerId); }
+  async getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData> { return dashboardRepo.getPartnerHeroMetrics(this.database, partnerId); }
 
   async getWorkingCapital(): Promise<WorkingCapitalData | null> {
     // Return mock data since working_capital_balance table doesn't exist in Neon yet
@@ -724,15 +437,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getClientLTV(year?: number) {
-    return reportsRepo.getClientLTV(db, year);
+    return reportsRepo.getClientLTV(this.database, year);
   }
 
   async getDashboardInvoices(year: number, month: number, category: 'received' | 'expected' | 'drafts' | 'overdue' | 'drafts_no_date') {
-    return dashboardRepo.getDashboardInvoices(db, year, month, category);
+    return dashboardRepo.getDashboardInvoices(this.database, year, month, category);
   }
 
-  async logAssistantAction(log: InsertAssistantActionLog) { return actionLogRepo.logAssistantAction(db, log); }
-  async getAssistantActionLogs(filters: AssistantActionLogFilters) { return actionLogRepo.getAssistantActionLogs(db, filters); }
+  async logAssistantAction(log: InsertAssistantActionLog) { return actionLogRepo.logAssistantAction(this.database, log); }
+  async getAssistantActionLogs(filters: AssistantActionLogFilters) { return actionLogRepo.getAssistantActionLogs(this.database, filters); }
 }
 
 export const storage = new DatabaseStorage();

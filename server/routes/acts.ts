@@ -1,9 +1,15 @@
+import { DocumentInputError } from "../services/objectStore";
+import { USER_ROLES } from "../../shared/domainTypes";
+import { pipeline } from "node:stream/promises";
+import { z } from "zod";
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { storage } from "../storage";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import type { ActsStore } from "../routeStores";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 import { findAuthorizedInvoice } from "../invoiceAccess";
 
-export const actsRouter = Router();
+export function createActsRouter(storage: ActsStore, authMiddleware: AuthMiddleware) {
+const actsRouter = Router();
 
 actsRouter.get("/api/admin/bonus-payments", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
   try { res.json(await storage.getAssistantBonusPayments()); }
@@ -42,7 +48,7 @@ actsRouter.get("/api/access-tokens", authMiddleware, requireRole("admin"), async
   catch (error) { console.error("Get tokens error:", error); res.status(500).json({ error: "Failed to get tokens" }); }
 });
 
-const VALID_ROLES = ["assistant", "partner", "admin", "client", "accountant"] as const;
+const VALID_ROLES = USER_ROLES;
 
 actsRouter.post("/api/access-tokens", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -85,16 +91,19 @@ actsRouter.get("/api/invoices/:id/acts", authMiddleware, async (req: Authenticat
     const actType = req.query.type as string | undefined;
     const invoice = await findAuthorizedInvoice(storage, actor, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-    let acts = await storage.getSignedActsByInvoice(id, actType as any);
+    if (actType && actType !== "company" && actType !== "executor") return res.status(400).json({ error: "Invalid act type" });
+    let acts = await storage.getSignedActsByInvoice(id, actType as "company" | "executor" | undefined);
     if (role === "partner" || role === "client") acts = acts.filter(a => a.actType === "company");
-    res.json(acts.map(({ fileData, ...rest }) => rest));
+    res.json(acts);
   } catch (error) { console.error("Get acts error:", error); res.status(500).json({ error: "Failed to get acts" }); }
 });
 
 actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const { actType, fileName, fileData, mimeType, isLink, url } = req.body;
+    const parsed = z.object({ actType: z.enum(['company', 'executor']), fileName: z.string().min(1).max(255), fileData: z.string().optional(), mimeType: z.string().max(120).optional(), isLink: z.boolean().default(false), url: z.string().url().refine(url => /^https?:\/\//i.test(url)).optional() }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid act fields' });
+    const { actType, fileName, fileData, mimeType, isLink, url } = parsed.data;
     const invoice = await findAuthorizedInvoice(storage, req.user!, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
     if (isLink) { if (!url) return res.status(400).json({ error: "URL is required for link-type acts" }); }
@@ -108,9 +117,9 @@ actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "
     try {
       await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "upload_act", entityType: "act", entityId: act.id, description: `Загружен акт ${actTypeLabel}: ${displayName}`, details: JSON.stringify({ invoiceId: id, invoiceNumber, clientName: client?.name, partnerName: partner?.name, actType, fileName, isLink: isLink || false }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
     } catch (logError) { console.error("[Upload Act] Failed to log action:", logError); }
-    const { fileData: _, ...actWithoutData } = act;
+    const { fileData: _, objectKey: _key, ...actWithoutData } = act;
     res.status(201).json(actWithoutData);
-  } catch (error) { console.error("Create act error:", error); res.status(500).json({ error: "Failed to upload act" }); }
+  } catch (error) { if (error instanceof DocumentInputError) return res.status(400).json({ error: error.message }); console.error("Create act error:", error); res.status(500).json({ error: "Failed to upload act" }); }
 });
 
 actsRouter.get("/api/acts/:id/download", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
@@ -125,8 +134,21 @@ actsRouter.get("/api/acts/:id/download", authMiddleware, async (req: Authenticat
     if ((role === "partner" || role === "client") && act.actType === "executor") {
       return res.status(404).json({ error: "Act not found" });
     }
-    res.json({ fileName: act.fileName, fileData: act.fileData, mimeType: act.mimeType });
+    res.json({ fileName: act.fileName, fileData: await storage.readSignedActData(id), mimeType: act.mimeType });
   } catch (error) { console.error("Download act error:", error); res.status(500).json({ error: "Failed to download act" }); }
+});
+
+actsRouter.get("/api/acts/:id/content", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const act = await storage.getSignedAct(req.params.id);
+    if (!act || !await findAuthorizedInvoice(storage, req.user!, act.invoiceId) || (['partner', 'client'].includes(req.user!.role) && act.actType === 'executor')) return res.status(404).json({ error: 'Act not found' });
+    const file = await storage.openSignedActFile(act.id);
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="document"; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
+    res.setHeader('Cache-Control', 'no-store');
+    await pipeline(file.stream, res);
+  } catch (error) { if (!res.headersSent) res.status(500).json({ error: 'Failed to download document' }); else res.destroy(); }
 });
 
 actsRouter.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
@@ -146,3 +168,6 @@ actsRouter.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assista
     res.json({ success: true });
   } catch (error) { console.error("Delete act error:", error); res.status(500).json({ error: "Failed to delete act" }); }
 });
+
+return actsRouter;
+}

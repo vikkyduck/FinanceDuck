@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 
 type ActType = 'executor' | 'company';
-type UserRole = 'admin' | 'assistant' | 'partner' | 'client';
+import type { UserRole } from "@shared/schema";
 
 interface SignedAct {
   id: string;
@@ -93,10 +93,10 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
       setUploadingType(null);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Ошибка загрузки",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
       setUploadingType(null);
@@ -122,10 +122,10 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       setLinkUrl("");
       setLinkName("");
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Ошибка добавления ссылки",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
     },
@@ -140,10 +140,10 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
       queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       toast({
         title: "Ошибка удаления",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
     },
@@ -182,18 +182,21 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     }
     
     try {
-      const data = await apiGet<{ fileName: string; fileData: string; mimeType: string }>(`/acts/${act.id}/download`);
+      const response = await fetch(`/api/acts/${act.id}/content`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Не удалось скачать документ');
+      const objectUrl = URL.createObjectURL(await response.blob());
       
       const link = document.createElement('a');
-      link.href = data.fileData;
-      link.download = data.fileName;
+      link.href = objectUrl;
+      link.download = act.fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (error: any) {
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error: unknown) {
       toast({
         title: "Ошибка скачивания",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
     }
@@ -295,9 +298,9 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
   return (
     <>
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <CardTitle className="text-lg">Подписанные акты</CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="gap-1">
               <Building2 className="h-3 w-3" />
               Компания: {companyActs.length}

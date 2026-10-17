@@ -1,3 +1,4 @@
+import { usePagedInvoices } from "@/hooks/usePagedInvoices";
 import { useEffect, useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,7 +36,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type UserRole = 'admin' | 'assistant' | 'client' | 'partner';
+import type { UserRole } from "@shared/schema";
 type ViewMode = 'table' | 'cards';
 
 interface UnifiedInvoicesListProps {
@@ -65,60 +66,6 @@ export const UnifiedInvoicesList = ({
   const yearParam = searchParams.get('year');
   const statusParam = searchParams.get('statusFilter') as InvoiceStatus | null;
   const queryClient = useQueryClient();
-  // Список читается через React Query под общим префиксом ключа ['/api/invoices'],
-  // поэтому инвалидация из InvoiceDetailsDialog/удаления обновляет его мгновенно
-  // (раньше был ручной useState + setInterval-поллинг мимо кэша — правки счёта
-  // проявлялись только через таймер). Фетч без параметров: сервер сам скоупит по
-  // токену/роли, а фильтры остаются клиентскими (useInvoiceFilters).
-  const {
-    data: invoices = [],
-    isLoading: loading,
-    error: invoicesError,
-  } = useQuery<any[]>({
-    queryKey: ['/api/invoices', 'unified-list'],
-    queryFn: async () => {
-      const data = await apiGet<any[]>('/invoices');
-      return data.map((inv: any) => ({
-        id: inv.id,
-        invoice_number: inv.invoiceNumber,
-        client_id: inv.clientId,
-        partner_id: inv.partnerId,
-        scheme: inv.scheme,
-        status: inv.status,
-        payment_date: inv.paymentDate,
-        actual_payment_date: inv.actualPaymentDate,
-        issue_date: inv.issueDate,
-        notes: inv.notes,
-        created_at: inv.createdAt,
-        client_name: inv.client?.name,
-        partner_name: inv.partner?.name,
-        client_bill: inv.calculations?.clientBill || inv.clientBill,
-        commission_rate: inv.calculations?.commissionRate,
-        commission_amount: inv.calculations?.commissionAmount,
-        agency_margin: inv.calculations?.agencyMargin,
-        client_base_after_margin: inv.calculations?.clientBaseAfterMargin,
-        amount_to_admin: inv.calculations?.amountToAdmin,
-        partner_share_from_margin: inv.calculations?.partnerShareFromMargin,
-        admin_share_from_margin: inv.calculations?.adminShareFromMargin,
-        executor_expenses_total: inv.calculations?.executorExpensesTotal || '0',
-        net_profit_admin: inv.calculations?.netProfitAdmin,
-        client_remaining: inv.calculations?.clientRemaining,
-        partner_transfer_due: inv.calculations?.partnerTransferDue,
-        partner_commission_rate: inv.partnerCommissionRate,
-        service_type: inv.serviceType,
-        period_unit: inv.periodUnit,
-        price_per_period: inv.pricePerPeriod,
-        total_periods: inv.totalPeriods,
-        periods_used: inv.periodsUsed,
-        hidden_from_assistant: inv.hiddenFromAssistant,
-      }));
-    },
-    staleTime: 30000,
-    // enableRealtime → фоновый опрос; RQ сам ставит его на паузу для скрытой
-    // вкладки и делает refetch при возврате фокуса.
-    refetchInterval: enableRealtime ? 120000 : false,
-  });
-
   const refreshInvoices = () =>
     queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
 
@@ -135,30 +82,20 @@ export const UnifiedInvoicesList = ({
   const isMobile = useIsMobile();
   
   const {
-    searchQuery,
-    setSearchQuery,
-    statusFilter,
-    setStatusFilter,
-    sortBy,
-    setSortBy,
-    clientFilter,
-    setClientFilter,
-    partnerFilter,
-    setPartnerFilter,
-    monthFilter,
-    setMonthFilter,
-    clients,
-    partners,
-    filteredInvoices,
-    statusCounts,
-  } = useInvoiceFilters(
-    invoices,
-    statusParam || initialStatusFilter,
-    role === 'client'
-      ? { prefix: 'clientInvoices', fields: ['searchQuery', 'statusFilter', 'sortBy'] }
-      : undefined
-  );
-  
+    invoices, loading, error: invoicesError, page, setPage, total,
+    searchQuery, setSearchQuery, statusFilter, setStatusFilter, sortBy, setSortBy,
+    clientFilter, setClientFilter, partnerFilter, setPartnerFilter, monthFilter, setMonthFilter,
+    clients, partners, statusCounts,
+  } = usePagedInvoices(role, statusParam || initialStatusFilter, enableRealtime);
+  const filteredInvoices = invoices;
+  const pagination = <div className="flex items-center justify-between gap-3 py-3">
+    <span className="text-sm text-muted-foreground">Найдено: {total} · Страница {page} из {Math.max(1, Math.ceil(total / 100))}</span>
+    <div className="flex gap-2">
+      <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button>
+      <Button variant="outline" disabled={page * 100 >= total} onClick={() => setPage(page + 1)}>Далее</Button>
+    </div>
+  </div>;
+
   const { setRef } = useStaggerAnimation(filteredInvoices.length, viewMode === 'table' ? 60 : 80);
 
   const filtersActive =
@@ -168,7 +105,7 @@ export const UnifiedInvoicesList = ({
     partnerFilter !== 'all' ||
     monthFilter !== 'all';
 
-  const hiddenByFilters = invoices.length - filteredInvoices.length;
+  const hiddenByFilters = statusCounts.all - total;
 
   const resetAllFilters = () => {
     setSearchQuery('');
@@ -306,11 +243,11 @@ export const UnifiedInvoicesList = ({
 
       setDeleteInvoice(null);
       refreshInvoices();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Ошибка",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
       });
     } finally {
       setDeletingInvoiceId(null);
@@ -325,12 +262,12 @@ export const UnifiedInvoicesList = ({
     );
   };
 
+  const allPageSelected = invoices.length > 0 && invoices.every(invoice => selectedInvoices.includes(invoice.id));
   const toggleSelectAll = () => {
-    if (selectedInvoices.length === invoices.length) {
-      setSelectedInvoices([]);
-    } else {
-      setSelectedInvoices(invoices.map(inv => inv.id));
-    }
+    const pageIds = new Set(invoices.map(invoice => invoice.id));
+    setSelectedInvoices(previous => allPageSelected
+      ? previous.filter(id => !pageIds.has(id))
+      : [...new Set([...previous, ...pageIds])]);
   };
 
   const handleBulkDelete = async () => {
@@ -347,11 +284,11 @@ export const UnifiedInvoicesList = ({
 
       setSelectedInvoices([]);
       refreshInvoices();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         variant: "destructive",
         title: "Ошибка удаления",
-        description: error.message,
+        description: (error instanceof Error ? error.message : String(error)),
       });
     } finally {
       setDeletingBulk(false);
@@ -364,7 +301,7 @@ export const UnifiedInvoicesList = ({
     return <CardSkeleton rows={3} />;
   }
 
-  if (invoices.length === 0) {
+  if (statusCounts.all === 0 && !invoicesError) {
     return (
       <EmptyState
         icon={FileText}
@@ -384,7 +321,8 @@ export const UnifiedInvoicesList = ({
   if (isMobile || viewMode === 'cards') {
     return (
       <>
-        <InvoiceFilters
+        {pagination}
+      <InvoiceFilters
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           statusFilter={statusFilter}
@@ -405,7 +343,7 @@ export const UnifiedInvoicesList = ({
         {filtersActive && hiddenByFilters > 0 && filteredInvoices.length > 0 && (
           <div className="flex items-center justify-between gap-3 rounded-md border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/30 px-3 py-2 text-sm">
             <span className="text-muted-foreground">
-              Фильтр скрывает <strong className="text-foreground">{hiddenByFilters}</strong> счёт{hiddenByFilters === 1 ? '' : hiddenByFilters < 5 ? 'а' : 'ов'} из {invoices.length}.
+              Фильтр скрывает <strong className="text-foreground">{hiddenByFilters}</strong> счёт{hiddenByFilters === 1 ? '' : hiddenByFilters < 5 ? 'а' : 'ов'} из {statusCounts.all}.
             </span>
             <Button variant="ghost" size="sm" onClick={resetAllFilters} data-testid="button-reset-filters">
               Показать все
@@ -413,11 +351,11 @@ export const UnifiedInvoicesList = ({
           </div>
         )}
         {filteredInvoices.length === 0 ? (
-          filtersActive && invoices.length > 0 ? (
+          filtersActive && statusCounts.all > 0 ? (
             <EmptyState
               icon={FileText}
               title="Счета не найдены"
-              description={`У вас ${invoices.length} счёт${invoices.length === 1 ? '' : invoices.length < 5 ? 'а' : 'ов'}, но все скрыты текущим фильтром.`}
+              description={`Всего счетов: ${statusCounts.all}. По текущим фильтрам ничего не найдено.`}
               action={{ label: 'Показать все счета', onClick: resetAllFilters }}
             />
           ) : (
@@ -488,7 +426,8 @@ export const UnifiedInvoicesList = ({
   if (viewMode === 'table') {
     return (
       <>
-        <InvoiceFilters
+        {pagination}
+      <InvoiceFilters
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           statusFilter={statusFilter}
@@ -509,7 +448,7 @@ export const UnifiedInvoicesList = ({
         {filtersActive && hiddenByFilters > 0 && filteredInvoices.length > 0 && (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-md border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/60 dark:border-amber-800/30 px-3 py-2 text-sm">
             <span className="text-muted-foreground">
-              Фильтр скрывает <strong className="text-foreground">{hiddenByFilters}</strong> из {invoices.length}.
+              Фильтр скрывает <strong className="text-foreground">{hiddenByFilters}</strong> из {statusCounts.all}.
             </span>
             <Button variant="ghost" size="sm" onClick={resetAllFilters} data-testid="button-reset-filters-table">
               Показать все
@@ -517,11 +456,11 @@ export const UnifiedInvoicesList = ({
           </div>
         )}
         {filteredInvoices.length === 0 ? (
-          filtersActive && invoices.length > 0 ? (
+          filtersActive && statusCounts.all > 0 ? (
             <EmptyState
               icon={FileText}
               title="Счета не найдены"
-              description={`У вас ${invoices.length} счёт${invoices.length === 1 ? '' : invoices.length < 5 ? 'а' : 'ов'}, но все скрыты текущим фильтром.`}
+              description={`Всего счетов: ${statusCounts.all}. По текущим фильтрам ничего не найдено.`}
               action={{ label: 'Показать все счета', onClick: resetAllFilters }}
             />
           ) : (
@@ -567,7 +506,7 @@ export const UnifiedInvoicesList = ({
                   {enableDelete && (
                     <TableHead className="w-[40px]">
                       <Checkbox
-                        checked={selectedInvoices.length === invoices.length && invoices.length > 0}
+                        checked={allPageSelected}
                         onCheckedChange={toggleSelectAll}
                         aria-label="Выбрать все"
                       />
@@ -764,6 +703,7 @@ export const UnifiedInvoicesList = ({
   // Cards view
   return (
     <>
+      {pagination}
       <InvoiceFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -806,7 +746,7 @@ export const UnifiedInvoicesList = ({
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => confirmDeleteInvoice(invoice.id, invoice.invoice_number)}
+                        onClick={() => confirmDeleteInvoice(invoice.id, invoice.invoice_number ?? invoice.id)}
                         disabled={deletingInvoiceId === invoice.id}
                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                       >
@@ -1104,7 +1044,7 @@ export const UnifiedInvoicesList = ({
           onOpenChange={(o) => { setMsgDialogOpen(o); if (!o) setMsgTarget(null); }}
           invoiceId={msgTarget.invoiceId}
           invoiceNumber={msgTarget.invoiceNumber}
-          currentRole={role as any}
+          currentRole={role}
         />
       )}
     </>

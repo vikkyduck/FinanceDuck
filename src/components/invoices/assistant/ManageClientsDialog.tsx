@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -121,13 +121,9 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
   const [addPartnerPopoverOpen, setAddPartnerPopoverOpen] = useState(false);
   const [editPartnerPopoverOpen, setEditPartnerPopoverOpen] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      fetchData();
-    }
-  }, [open]);
 
-  const fetchData = async () => {
+
+  const fetchData = useCallback(async () => {
     setFetchingData(true);
     try {
       const partnersData = await invoiceService.fetchPartners();
@@ -140,13 +136,19 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
         const basicClients = await invoiceService.fetchClients();
         setClients(basicClients.map(c => ({ ...c, partners: [] })));
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error fetching data:", error);
       toast.error("Не удалось загрузить данные");
     } finally {
       setFetchingData(false);
     }
-  };
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (open) {
+      fetchData();
+    }
+  }, [open, fetchData]);
 
   const togglePartner = (partnerIds: string[], partnerId: string): string[] => {
     if (partnerIds.includes(partnerId)) {
@@ -190,8 +192,8 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
       setForm(emptyForm);
       setAddPartnerPopoverOpen(false);
       fetchData();
-    } catch (error: any) {
-      toast.error(error.message || "Не удалось добавить клиента");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось добавить клиента");
     } finally {
       setLoading(false);
     }
@@ -238,8 +240,8 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
       }
       await apiPost(`/clients/${clientId}/telegram-test`, {});
       showSuccess("Telegram", "Тестовое сообщение отправлено");
-    } catch (e: any) {
-      toast.error(e?.message || "Не удалось отправить тест");
+    } catch (e: unknown) {
+      toast.error((e instanceof Error ? e.message : String(e)) || "Не удалось отправить тест");
     }
   };
 
@@ -274,8 +276,8 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
       setEditForm(emptyForm);
       setEditPartnerPopoverOpen(false);
       fetchData();
-    } catch (error: any) {
-      toast.error(error.message || "Не удалось обновить клиента");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось обновить клиента");
     } finally {
       setLoading(false);
     }
@@ -298,8 +300,8 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
       } else {
         toast.error(result.error || "Не удалось удалить клиента");
       }
-    } catch (error: any) {
-      toast.error(error.message || "Не удалось удалить клиента");
+    } catch (error: unknown) {
+      toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось удалить клиента");
     } finally {
       setDeleting(false);
       setDeleteConfirmOpen(false);
@@ -484,10 +486,10 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                               ) : (
                                 <div className="flex flex-col">
                                   <span className="font-medium">{client.name}</span>
-                                  {(client as any).contactPerson && (
+                                  {client.contactPerson && (
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                                       <User className="h-3 w-3" />
-                                      {(client as any).contactPerson}
+                                      {client.contactPerson}
                                     </span>
                                   )}
                                 </div>
@@ -599,13 +601,13 @@ export const ManageClientsDialog = ({ open, onOpenChange }: ManageClientsDialogP
                                       {client.phone}
                                     </Badge>
                                   )}
-                                  {(client as any).tgChatId && (
+                                  {client.tgChatId && (
                                     <Badge variant="secondary" className="text-xs">
                                       <Send className="h-3 w-3 mr-1" />
-                                      TG: {(client as any).tgChatId}
+                                      TG: {client.tgChatId}
                                     </Badge>
                                   )}
-                                  {!client.telegram && !client.phone && !(client as any).tgChatId && (
+                                  {!client.telegram && !client.phone && !client.tgChatId && (
                                     <span className="text-xs text-muted-foreground">Нет контактов</span>
                                   )}
                                 </div>

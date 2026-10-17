@@ -1,3 +1,4 @@
+import { schemePolicy, SCHEME_POLICIES } from './schemePolicies';
 /**
  * SHARED FINANCIAL ENGINE — single source of truth for all invoice calculations.
  *
@@ -8,24 +9,18 @@
  * converting to its own format (strings for Drizzle DB, numbers for React UI).
  */
 
-export type InvoiceScheme =
-  | 'partner_10'
-  | 'partner_15'
-  | 'agency_30'
-  | 'agency_40'
-  | 'commission_based'
-  // Гибкая агентская схема: маржа агентства и процент партнёра задаются
-  // вручную (обобщает жёсткие agency_30/40). Клиент видит маржу и списания.
-  | 'agency';
+import Decimal from 'decimal.js';
+import type { InvoiceScheme } from './schema';
+export type { InvoiceScheme } from './schema';
 
 /** Агентские схемы (открытая клиенту раскладка бюджета): жёсткие 30/40 и
  *  гибкая 'agency'. Единственный источник истины для сервера — фильтры
  *  `scheme === 'agency_30' || ...` по коду не размножать: именно такой
  *  рассыпанный фильтр однажды оставил счёт по гибкой схеме без бюджета
  *  в кабинете клиента. Фронтовый близнец: src/lib/invoiceHelpers.ts. */
-export const AGENCY_SCHEMES: readonly InvoiceScheme[] = ['agency_30', 'agency_40', 'agency'];
+export const AGENCY_SCHEMES: readonly InvoiceScheme[] = (Object.keys(SCHEME_POLICIES) as InvoiceScheme[]).filter(scheme => SCHEME_POLICIES[scheme].kind === 'agency');
 export function isAgencyScheme(scheme: unknown): boolean {
-  return scheme === 'agency_30' || scheme === 'agency_40' || scheme === 'agency';
+  return schemePolicy(scheme)?.kind === 'agency';
 }
 
 export interface FinancialResult {
@@ -70,190 +65,66 @@ export function calculateFinancials(
   plannedExpenses: number = 0,
   agencyMarginRate: number = 0,
 ): FinancialResult {
-  const base: FinancialResult = {
-    clientBill,
-    executorExpensesTotal: executorExpenses,
-    partnerTransferDue: 0,
-    netProfitAdmin: 0,
-    adminShare50: 0,
-    catShare50: 0,
+  return calculateInvoiceFinancials({ scheme, clientBill, partnerCommRate, executorExpenses, expensesByPartner, expensesByAdmin, plannedExpenses, agencyMarginRate });
+}
+
+export interface FinancialInputs {
+  scheme: InvoiceScheme;
+  clientBill: number;
+  partnerCommRate?: number;
+  executorExpenses?: number;
+  expensesByPartner?: number;
+  expensesByAdmin?: number;
+  plannedExpenses?: number;
+  agencyMarginRate?: number;
+}
+
+/** Decimal arithmetic; currency is rounded half-up to kopecks at each booked amount. */
+export function calculateInvoiceFinancials(input: FinancialInputs): FinancialResult {
+  const money = (value: Decimal.Value) => new Decimal(value).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  const bill = money(input.clientBill);
+  const expenses = money(input.executorExpenses ?? 0);
+  const byPartner = money(input.expensesByPartner ?? 0);
+  const byAdmin = money(input.expensesByAdmin ?? 0);
+  const planned = money(input.plannedExpenses ?? 0);
+  const percent = (rate: number) => Decimal.max(0, Decimal.min(100, rate));
+  const share = (rate: number) => money(bill.mul(percent(rate)).div(100));
+  const base = { clientBill: bill.toNumber(), executorExpensesTotal: expenses.toNumber(), clientSpent: expenses.toNumber() };
+  const split = (profit: Decimal) => {
+    const admin = money(profit.div(2));
+    return { netProfitAdmin: profit.toNumber(), adminShare50: admin.toNumber(), catShare50: profit.minus(admin).toNumber() };
   };
-
-  switch (scheme) {
-    case 'agency_30': {
-      // 30% agency margin: 15% admin + 15% partner. Expenses come from 70% client budget.
-      const agencyMargin         = clientBill * 0.30;
-      const partnerShareFromMargin = clientBill * 0.15;
-      const adminShareFromMargin   = clientBill * 0.15;
-      const clientBaseAfterMargin  = clientBill * 0.70;
-      const clientRemaining        = clientBaseAfterMargin - executorExpenses;
-      const partnerTransferDue     = adminShareFromMargin;  // partner owes admin the fixed 15%
-      const netProfitAdmin         = adminShareFromMargin;  // fixed — expenses from client budget
-
-      return {
-        ...base,
-        agencyMargin,
-        partnerShareFromMargin,
-        adminShareFromMargin,
-        clientBaseAfterMargin,
-        clientSpent: executorExpenses,
-        clientRemaining,
-        partnerTransferDue,
-        netProfitAdmin,
-        adminShare50: netProfitAdmin / 2,
-        catShare50:   netProfitAdmin / 2,
-      };
-    }
-
-    case 'agency_40': {
-      // 40% agency margin: 24% admin + 16% partner. Expenses come from 60% client budget.
-      const agencyMargin         = clientBill * 0.40;
-      const partnerShareFromMargin = clientBill * 0.16;
-      const adminShareFromMargin   = clientBill * 0.24;
-      const clientBaseAfterMargin  = clientBill * 0.60;
-      const clientRemaining        = clientBaseAfterMargin - executorExpenses;
-      const partnerTransferDue     = adminShareFromMargin;  // partner owes admin the fixed 24%
-      const netProfitAdmin         = adminShareFromMargin;  // fixed — expenses from client budget
-
-      return {
-        ...base,
-        agencyMargin,
-        partnerShareFromMargin,
-        adminShareFromMargin,
-        clientBaseAfterMargin,
-        clientSpent: executorExpenses,
-        clientRemaining,
-        partnerTransferDue,
-        netProfitAdmin,
-        adminShare50: netProfitAdmin / 2,
-        catShare50:   netProfitAdmin / 2,
-      };
-    }
-
-    case 'agency': {
-      // Гибкая агентская схема (обобщает жёсткие agency_30/40).
-      //   agencyMarginRate — комиссия агентства, % от суммы (видна клиенту);
-      //   partnerCommRate  — процент партнёра, % от ВСЕЙ суммы (скрыт);
-      //   админу — остаток маржи (маржа − доля партнёра).
-      // Пример: 1 000 000, маржа 40%, партнёр 15% → маржа 400к, клиенту 600к,
-      //   партнёру 150к, админу 250к.
-      const marginRate  = Math.max(0, Math.min(100, agencyMarginRate)) / 100;
-      // Партнёр не может получить больше самой маржи.
-      const partnerRate = Math.max(0, Math.min(marginRate * 100, partnerCommRate)) / 100;
-
-      const agencyMargin           = clientBill * marginRate;
-      const partnerShareFromMargin = clientBill * partnerRate;
-      const adminShareFromMargin   = agencyMargin - partnerShareFromMargin;
-      const clientBaseAfterMargin  = clientBill * (1 - marginRate);
-      const clientRemaining        = clientBaseAfterMargin - executorExpenses;
-      const partnerTransferDue     = adminShareFromMargin; // партнёр должен админу его долю
-      const netProfitAdmin         = adminShareFromMargin; // расходы из клиентского бюджета
-
-      return {
-        ...base,
-        commissionRate: agencyMarginRate, // ставка маржи (для показа/персиста)
-        agencyMargin,
-        partnerShareFromMargin,
-        adminShareFromMargin,
-        clientBaseAfterMargin,
-        clientSpent: executorExpenses,
-        clientRemaining,
-        partnerTransferDue,
-        netProfitAdmin,
-        adminShare50: netProfitAdmin / 2,
-        catShare50:   netProfitAdmin / 2,
-      };
-    }
-
-    case 'partner_10': {
-      const commissionRate   = 10;
-      const commissionAmount = clientBill * 0.10;
-      const amountToAdmin    = clientBill * 0.90;
-      const partnerTransferDue = plannedExpenses > 0
-        ? Math.max(0, amountToAdmin - plannedExpenses)
-        : Math.max(0, amountToAdmin - expensesByPartner);
-      const netProfitAdmin = partnerTransferDue - expensesByAdmin;
-      // Client remaining: proportional to service delivery progress.
-      // plannedExpenses = total planned executor cost for the engagement.
-      // If set: remaining = clientBill × (1 − executorExpenses / plannedExpenses).
-      // If not set (single-delivery): 0 — full price is the service cost, nothing owed back.
-      const clientRemaining = plannedExpenses > 0
-        ? Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses))
-        : 0;
-
-      return {
-        ...base,
-        commissionRate,
-        commissionAmount,
-        amountToAdmin,
-        clientRemaining,
-        partnerTransferDue,
-        netProfitAdmin,
-        adminShare50: netProfitAdmin / 2,
-        catShare50:   netProfitAdmin / 2,
-      };
-    }
-
-    case 'partner_15': {
-      const commissionRate   = 15;
-      const commissionAmount = clientBill * 0.15;
-      const amountToAdmin    = clientBill * 0.85;
-      const partnerTransferDue = plannedExpenses > 0
-        ? Math.max(0, amountToAdmin - plannedExpenses)
-        : Math.max(0, amountToAdmin - expensesByPartner);
-      const netProfitAdmin = partnerTransferDue - expensesByAdmin;
-      const clientRemaining = plannedExpenses > 0
-        ? Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses))
-        : 0;
-
-      return {
-        ...base,
-        commissionRate,
-        commissionAmount,
-        amountToAdmin,
-        clientRemaining,
-        partnerTransferDue,
-        netProfitAdmin,
-        adminShare50: netProfitAdmin / 2,
-        catShare50:   netProfitAdmin / 2,
-      };
-    }
-
-    case 'commission_based':
-    default: {
-      // Default 0% — entire clientBill goes to admin
-      const commissionRate   = partnerCommRate ?? 0;
-      const commissionAmount = clientBill * (commissionRate / 100);
-      const amountToAdmin    = clientBill - commissionAmount;
-      const partnerTransferDue = plannedExpenses > 0
-        ? Math.max(0, amountToAdmin - plannedExpenses)
-        : Math.max(0, amountToAdmin - expensesByPartner);
-      const netProfitAdmin = partnerTransferDue - expensesByAdmin;
-      const clientRemaining = plannedExpenses > 0
-        ? Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses))
-        : 0;
-
-      return {
-        ...base,
-        commissionRate,
-        commissionAmount,
-        amountToAdmin,
-        clientRemaining,
-        partnerTransferDue,
-        netProfitAdmin,
-        adminShare50: netProfitAdmin / 2,
-        catShare50:   netProfitAdmin / 2,
-      };
-    }
+  const policy = schemePolicy(input.scheme);
+  if (!policy) throw new Error(`Unknown invoice scheme: ${input.scheme}`);
+  if (policy.kind === 'agency') {
+    const marginRate = policy.marginRate ?? percent(input.agencyMarginRate ?? 0).toNumber();
+    const partnerRate = policy.partnerRate ?? Math.min(marginRate, input.partnerCommRate ?? 0);
+    const margin = share(marginRate);
+    const partner = share(partnerRate);
+    const admin = margin.minus(partner);
+    const clientBase = bill.minus(margin);
+    return { ...base, ...(input.scheme === 'agency' ? { commissionRate: marginRate } : {}),
+      agencyMargin: margin.toNumber(), partnerShareFromMargin: partner.toNumber(), adminShareFromMargin: admin.toNumber(),
+      clientBaseAfterMargin: clientBase.toNumber(), clientRemaining: clientBase.minus(expenses).toNumber(),
+      partnerTransferDue: admin.toNumber(), ...split(admin),
+    };
   }
+  const commissionRate = policy.commissionRate ?? percent(input.partnerCommRate ?? 0).toNumber();
+  const commission = share(commissionRate);
+  const toAdmin = bill.minus(commission);
+  const due = Decimal.max(0, toAdmin.minus(planned.gt(0) ? planned : byPartner));
+  const remaining = planned.gt(0) ? money(Decimal.max(0, bill.mul(new Decimal(1).minus(expenses.div(planned))))) : new Decimal(0);
+  return { ...base, commissionRate, commissionAmount: commission.toNumber(), amountToAdmin: toAdmin.toNumber(),
+    clientRemaining: remaining.toNumber(), partnerTransferDue: due.toNumber(), ...split(due.minus(byAdmin)),
+  };
 }
 
 /**
  * Parse a DB numeric string safely to number.
  * All invoice_calculations fields are stored as numeric strings.
  */
-export function parseNum(value: string | null | undefined): number {
+export function parseNum(value: string | number | null | undefined): number {
   if (value === null || value === undefined || value === '') return 0;
-  const n = parseFloat(value);
-  return isNaN(n) ? 0 : n;
+  const n = typeof value === "number" ? value : Number(value.replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
 }

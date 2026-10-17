@@ -1,17 +1,19 @@
+import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
-import { backupService } from "../backupService";
-import { AuthenticatedRequest, authMiddleware, requireRole } from "../middleware";
+import type { BackupService } from "../backupService";
+import { AuthenticatedRequest, requireRole } from "../middleware";
 
-export const backupRouter = Router();
+export function createBackupRouter(authMiddleware: AuthMiddleware, backupService: BackupService) {
+const backupRouter = Router();
 
 backupRouter.get("/api/backups", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
   try { res.json(await backupService.listBackups()); }
-  catch (error: any) { console.error("List backups error:", error); res.status(500).json({ error: error.message || "Failed to list backups" }); }
+  catch (error: unknown) { console.error("List backups error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to list backups" }); }
 });
 
 backupRouter.post("/api/backups", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
   try { res.json(await backupService.createBackup("manual")); }
-  catch (error: any) { console.error("Create backup error:", error); res.status(500).json({ error: error.message || "Failed to create backup" }); }
+  catch (error: unknown) { console.error("Create backup error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to create backup" }); }
 });
 
 backupRouter.get("/api/backups/:id/download", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
@@ -25,7 +27,7 @@ backupRouter.get("/api/backups/:id/download", authMiddleware, requireRole("admin
     const safeName = (backupId.split("/").pop() || "backup.json").replace(/[^A-Za-z0-9._-]/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
     res.json(backup);
-  } catch (error: any) { console.error("Download backup error:", error); res.status(500).json({ error: error.message || "Failed to download backup" }); }
+  } catch (error: unknown) { console.error("Download backup error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to download backup" }); }
 });
 
 backupRouter.post("/api/backups/:id/restore", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
@@ -34,7 +36,7 @@ backupRouter.post("/api/backups/:id/restore", authMiddleware, requireRole("admin
     const result = await backupService.restoreBackup(backupId);
     if (!result.success) return res.status(400).json({ error: result.message });
     res.json({ message: result.message });
-  } catch (error: any) { console.error("Restore backup error:", error); res.status(500).json({ error: error.message || "Failed to restore backup" }); }
+  } catch (error: unknown) { console.error("Restore backup error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to restore backup" }); }
 });
 
 backupRouter.delete("/api/backups/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
@@ -43,5 +45,8 @@ backupRouter.delete("/api/backups/:id", authMiddleware, requireRole("admin"), as
     const deleted = await backupService.deleteBackup(backupId);
     if (!deleted) return res.status(404).json({ error: "Backup not found" });
     res.status(204).send();
-  } catch (error: any) { console.error("Delete backup error:", error); res.status(500).json({ error: error.message || "Failed to delete backup" }); }
+  } catch (error: unknown) { console.error("Delete backup error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to delete backup" }); }
 });
+
+return backupRouter;
+}

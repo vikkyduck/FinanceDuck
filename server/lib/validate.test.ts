@@ -1,3 +1,4 @@
+import type { ZodTypeAny } from "zod";
 import { describe, it, expect } from "vitest";
 import {
   validateBody, invoiceMoneySchema, expenseCreateSchema, expenseUpdateSchema, partnerPaymentSchema,
@@ -6,8 +7,8 @@ import {
 // S5 из ревью: whitelist режет лишние поля, но не типы — clientBill:"banana"
 // доходил до движка. Эти тесты фиксируют, что мусор больше не проходит.
 
-const ok = (s: any, b: any) => expect(validateBody(s, b)).toBeNull();
-const bad = (s: any, b: any) => expect(validateBody(s, b)).toBeTruthy();
+const ok = (s: ZodTypeAny, b: unknown) => expect(validateBody(s, b)).toBeNull();
+const bad = (s: ZodTypeAny, b: unknown) => expect(validateBody(s, b)).toBeTruthy();
 
 describe("invoiceMoneySchema", () => {
   it("валидные тела проходят (число, числовая строка, запятая, отсутствие полей)", () => {

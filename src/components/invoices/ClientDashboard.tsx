@@ -172,8 +172,8 @@ export const ClientDashboard = () => {
       const data: ReportPreview = await response.json();
       setPreview(data);
       setPreviewOpen(true);
-    } catch (error: any) {
-      toast({ title: "Ошибка", description: error.message || "Не удалось получить данные отчёта", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Ошибка", description: (error instanceof Error ? error.message : String(error)) || "Не удалось получить данные отчёта", variant: "destructive" });
     } finally {
       setPreviewing(false);
     }
@@ -214,9 +214,9 @@ export const ClientDashboard = () => {
         document.body.appendChild(a); a.click();
         setTimeout(() => { window.URL.revokeObjectURL(url); document.body.removeChild(a); }, 100);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       reportWindow?.close();
-      toast({ title: "Ошибка", description: error.message || "Не удалось сформировать отчёт", variant: "destructive" });
+      toast({ title: "Ошибка", description: (error instanceof Error ? error.message : String(error)) || "Не удалось сформировать отчёт", variant: "destructive" });
     } finally {
       setDownloading(false);
     }
@@ -246,7 +246,7 @@ export const ClientDashboard = () => {
       let filename = `бюджетный_отчёт_${new Date().toISOString().split("T")[0]}.${fallbackExt}`;
       const utfMatch = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
       const asciiMatch = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
-      if (utfMatch) try { filename = decodeURIComponent(utfMatch[1]); } catch {}
+      if (utfMatch) try { filename = decodeURIComponent(utfMatch[1]); } catch { /* Malformed optional UI preference: keep its default. */ }
       else if (asciiMatch) filename = asciiMatch[1];
       const buffer = await response.arrayBuffer();
       const blob = new Blob([buffer], { type: mime });
@@ -256,8 +256,8 @@ export const ClientDashboard = () => {
       document.body.appendChild(a); a.click();
       setTimeout(() => { window.URL.revokeObjectURL(blobUrl); document.body.removeChild(a); }, 100);
       showSuccess("Отчёт скачан", filename);
-    } catch (error: any) {
-      toast({ title: "Ошибка", description: error.message || "Не удалось скачать отчёт", variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Ошибка", description: (error instanceof Error ? error.message : String(error)) || "Не удалось скачать отчёт", variant: "destructive" });
     } finally {
       setDownloading(false);
     }

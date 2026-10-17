@@ -1,4 +1,5 @@
-import type { AssistantInvoiceDto } from "@shared/contracts";
+import { assistantSummarySchema } from '@shared/assistantContract';
+import { apiGet } from '@/lib/api';
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, Receipt, DollarSign, Calendar, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -12,39 +13,20 @@ interface Props {
 }
 
 export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
-  const { data: stats, isLoading, refetch } = useQuery({
+  const { data: stats, isLoading, error, refetch } = useQuery({
     queryKey: ['assistant-yearly-stats', selectedYear],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/assistant/stats-invoices?year=${selectedYear}`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) {
-        return { total: 0, totalExpenses: 0, count: 0, average: 0, bestMonth: null };
-      }
-      const invoices: AssistantInvoiceDto[] = await response.json();
-
-      if (!invoices || invoices.length === 0) {
-        return { total: 0, totalExpenses: 0, count: 0, average: 0, bestMonth: null };
-      }
-
-      const total = invoices.reduce((sum, inv) => sum + (inv.client_bill || 0), 0);
-      const totalExpenses = invoices.reduce((sum, inv) => sum + (inv.executor_expenses_total || 0), 0);
-
-      const monthlyTotals: Record<number, number> = {};
-      invoices.forEach(inv => {
-        const month = new Date(inv.actual_payment_date!).getMonth();
-        monthlyTotals[month] = (monthlyTotals[month] || 0) + (inv.client_bill || 0);
-      });
-
+      const summary = await apiGet(`/assistant/invoice-summary?year=${selectedYear}`, assistantSummarySchema);
+      const total = Number(summary.total), totalExpenses = Number(summary.totalExpenses);
+      const monthlyTotals = Object.fromEntries(summary.monthly.map(row => [row.month, Number(row.total)]));
       const bestMonth = Object.entries(monthlyTotals)
         .sort(([, a], [, b]) => b - a)[0];
 
       return {
         total,
         totalExpenses,
-        count: invoices.length,
-        average: total / invoices.length,
+        count: summary.count,
+        average: summary.count ? total / summary.count : 0,
         bestMonth: bestMonth ? {
           name: format(new Date(selectedYear, parseInt(bestMonth[0])), 'LLLL', { locale: ru }),
           amount: bestMonth[1]
@@ -77,6 +59,8 @@ export const AssistantYearlyOverview = ({ selectedYear }: Props) => {
     onUpdate: () => refetch(),
     enabled: true,
   });
+
+  if (error) return <p role="alert">Не удалось загрузить статистику. <button onClick={() => refetch()}>Повторить</button></p>;
 
   if (isLoading || !stats) {
     return (

@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { calculateFinancials, parseNum } from "./financialEngine";
+import { calculateInvoiceFinancials, parseNum } from "./financialEngine";
 
 // Характеризующие тесты: фиксируют ТЕКУЩЕЕ поведение денежного движка,
 // чтобы будущий рефакторинг (или патч 2.4) не изменил расчёты незаметно.
 // Деньги во float → сверяем с точностью до копеек (toBeCloseTo(..., 2)).
 const money = (actual: number, expected: number) => expect(actual).toBeCloseTo(expected, 2);
 
-describe("calculateFinancials — agency_30 (30% маржа: 15% админ + 15% партнёр)", () => {
-  const r = calculateFinancials("agency_30", 1000, 0, 200);
+describe("calculateInvoiceFinancials — agency_30 (30% маржа: 15% админ + 15% партнёр)", () => {
+  const r = calculateInvoiceFinancials({ scheme: "agency_30", clientBill: 1000, partnerCommRate: 0, executorExpenses: 200 });
   it("маржа и доли", () => {
     money(r.agencyMargin!, 300);
     money(r.partnerShareFromMargin!, 150);
@@ -26,8 +26,8 @@ describe("calculateFinancials — agency_30 (30% маржа: 15% админ + 15
   });
 });
 
-describe("calculateFinancials — agency_40 (40% маржа: 24% админ + 16% партнёр)", () => {
-  const r = calculateFinancials("agency_40", 1000, 0, 100);
+describe("calculateInvoiceFinancials — agency_40 (40% маржа: 24% админ + 16% партнёр)", () => {
+  const r = calculateInvoiceFinancials({ scheme: "agency_40", clientBill: 1000, partnerCommRate: 0, executorExpenses: 100 });
   it("маржа и доли", () => {
     money(r.agencyMargin!, 400);
     money(r.partnerShareFromMargin!, 160);
@@ -42,9 +42,9 @@ describe("calculateFinancials — agency_40 (40% маржа: 24% админ + 16
   });
 });
 
-describe("calculateFinancials — partner_10", () => {
+describe("calculateInvoiceFinancials — partner_10", () => {
   it("без planned: остаток = 0, перевод = amountToAdmin - расходы партнёра", () => {
-    const r = calculateFinancials("partner_10", 1000, 0, 0, 50);
+    const r = calculateInvoiceFinancials({ scheme: "partner_10", clientBill: 1000, partnerCommRate: 0, executorExpenses: 0, expensesByPartner: 50 });
     money(r.commissionAmount!, 100);
     money(r.amountToAdmin!, 900);
     money(r.partnerTransferDue, 850); // 900 - 50
@@ -54,16 +54,16 @@ describe("calculateFinancials — partner_10", () => {
   });
   it("с planned: остаток пропорционален прогрессу, вычитается расход админа", () => {
     // clientBill=1000, planned=400, executorExpenses=100, byPartner=30, byAdmin=20
-    const r = calculateFinancials("partner_10", 1000, 0, 100, 30, 20, 400);
+    const r = calculateInvoiceFinancials({ scheme: "partner_10", clientBill: 1000, partnerCommRate: 0, executorExpenses: 100, expensesByPartner: 30, expensesByAdmin: 20, plannedExpenses: 400 });
     money(r.partnerTransferDue, 500); // 900 - 400(planned)
     money(r.netProfitAdmin, 480);     // 500 - 20(byAdmin)
     money(r.clientRemaining!, 750);   // 1000 * (1 - 100/400)
   });
 });
 
-describe("calculateFinancials — partner_15", () => {
+describe("calculateInvoiceFinancials — partner_15", () => {
   it("с planned", () => {
-    const r = calculateFinancials("partner_15", 1000, 0, 150, 0, 0, 300);
+    const r = calculateInvoiceFinancials({ scheme: "partner_15", clientBill: 1000, partnerCommRate: 0, executorExpenses: 150, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 300 });
     money(r.commissionAmount!, 150);
     money(r.amountToAdmin!, 850);
     money(r.partnerTransferDue, 550); // 850 - 300
@@ -72,26 +72,26 @@ describe("calculateFinancials — partner_15", () => {
   });
 });
 
-describe("calculateFinancials — commission_based", () => {
+describe("calculateInvoiceFinancials — commission_based", () => {
   it("кастомная ставка 20%", () => {
-    const r = calculateFinancials("commission_based", 1000, 20);
+    const r = calculateInvoiceFinancials({ scheme: "commission_based", clientBill: 1000, partnerCommRate: 20 });
     money(r.commissionAmount!, 200);
     money(r.amountToAdmin!, 800);
     money(r.netProfitAdmin, 800);
     money(r.adminShare50, 400);
   });
   it("ставка 0% по умолчанию — весь счёт админу", () => {
-    const r = calculateFinancials("commission_based", 500, 0);
+    const r = calculateInvoiceFinancials({ scheme: "commission_based", clientBill: 500, partnerCommRate: 0 });
     money(r.commissionAmount!, 0);
     money(r.amountToAdmin!, 500);
     money(r.netProfitAdmin, 500);
   });
 });
 
-describe("calculateFinancials — agency (гибкая: маржа% + партнёр%, партнёр от всей суммы)", () => {
-  // Сигнатура: calculateFinancials(scheme, clientBill, partnerCommRate, exec, byP, byA, planned, agencyMarginRate)
+describe("calculateInvoiceFinancials — agency (гибкая: маржа% + партнёр%, партнёр от всей суммы)", () => {
+  // Сигнатура: calculateInvoiceFinancials({ scheme: scheme, clientBill: clientBill, partnerCommRate: partnerCommRate, executorExpenses: exec, expensesByPartner: byP, expensesByAdmin: byA, plannedExpenses: planned, agencyMarginRate: agencyMarginRate })
   it("пример пользователя: 1млн, маржа 40%, партнёр 15% → 400к/600к/150к/250к", () => {
-    const r = calculateFinancials("agency", 1_000_000, 15, 0, 0, 0, 0, 40);
+    const r = calculateInvoiceFinancials({ scheme: "agency", clientBill: 1_000_000, partnerCommRate: 15, executorExpenses: 0, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 0, agencyMarginRate: 40 });
     money(r.agencyMargin!, 400_000);
     money(r.clientBaseAfterMargin!, 600_000);
     money(r.partnerShareFromMargin!, 150_000);
@@ -101,26 +101,26 @@ describe("calculateFinancials — agency (гибкая: маржа% + партн
     money(r.adminShare50, 125_000);
   });
   it("обобщает жёсткую agency_30 (маржа 30%, партнёр 15%)", () => {
-    const flex = calculateFinancials("agency", 1_000_000, 15, 0, 0, 0, 0, 30);
-    const hard = calculateFinancials("agency_30", 1_000_000);
+    const flex = calculateInvoiceFinancials({ scheme: "agency", clientBill: 1_000_000, partnerCommRate: 15, executorExpenses: 0, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 0, agencyMarginRate: 30 });
+    const hard = calculateInvoiceFinancials({ scheme: "agency_30", clientBill: 1_000_000 });
     money(flex.agencyMargin!, hard.agencyMargin!);
     money(flex.partnerShareFromMargin!, hard.partnerShareFromMargin!);
     money(flex.adminShareFromMargin!, hard.adminShareFromMargin!);
     money(flex.clientBaseAfterMargin!, hard.clientBaseAfterMargin!);
   });
   it("расходы уменьшают остаток клиента, прибыль админа фиксирована", () => {
-    const r = calculateFinancials("agency", 1_000_000, 15, 100_000, 0, 0, 0, 40);
+    const r = calculateInvoiceFinancials({ scheme: "agency", clientBill: 1_000_000, partnerCommRate: 15, executorExpenses: 100_000, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 0, agencyMarginRate: 40 });
     money(r.clientSpent!, 100_000);
     money(r.clientRemaining!, 500_000); // 600к − 100к
     money(r.netProfitAdmin, 250_000);   // не зависит от расходов
   });
   it("процент партнёра больше маржи → обрезается до маржи (админу 0)", () => {
-    const r = calculateFinancials("agency", 1_000_000, 40, 0, 0, 0, 0, 30);
+    const r = calculateInvoiceFinancials({ scheme: "agency", clientBill: 1_000_000, partnerCommRate: 40, executorExpenses: 0, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 0, agencyMarginRate: 30 });
     money(r.partnerShareFromMargin!, 300_000); // capped at margin 30%
     money(r.adminShareFromMargin!, 0);
   });
   it("партнёр 0% → вся маржа админу", () => {
-    const r = calculateFinancials("agency", 1_000_000, 0, 0, 0, 0, 0, 40);
+    const r = calculateInvoiceFinancials({ scheme: "agency", clientBill: 1_000_000, partnerCommRate: 0, executorExpenses: 0, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 0, agencyMarginRate: 40 });
     money(r.partnerShareFromMargin!, 0);
     money(r.adminShareFromMargin!, 400_000);
   });
@@ -128,12 +128,12 @@ describe("calculateFinancials — agency (гибкая: маржа% + партн
 
 describe("инварианты / крайние случаи", () => {
   it("clientRemaining никогда не отрицателен (расходы > planned)", () => {
-    const r = calculateFinancials("partner_10", 1000, 0, 200, 0, 0, 100);
+    const r = calculateInvoiceFinancials({ scheme: "partner_10", clientBill: 1000, partnerCommRate: 0, executorExpenses: 200, expensesByPartner: 0, expensesByAdmin: 0, plannedExpenses: 100 });
     expect(r.clientRemaining!).toBeGreaterThanOrEqual(0);
     money(r.clientRemaining!, 0);
   });
   it("partnerTransferDue не уходит в минус", () => {
-    const r = calculateFinancials("commission_based", 100, 0, 0, 500);
+    const r = calculateInvoiceFinancials({ scheme: "commission_based", clientBill: 100, partnerCommRate: 0, executorExpenses: 0, expensesByPartner: 500 });
     expect(r.partnerTransferDue).toBeGreaterThanOrEqual(0);
   });
 });

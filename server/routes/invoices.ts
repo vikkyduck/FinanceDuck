@@ -1,3 +1,6 @@
+import { getClientBalances, getPartnerInvoiceSummary } from '../repositories/invoiceSummaryRepo';
+import { MoneyRangeError } from '../../shared/money';
+import { browsePages } from '../../shared/pagination';
 import type { AuthMiddleware } from "../middleware";
 import { type InvoiceCommands, CommandError, type CommandActor } from "../services/invoiceCommands";
 import type { db as Database } from "../db";
@@ -28,13 +31,27 @@ invoicesRouter.get("/api/invoices", authMiddleware, async (req: AuthenticatedReq
     if (!parsed.success) return res.status(400).json({ error: 'Invalid invoice filters' });
     const result = await storage.getInvoices(role, partnerId, clientId, parsed.data);
     const projected = stripSensitiveFieldsFromList(result, role);
-    if (parsed.data.page) return res.json({ invoices: projected, ...await getInvoiceListMetadata(db, req.user!, parsed.data) });
-    res.json(projected);
+    const metadata = await getInvoiceListMetadata(db, req.user!, parsed.data);
+    res.json({ invoices: projected, ...metadata, page: parsed.data.page, pages: browsePages(metadata.total, parsed.data.limit) });
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Get invoices error:", error);
     res.status(500).json({ error: "Failed to get invoices" });
   }
+});
+
+invoicesRouter.get('/api/invoices/client-balances', authMiddleware, requireRole('admin', 'assistant', 'accountant'), async (req: AuthenticatedRequest, res: Response) => {
+  const parsed = invoiceQueryInput.safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid balance filters' });
+  try { res.json(await getClientBalances(db, req.user!, parsed.data)); }
+  catch (error) { console.error('Client balance summary failed:', error); res.status(500).json({ error: 'Не удалось загрузить балансы' }); }
+});
+
+invoicesRouter.get('/api/invoices/partner-summary', authMiddleware, requireRole('partner'), async (req: AuthenticatedRequest, res: Response) => {
+  const year = Number(req.query.year ?? new Date().getFullYear());
+  if (!Number.isInteger(year) || year < 2000 || year > 9998) return res.status(400).json({ error: 'Invalid year' });
+  try { res.json(await getPartnerInvoiceSummary(db, req.user!, year)); }
+  catch (error) { console.error('Partner summary failed:', error); res.status(500).json({ error: 'Не удалось загрузить итоги' }); }
 });
 
 invoicesRouter.get("/api/invoices/:id", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
@@ -45,7 +62,7 @@ invoicesRouter.get("/api/invoices/:id", authMiddleware, async (req: Authenticate
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
     res.json(stripSensitiveFieldsForRole(invoice, actor.role));
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Get invoice error:", error);
     res.status(500).json({ error: "Failed to get invoice" });
   }
@@ -68,7 +85,7 @@ invoicesRouter.post("/api/invoices", authMiddleware, requireRole("admin", "assis
     const filtered = stripSensitiveFieldsForRole(fullInvoice, role);
     res.status(201).json(filtered);
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Create invoice error:", error);
     res.status(500).json({ error: "Failed to create invoice" });
   }
@@ -97,7 +114,7 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
     const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
     res.json(filtered);
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Update invoice error:", error);
     res.status(500).json({ error: "Failed to update invoice" });
   }
@@ -109,7 +126,7 @@ invoicesRouter.post("/api/invoices/:id/periods", authMiddleware, requireRole("ad
     if (!Number.isSafeInteger(period) || period < 1 || typeof closed !== 'boolean') return res.status(400).json({ error: 'Нужны номер периода и действие закрытия' });
     res.json(await invoiceCommands.setPeriod(commandActor(req), req.params.id, period, closed));
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error('Service period error:', error);
     res.status(500).json({ error: 'Не удалось изменить период' });
   }
@@ -121,7 +138,7 @@ invoicesRouter.delete("/api/invoices/:id", authMiddleware, requireRole("admin"),
     await invoiceCommands.delete(commandActor(req), id);
     res.json({ success: true });
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Delete invoice error:", error);
     res.status(500).json({ error: "Failed to delete invoice" });
   }
@@ -153,7 +170,7 @@ invoicesRouter.get("/api/invoices/:id/expenses", authMiddleware, async (req: Aut
     }
     res.json(expenses);
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Get expenses error:", error);
     res.status(500).json({ error: "Failed to get expenses" });
   }
@@ -172,7 +189,7 @@ invoicesRouter.post("/api/invoices/:id/expenses", authMiddleware, requireRole("a
     const expense = await invoiceCommands.createExpense(commandActor(req), { ...pickExpense(req.body), invoiceId: id, createdBy: req.user!.token.id });
     res.status(201).json(expense);
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Create expense error:", error);
     res.status(500).json({ error: "Failed to create expense" });
   }
@@ -195,7 +212,7 @@ invoicesRouter.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "
     if (!expense) return res.status(404).json({ error: "Expense not found" });
     res.json(expense);
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Update expense error:", error);
     res.status(500).json({ error: "Failed to update expense" });
   }
@@ -207,7 +224,7 @@ invoicesRouter.delete("/api/expenses/:id", authMiddleware, requireRole("admin", 
     await invoiceCommands.deleteExpense(commandActor(req), id);
     res.json({ success: true });
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Delete expense error:", error);
     res.status(500).json({ error: "Failed to delete expense" });
   }
@@ -230,7 +247,7 @@ invoicesRouter.post("/api/invoices/transfer", authMiddleware, requireRole("admin
 
     res.status(201).json({ id: result.id });
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Transfer funds error:", error);
     res.status(500).json({ error: "Не удалось перенести средства" });
   }
@@ -243,7 +260,7 @@ invoicesRouter.get("/api/invoices/:id/transfers", authMiddleware, async (req: Au
     if (!inv) return res.status(404).json({ error: "Invoice not found" });
     res.json(await storage.getInvoiceTransfers(id));
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Get transfers error:", error);
     res.status(500).json({ error: "Не удалось получить переносы" });
   }
@@ -254,7 +271,7 @@ invoicesRouter.delete("/api/transfers/:id", authMiddleware, requireRole("admin")
     await invoiceCommands.deleteTransfer(commandActor(req), req.params.id);
     res.json({ success: true });
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Delete transfer error:", error);
     res.status(500).json({ error: "Не удалось удалить перенос" });
   }
@@ -269,7 +286,7 @@ invoicesRouter.patch("/api/invoices/:id/closing-document", authMiddleware, requi
     const updated = await invoiceCommands.update(commandActor(req), id, { closingDocumentUrl });
     res.json(updated);
   } catch (error) {
-    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Update closing document error:", error);
     res.status(500).json({ error: "Failed to update closing document" });
   }

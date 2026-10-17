@@ -104,7 +104,7 @@ export type ActsStore = Pick<
 >;
 export type MyInvoicesStore = Pick<
   StorageOperations,
-  "getClients" | "getInvoiceExpenses" | "getInvoices"
+  "invoiceExportPages" | "expenseExportPages"
 >;
 export type PartnersStore = Pick<
   StorageOperations,

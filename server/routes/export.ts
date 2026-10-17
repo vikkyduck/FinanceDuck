@@ -5,7 +5,7 @@ import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
 import fs from "fs";
 import path from "path";
-import { invoiceQueryInput } from "../invoiceQuery";
+import { invoiceQueryInput, invoiceQueryFields } from "../invoiceQuery";
 import type { ExportStore } from "../routeStores";
 import { AuthenticatedRequest, requireRole } from "../middleware";
 import { formatMoney, formatDate, formatDateTime } from "../lib/format";
@@ -30,7 +30,7 @@ const findFont = (cands: string[]) => cands.find(p => p && fs.existsSync(p)) || 
 
 exportRouter.post("/api/admin/export", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const parsed = invoiceQueryInput.pick({ invoiceId: true, clientId: true, dateFrom: true, dateTo: true }).extend({
+    const parsed = invoiceQueryFields.pick({ invoiceId: true, clientId: true, dateFrom: true, dateTo: true }).extend({
       exportTypes: z.array(z.enum(['invoices', 'clients', 'partners', 'expenses'])).min(1).default(['invoices']),
       actualDateFrom: z.string().date().optional(), actualDateTo: z.string().date().optional(),
       statuses: z.array(z.enum(['draft', 'sent', 'paid', 'cancelled'])).default([]),

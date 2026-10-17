@@ -5,11 +5,11 @@ import { schemePolicy, SCHEME_POLICIES } from './schemePolicies';
  * Used by BOTH the backend (server/storage.ts) and the frontend (src/lib/invoiceCalculations.ts).
  * All financial formulas live here and nowhere else.
  *
- * Return type uses plain numbers. Each consumer is responsible for
- * converting to its own format (strings for Drizzle DB, numbers for React UI).
+ * Canonical booked amounts are decimal strings; the UI has a numeric display adapter.
  */
 
 import Decimal from 'decimal.js';
+import { moneyDecimal, moneyString } from './money';
 import type { InvoiceScheme } from './schema';
 export type { InvoiceScheme } from './schema';
 
@@ -41,72 +41,48 @@ export interface FinancialResult {
   catShare50: number;
 }
 
-/**
- * Core calculation function — pure, no side effects.
- *
- * @param scheme              Commission scheme type
- * @param clientBill          Total amount billed to the client
- * @param partnerCommRate     Custom commission rate % (only for commission_based)
- * @param executorExpenses    Total executor expenses (reference value)
- * @param expensesByPartner   Expenses paid by partner from client money (paidByAdmin = false)
- * @param expensesByAdmin     Expenses paid by admin from own funds (paidByAdmin = true)
- * @param plannedExpenses     Reserved amount for future expenses (affects partner transfer for non-agency schemes)
- * @param agencyMarginRate    Agency margin % — ТОЛЬКО для гибкой схемы 'agency'
- *                            (комиссия агентства, видна клиенту). Для 'agency'
- *                            partnerCommRate = процент партнёра от всей суммы.
- */
-export function calculateFinancials(
-  scheme: InvoiceScheme,
-  clientBill: number,
-  partnerCommRate: number = 0,
-  executorExpenses: number = 0,
-  expensesByPartner: number = 0,
-  expensesByAdmin: number = 0,
-  plannedExpenses: number = 0,
-  agencyMarginRate: number = 0,
-): FinancialResult {
-  return calculateInvoiceFinancials({ scheme, clientBill, partnerCommRate, executorExpenses, expensesByPartner, expensesByAdmin, plannedExpenses, agencyMarginRate });
-}
-
 export interface FinancialInputs {
   scheme: InvoiceScheme;
-  clientBill: number;
-  partnerCommRate?: number;
-  executorExpenses?: number;
-  expensesByPartner?: number;
-  expensesByAdmin?: number;
-  plannedExpenses?: number;
-  agencyMarginRate?: number;
+  clientBill: Decimal.Value;
+  partnerCommRate?: Decimal.Value;
+  executorExpenses?: Decimal.Value;
+  expensesByPartner?: Decimal.Value;
+  expensesByAdmin?: Decimal.Value;
+  plannedExpenses?: Decimal.Value;
+  agencyMarginRate?: Decimal.Value;
 }
 
 /** Decimal arithmetic; currency is rounded half-up to kopecks at each booked amount. */
-export function calculateInvoiceFinancials(input: FinancialInputs): FinancialResult {
-  const money = (value: Decimal.Value) => new Decimal(value).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+export type BookedFinancialResult = { [K in keyof FinancialResult]: string };
+
+/** The server persists these decimal strings without a binary-number round trip. */
+export function calculateBookedFinancials(input: FinancialInputs): BookedFinancialResult {
+  const money = moneyDecimal;
   const bill = money(input.clientBill);
   const expenses = money(input.executorExpenses ?? 0);
   const byPartner = money(input.expensesByPartner ?? 0);
   const byAdmin = money(input.expensesByAdmin ?? 0);
   const planned = money(input.plannedExpenses ?? 0);
-  const percent = (rate: number) => Decimal.max(0, Decimal.min(100, rate));
-  const share = (rate: number) => money(bill.mul(percent(rate)).div(100));
-  const base = { clientBill: bill.toNumber(), executorExpensesTotal: expenses.toNumber(), clientSpent: expenses.toNumber() };
+  const percent = (rate: Decimal.Value) => Decimal.max(0, Decimal.min(100, rate));
+  const share = (rate: Decimal.Value) => money(bill.mul(percent(rate)).div(100));
+  const base = { clientBill: moneyString(bill), executorExpensesTotal: moneyString(expenses), clientSpent: moneyString(expenses) };
   const split = (profit: Decimal) => {
     const admin = money(profit.div(2));
-    return { netProfitAdmin: profit.toNumber(), adminShare50: admin.toNumber(), catShare50: profit.minus(admin).toNumber() };
+    return { netProfitAdmin: moneyString(profit), adminShare50: moneyString(admin), catShare50: moneyString(profit.minus(admin)) };
   };
   const policy = schemePolicy(input.scheme);
   if (!policy) throw new Error(`Unknown invoice scheme: ${input.scheme}`);
   if (policy.kind === 'agency') {
     const marginRate = policy.marginRate ?? percent(input.agencyMarginRate ?? 0).toNumber();
-    const partnerRate = policy.partnerRate ?? Math.min(marginRate, input.partnerCommRate ?? 0);
+    const partnerRate = policy.partnerRate ?? Decimal.min(marginRate, percent(input.partnerCommRate ?? 0)).toNumber();
     const margin = share(marginRate);
     const partner = share(partnerRate);
     const admin = margin.minus(partner);
     const clientBase = bill.minus(margin);
-    return { ...base, ...(input.scheme === 'agency' ? { commissionRate: marginRate } : {}),
-      agencyMargin: margin.toNumber(), partnerShareFromMargin: partner.toNumber(), adminShareFromMargin: admin.toNumber(),
-      clientBaseAfterMargin: clientBase.toNumber(), clientRemaining: clientBase.minus(expenses).toNumber(),
-      partnerTransferDue: admin.toNumber(), ...split(admin),
+    return { ...base, ...(input.scheme === 'agency' ? { commissionRate: String(marginRate) } : {}),
+      agencyMargin: moneyString(margin), partnerShareFromMargin: moneyString(partner), adminShareFromMargin: moneyString(admin),
+      clientBaseAfterMargin: moneyString(clientBase), clientRemaining: moneyString(clientBase.minus(expenses)),
+      partnerTransferDue: moneyString(admin), ...split(admin),
     };
   }
   const commissionRate = policy.commissionRate ?? percent(input.partnerCommRate ?? 0).toNumber();
@@ -114,9 +90,14 @@ export function calculateInvoiceFinancials(input: FinancialInputs): FinancialRes
   const toAdmin = bill.minus(commission);
   const due = Decimal.max(0, toAdmin.minus(planned.gt(0) ? planned : byPartner));
   const remaining = planned.gt(0) ? money(Decimal.max(0, bill.mul(new Decimal(1).minus(expenses.div(planned))))) : new Decimal(0);
-  return { ...base, commissionRate, commissionAmount: commission.toNumber(), amountToAdmin: toAdmin.toNumber(),
-    clientRemaining: remaining.toNumber(), partnerTransferDue: due.toNumber(), ...split(due.minus(byAdmin)),
+  return { ...base, commissionRate: String(commissionRate), commissionAmount: moneyString(commission), amountToAdmin: moneyString(toAdmin),
+    clientRemaining: moneyString(remaining), partnerTransferDue: moneyString(due), ...split(due.minus(byAdmin)),
   };
+}
+
+/** Numeric display adapter; never used to persist financial facts. */
+export function calculateInvoiceFinancials(input: FinancialInputs): FinancialResult {
+  return Object.fromEntries(Object.entries(calculateBookedFinancials(input)).map(([key, value]) => [key, Number(value)])) as unknown as FinancialResult;
 }
 
 /**

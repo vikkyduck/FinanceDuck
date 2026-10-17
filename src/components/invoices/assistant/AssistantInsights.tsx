@@ -1,4 +1,5 @@
-import type { AssistantInvoiceDto } from "@shared/contracts";
+import { assistantSummarySchema } from '@shared/assistantContract';
+import { apiGet } from '@/lib/api';
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, TrendingUp, Lightbulb, Target } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,47 +12,20 @@ interface Props {
 }
 
 export const AssistantInsights = ({ selectedYear }: Props) => {
-  const { data: insights, isLoading, refetch } = useQuery({
+  const { data: insights, isLoading, error, refetch } = useQuery({
     queryKey: ['assistant-insights', selectedYear],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/assistant/stats-invoices?year=${selectedYear}`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) return [];
-      const invoices: AssistantInvoiceDto[] = await response.json();
-
-      if (!invoices || invoices.length === 0) {
-        return [];
-      }
-
-      const partnerTotals = new Map<string, number>();
-      const monthlyTotals = new Map<number, number>();
-      let totalAmount = 0;
-
-      invoices.forEach(inv => {
-        const amount = inv.client_bill || 0;
-        totalAmount += amount;
-
-        const partnerName = inv.partner_name || 'Неизвестный';
-        partnerTotals.set(partnerName, (partnerTotals.get(partnerName) || 0) + amount);
-
-        const month = new Date(inv.actual_payment_date!).getMonth();
-        monthlyTotals.set(month, (monthlyTotals.get(month) || 0) + amount);
-      });
-
-      const topPartner = Array.from(partnerTotals.entries())
-        .sort(([, a], [, b]) => b - a)[0];
-
-      const bestMonth = Array.from(monthlyTotals.entries())
-        .sort(([, a], [, b]) => b - a)[0];
-
-      const averageCheck = totalAmount / invoices.length;
+      const summary = await apiGet(`/assistant/invoice-summary?year=${selectedYear}`, assistantSummarySchema);
+      if (!summary.count) return [];
+      const totalAmount = Number(summary.total);
+      const topPartner = summary.topPartner ? [summary.topPartner.name, Number(summary.topPartner.total)] as const : null;
+      const bestMonth = summary.monthly.map(row => [row.month, Number(row.total)] as const).sort((a, b) => b[1] - a[1])[0];
+      const averageCheck = totalAmount / summary.count;
 
       const insightsList: { icon: typeof Trophy; color: string; bg: string; text: string }[] = [];
 
       if (topPartner) {
-        const percentage = ((topPartner[1] / totalAmount) * 100).toFixed(0);
+        const percentage = (totalAmount ? (topPartner[1] / totalAmount) * 100 : 0).toFixed(0);
         insightsList.push({
           icon: Trophy,
           color: "text-yellow-600 dark:text-yellow-400",
@@ -78,12 +52,12 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
         text: `Средний чек: ${Math.round(averageCheck / 1000)}К ₽`
       });
 
-      if (invoices.length >= 10) {
+      if (summary.count >= 10) {
         insightsList.push({
           icon: Lightbulb,
           color: "text-purple-600 dark:text-purple-400",
           bg: "bg-purple-500/10",
-          text: `Отлично! Обработано ${invoices.length} оплаченных счетов в этом году`
+          text: `Отлично! Обработано ${summary.count} оплаченных счетов в этом году`
         });
       }
 
@@ -107,6 +81,8 @@ export const AssistantInsights = ({ selectedYear }: Props) => {
     onUpdate: () => refetch(),
     enabled: true,
   });
+
+  if (error) return <p role="alert">Не удалось загрузить статистику. <button onClick={() => refetch()}>Повторить</button></p>;
 
   if (isLoading || !insights?.length) {
     return null;

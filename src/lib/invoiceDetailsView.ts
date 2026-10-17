@@ -25,7 +25,7 @@ export interface InvoiceDetailsView {
   client_id?: string | null;
   partner_id?: string | null;
   scheme: InvoiceScheme;
-  status: string;
+  status: InvoiceDto['status'];
   payment_date?: string | null;
   actual_payment_date?: string | null;
   notes?: string | null;

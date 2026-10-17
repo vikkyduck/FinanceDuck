@@ -11,7 +11,7 @@ import {
   RecurringInvoice, InsertRecurringInvoice, AccessToken, UserSession, UserRole, InvoiceScheme, ActType, AssistantActionType
 } from "../shared/schema";
 import { eq, and, desc, asc, isNull, isNotNull, gte, lte, sql, inArray, or, sum, count, type SQL } from "drizzle-orm";
-import { calculateFinancials, parseNum, type FinancialResult } from "../shared/financialEngine";
+import { parseNum } from "../shared/financialEngine";
 import { randomBytes } from "crypto";
 import * as userRepo       from "./repositories/userRepo";
 import * as partnerRepo     from "./repositories/partnerRepo";
@@ -25,7 +25,6 @@ import * as alertsRepo from "./repositories/alertsRepo";
 import * as planningRepo from "./repositories/planningRepo";
 import * as reportsRepo from "./repositories/reportsRepo";
 import * as searchRepo from "./repositories/searchRepo";
-import { calculateInvoiceServer } from "./repositories/invoiceRepo";
 import type { ClientCollectionScope } from "./tenantAccess";
 
 export class DatabaseStorage implements StorageOperations {

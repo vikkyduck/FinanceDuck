@@ -15,13 +15,13 @@ const isAgency = (scheme?: string | null) => scheme === "agency_30" || scheme ==
 // Единый маршрут выгрузки счетов в Excel. Кнопка «Выгрузить в Excel» есть
 // у ассистента, бухгалтера и админа. Раньше тот же путь обслуживался
 // дублирующим хендлером в recurring.ts — он удалён.
-// getInvoices сам отдаёт нужный срез по роли: admin — все, assistant — кроме
+// invoiceExportPages сам отдаёт нужный срез по роли: admin — все, assistant — кроме
 // скрытых (hideFromAssistant), accountant — только скрытые.
 //
 // Для АДМИНА выгрузка отражает все операции по счёту: приход, условия по
 // партнёрскому соглашению, комиссию партнёру, траты, остаток клиента на дату
 // и чистую прибыль админа. Для ассистента/бухгалтера остаётся безопасная
-// раскладка без прибыли/комиссий — эти поля getInvoices по ролям не вырезает.
+// раскладка без прибыли/комиссий — эти поля репозиторий по ролям не вырезает.
 myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role as UserRole;
@@ -31,13 +31,18 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
     // exports land on `.default`, so `ExcelJS.Workbook` would be undefined.
     const ExcelJSModule = await import("exceljs");
     const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
-    const workbook = new ExcelJS.Workbook();
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename=export_${role}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream: res, useStyles: true, useSharedStrings: false });
     workbook.creator = "Invoice Management System";
     workbook.created = new Date();
 
-    const invoices = await storage.getInvoices(role);
-    const allClients = await storage.getClients({ kind: "all" });
-    const clientMap = new Map(allClients.map(c => [c.id, c.name]));
+    const rows = async function* () {
+      for await (const page of storage.invoiceExportPages(req.user!, {})) {
+        if (res.destroyed) throw new Error('Export cancelled');
+        yield* page;
+      }
+    };
 
     const sheet = workbook.addWorksheet("Счета");
     if (isAdmin) {
@@ -76,13 +81,13 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
     headerRow.font = { bold: true };
     headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
 
-    for (const inv of invoices) {
+    for await (const inv of rows()) {
       const calc = inv.calculations;
       const clientBill = parseNum(calc?.clientBill || inv.clientBill || "0");
       const actualExpenses = parseNum(calc?.executorExpensesTotal || "0");
       const common = {
         number: inv.invoiceNumber || "—",
-        client: clientMap.get(inv.clientId || "") || "—",
+        client: inv.client?.name || "—",
         partner: inv.partner?.name || "—",
         status: statusMap[inv.status || ""] || inv.status,
         scheme: schemeMap[inv.scheme || ""] || inv.scheme || "—",
@@ -98,9 +103,7 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
         const partnerCommission = isAgency(inv.scheme)
           ? parseNum(calc?.partnerShareFromMargin || "0")
           : parseNum(calc?.commissionAmount || "0");
-        const clientRemaining = isAgency(inv.scheme)
-          ? parseNum(calc?.clientBaseAfterMargin || "0") - actualExpenses
-          : parseNum(calc?.clientRemaining || "0");
+        const clientRemaining = parseNum(calc?.clientRemaining);
         const netProfit = parseNum(calc?.netProfitAdmin || "0");
         sheet.addRow({
           ...common,
@@ -108,20 +111,19 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
           expenses: actualExpenses,
           clientRemaining,
           netProfit,
-        });
+        }).commit();
       } else {
         const plannedExpenses = parseNum(inv.plannedExpenses || "0");
-        const remaining = isAgency(inv.scheme)
-          ? parseNum(calc?.clientBaseAfterMargin || "0") - actualExpenses
-          : clientBill - actualExpenses;
+        const remaining = parseNum(calc?.clientRemaining);
         sheet.addRow({
           ...common,
           plannedExpenses: plannedExpenses || 0,
           actualExpenses,
           remaining,
-        });
+        }).commit();
       }
     }
+    sheet.commit();
 
     const expSheet = workbook.addWorksheet("Расходы");
     expSheet.columns = [
@@ -135,20 +137,21 @@ myInvoicesRouter.post("/api/my-invoices/export", authMiddleware, requireRole("ad
     const expHeaderRow = expSheet.getRow(1);
     expHeaderRow.font = { bold: true };
     expHeaderRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
-    for (const inv of invoices) {
-      const expenses = await storage.getInvoiceExpenses(inv.id);
-      for (const exp of expenses) {
-        expSheet.addRow({ invoiceNumber: inv.invoiceNumber || "—", client: clientMap.get(inv.clientId || "") || "—", description: exp.description || "—", amount: parseNum(exp.amount || "0"), date: exp.date ? new Date(exp.date).toLocaleDateString("ru-RU") : "—", paidByAdmin: exp.paidByAdmin ? "Да" : "Нет" });
+    for await (const page of storage.invoiceExportPages(req.user!, {})) {
+      if (res.destroyed) throw new Error('Export cancelled');
+      const byId = new Map(page.map(row => [row.id, row]));
+      for await (const expenses of storage.expenseExportPages(page.map(row => row.id))) {
+        for (const exp of expenses) {
+          const inv = byId.get(exp.invoiceId)!;
+          expSheet.addRow({ invoiceNumber: inv.invoiceNumber || "—", client: inv.client?.name || "—", description: exp.description || "—", amount: parseNum(exp.amount || "0"), date: exp.date ? new Date(exp.date).toLocaleDateString("ru-RU") : "—", paidByAdmin: exp.paidByAdmin ? "Да" : "Нет" }).commit();
+        }
       }
     }
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename=export_${role}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    res.send(Buffer.from(buffer as ArrayBuffer));
+    expSheet.commit();
+    await workbook.commit();
   } catch (error) {
     console.error("My invoices export error:", error);
-    res.status(500).json({ error: "Failed to export data" });
+    if (res.headersSent) res.destroy(); else res.status(500).json({ error: "Failed to export data" });
   }
 });
 

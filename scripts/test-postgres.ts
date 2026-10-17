@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -15,6 +15,7 @@ if (!['127.0.0.1', 'localhost', '[::1]'].includes(address.hostname)) throw new E
 const name = `finance_test_${randomUUID().replaceAll('-', '')}`;
 const control = new Pool({ connectionString: address.toString(), max: 1 });
 let pool: Pool | undefined;
+const restoreNames: string[] = [];
 try {
   await control.query(`CREATE DATABASE "${name}"`);
   address.pathname = `/${name}`;
@@ -111,10 +112,54 @@ try {
       assert.deepEqual(restored!.data[table].map(row => JSON.stringify(row)).sort(), snapshot!.data[table].map(row => JSON.stringify(row)).sort(), table);
     }
     console.log('PASS: encrypted PostgreSQL cursor backup round trip preserves all rows, bigints and dates');
+    const { restoreShadowDatabase } = await import('../server/services/shadowRestore');
+    const { verifyRestoredArchive } = await import('../server/services/restoreVerification');
+    const { objectStore } = await import('../server/services/objectStore');
+    const suffix = randomUUID().replaceAll('-', '');
+    const shadow = `finance_restore_${suffix}`, retained = `finance_retained_${suffix}`, failed = `finance_failed_${suffix}`;
+    restoreNames.push(shadow, retained, failed);
+    await control.query(`CREATE DATABASE "${shadow}"`);
+    const proof = await restoreShadowDatabase(path.join(backupDirectory, info.id), shadow, path.join(backupDirectory, 'shadow-proof'));
+    assert.equal(proof.tables, 22);
+    const shadowAddress = new URL(address); shadowAddress.pathname = `/${shadow}`;
+    const shadowPool = new Pool({ connectionString: shadowAddress.toString() });
+    try {
+      const shadowDb = drizzle(shadowPool, { schema });
+      await shadowPool.query("UPDATE invoice_calculations SET client_bill = client_bill + 0.01 WHERE invoice_id = $1", [from.id]);
+      await assert.rejects(verifyRestoredArchive(shadowDb, objectStore, path.join(backupDirectory, info.id), backupDirectory), /verification failed: invoiceCalculations/);
+      await shadowPool.query("UPDATE invoice_calculations SET client_bill = client_bill - 0.01 WHERE invoice_id = $1", [from.id]);
+    } finally { await shadowPool.end(); }
+    console.log('PASS: shadow restore verifies all 22 tables and rejects a one-kopeck difference');
+    await pool.query("INSERT INTO clients (name) VALUES ('LIVE-AFTER-SNAPSHOT')");
+    await pool.end(); pool = undefined;
+    const switchSource = await readFile('deploy/swap-databases.sql', 'utf8');
+    const transaction = switchSource.slice(switchSource.indexOf('BEGIN;'), switchSource.indexOf('COMMIT;') + 7);
+    const switchDatabases = async (replacement: string, archiveName: string, injectFailure = false) => {
+      const names = { live: name, replacement, retained: archiveName };
+      let query = transaction.replace(/:"(live|replacement|retained)"/g, (_, key: keyof typeof names) => `"${names[key]}"`)
+        .replace(/:'(live|replacement|retained)'/g, (_, key: keyof typeof names) => `'${names[key]}'`);
+      if (injectFailure) query = query.replace(`ALTER DATABASE "${replacement}" RENAME`, `SELECT 1/0; ALTER DATABASE "${replacement}" RENAME`);
+      try { await control.query(query); } catch (error) { await control.query('ROLLBACK'); throw error; }
+    };
+    await assert.rejects(switchDatabases(shadow, retained, true), /division by zero/);
+    const states = await control.query('SELECT datname, datallowconn FROM pg_database WHERE datname = ANY($1)', [[name, shadow, retained]]);
+    assert.equal(states.rows.length, 2); assert(states.rows.every(row => row.datallowconn));
+    console.log('PASS: interruption between database renames rolls back both names and connection policy');
+    await switchDatabases(shadow, retained);
+    let readback = new Pool({ connectionString: address.toString() });
+    try { assert.equal((await readback.query("SELECT count(*)::int AS n FROM clients WHERE name='LIVE-AFTER-SNAPSHOT'")).rows[0].n, 0); }
+    finally { await readback.end(); }
+    await switchDatabases(retained, failed);
+    readback = new Pool({ connectionString: address.toString() });
+    try { assert.equal((await readback.query("SELECT count(*)::int AS n FROM clients WHERE name='LIVE-AFTER-SNAPSHOT'")).rows[0].n, 1); }
+    finally { await readback.end(); }
+    console.log('PASS: verified database switch and reverse switch preserve the original live database');
+
   } finally { await rm(backupDirectory, { recursive: true, force: true }); }
 
 } finally {
   await pool?.end();
-  await control.query(`DROP DATABASE IF EXISTS "${name}"`);
+  for (const restoredName of restoreNames) await control.query(`DROP DATABASE IF EXISTS "${restoredName}" WITH (FORCE)`);
+  await control.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
   await control.end();
 }

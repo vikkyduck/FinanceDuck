@@ -1,3 +1,4 @@
+import { InvoicePagination } from './InvoicePagination';
 import { usePagedInvoices } from "@/hooks/usePagedInvoices";
 import { useEffect, useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -82,19 +83,13 @@ export const UnifiedInvoicesList = ({
   const isMobile = useIsMobile();
   
   const {
-    invoices, loading, error: invoicesError, page, setPage, total,
+    invoices, loading, error: invoicesError, page, setPage, total, pages,
     searchQuery, setSearchQuery, statusFilter, setStatusFilter, sortBy, setSortBy,
     clientFilter, setClientFilter, partnerFilter, setPartnerFilter, monthFilter, setMonthFilter,
     clients, partners, statusCounts,
   } = usePagedInvoices(role, statusParam || initialStatusFilter, enableRealtime);
   const filteredInvoices = invoices;
-  const pagination = <div className="flex items-center justify-between gap-3 py-3">
-    <span className="text-sm text-muted-foreground">Найдено: {total} · Страница {page} из {Math.max(1, Math.ceil(total / 100))}</span>
-    <div className="flex gap-2">
-      <Button variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button>
-      <Button variant="outline" disabled={page * 100 >= total} onClick={() => setPage(page + 1)}>Далее</Button>
-    </div>
-  </div>;
+  const pagination = <InvoicePagination page={page} pages={pages} total={total} onPage={setPage} disabled={loading} />;
 
   const { setRef } = useStaggerAnimation(filteredInvoices.length, viewMode === 'table' ? 60 : 80);
 

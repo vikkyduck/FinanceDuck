@@ -6,7 +6,7 @@ import type { UserRole } from "@shared/schema";
  * This file is the FE adapter: it converts camelCase numbers → snake_case numbers
  * (the shape expected by React components) and re-exports utility helpers.
  */
-import { calculateFinancials as _calc, parseNum } from "@shared/financialEngine";
+import { calculateInvoiceFinancials as _calc, parseNum, type FinancialInputs } from "@shared/financialEngine";
 export type { InvoiceScheme } from "@shared/financialEngine";
 
 // ─── Public interface (snake_case, numbers) used by React components ──────────
@@ -34,26 +34,8 @@ export interface InvoiceCalculations {
  * Calculate invoice financial metrics.
  * Delegates to the shared engine and converts camelCase → snake_case for the UI.
  */
-export function calculateInvoice(
-  scheme: import("@shared/financialEngine").InvoiceScheme,
-  clientBill: number,
-  partnerCommissionRate?: number,
-  executorExpenses: number = 0,
-  expensesPaidByPartner: number = 0,
-  expensesPaidByAdmin: number = 0,
-  plannedExpenses: number = 0,
-  agencyMarginRate: number = 0,
-): InvoiceCalculations {
-  const f = _calc(
-    scheme,
-    clientBill,
-    partnerCommissionRate ?? 0,
-    executorExpenses,
-    expensesPaidByPartner,
-    expensesPaidByAdmin,
-    plannedExpenses,
-    agencyMarginRate,
-  );
+export function calculateInvoice(input: FinancialInputs): InvoiceCalculations {
+  const f = _calc(input);
 
   return {
     client_bill:               f.clientBill,

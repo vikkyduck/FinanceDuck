@@ -30,6 +30,8 @@ try {
   const { InvoiceCommands } = await import('../server/services/invoiceCommands');
   const { DatabaseStorage } = await import('../server/storage');
   const { createInvoicesRouter } = await import('../server/routes/invoices');
+  const { createAssistantRouter } = await import('../server/routes/assistant');
+  const { createDocumentStatusRouter } = await import('../server/routes/documentStatus');
   const { getAdminMonthlyData } = await import('../server/repositories/dashboardRepo');
   const { invoiceExportPages } = await import('../server/repositories/exportRepo');
   const objects = new FileObjectStore(path.join(directory, 'objects'));
@@ -41,7 +43,11 @@ try {
   await pool.query(`INSERT INTO partners(id, name) SELECT fixture_uuid('partner-'||n), 'Fixture partner '||n FROM generate_series(1,20) n`);
   await pool.query(`INSERT INTO clients(id, name) SELECT fixture_uuid('client-'||n), 'Fixture client '||n FROM generate_series(1,200) n`);
   const app = express(); app.use(express.json());
-  app.use(createInvoicesRouter(new DatabaseStorage(db), (req, _res, next) => { req.user = { role: 'admin', token: { id: actorId } } as typeof req.user; next(); }, db, new InvoiceCommands(db)));
+  const partnerId = (await pool.query('SELECT id FROM partners LIMIT 1')).rows[0].id;
+  const auth: import('../server/middleware').AuthMiddleware = (req, _res, next) => {
+    req.user = { role: req.path.endsWith('/partner-summary') ? 'partner' : 'admin', partnerId, token: { id: actorId } } as typeof req.user; next();
+  };
+  app.use(createInvoicesRouter(new DatabaseStorage(db), auth, db, new InvoiceCommands(db)), createAssistantRouter(auth, db), createDocumentStatusRouter(auth, db));
   app.get('/bench/monthly', async (_req, res) => { res.json(await getAdminMonthlyData(db, 2026)); });
   server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No benchmark listener');
@@ -59,7 +65,8 @@ try {
     await pool.query(`INSERT INTO invoice_expenses(invoice_id,description,amount,created_by,date)
       SELECT fixture_uuid('invoice-'||n),'Fixture expense '||k,10,$3,'2026-01-01' FROM generate_series($1::int,$2::int) n CROSS JOIN generate_series(1,3) k`, [previous+1,count,actorId]);
     previous = count; await pool.query('ANALYZE');
-    for (const concurrency of (process.env.BENCH_BACKUP_ONLY === '1' ? [] : [1,5,20,40])) {
+    for (const concurrency of (process.env.BENCH_BACKUP_ONLY === '1' ? [] : (process.env.BENCH_CONCURRENCY ?? '1,5,20,40').split(',').map(Number))) {
+      const byRoute = new Map<string, number[]>();
       const times: number[] = []; let errors = 0, next = 0;
       // Warm the query plans and buffers outside the measurement.
       for (let i=0;i<5;i++) await fetch(origin+'/api/invoices?page=1&limit=100').then(r=>r.arrayBuffer());
@@ -67,19 +74,25 @@ try {
       await Promise.all(Array.from({ length: concurrency }, async () => {
         for (;;) {
           const i = next++; if (i >= 100 && performance.now() - start >= 10000) return;
-          const route = i % 10 === 0 ? '/bench/monthly' : i % 5 === 0 ? '/api/invoices?page=1&limit=100&search=BENCH-99' : `/api/invoices?page=${1+i%10}&limit=100`;
+          const routes = ['/api/invoices', '/api/invoices/client-balances?limit=25', '/api/invoices/partner-summary?year=2026',
+            '/api/assistant/invoice-summary?year=2026', '/api/assistant/invoice-groups?year=2026&limit=25', '/api/clients/acts-status?limit=25', '/api/closing-docs-status?limit=25',
+            '/api/invoices?page=1&limit=100&search=BENCH-99', `/api/invoices?page=${1+i%10}&limit=100`, '/bench/monthly'];
+          const route = routes[i % routes.length];
           const t = performance.now();
-          try { const response = await fetch(origin+route, { signal: AbortSignal.timeout(60000) }); if (!response.ok) errors++; await response.arrayBuffer(); } catch { errors++; }
-          times.push(performance.now()-t);
+          try { const response = await fetch(origin+route, { signal: AbortSignal.timeout(60000) }); if (!response.ok) errors++; const body = await response.json(); if (Array.isArray(body.invoices) && body.invoices.length > 100) errors++; } catch { errors++; }
+          const elapsed = performance.now() - t; times.push(elapsed);
+          const samples = byRoute.get(route) ?? []; samples.push(elapsed); byRoute.set(route, samples);
         }
       }));
       times.sort((a,b)=>a-b);
       const row = { invoices: count, expenses: count*3, concurrency, requests: times.length, errors,
         p50: Math.round(times[Math.ceil(times.length*.5)-1]), p95: Math.round(times[Math.ceil(times.length*.95)-1]), p99: Math.round(times[Math.ceil(times.length*.99)-1]),
         requestsPerSecond: +(times.length/((performance.now()-start)/1000)).toFixed(1), rssMiB: Math.round(process.memoryUsage().rss/1048576) };
-      runs.push(row); console.log(JSON.stringify(row));
+      const endpoints = Object.fromEntries([...byRoute].map(([route, samples]) => { samples.sort((a,b) => a-b); return [route, { requests: samples.length, p95: Math.round(samples[Math.ceil(samples.length * .95)-1]) }]; }));
+      runs.push({ ...row, endpoints }); console.log(JSON.stringify(row));
     }
   }
+  if (process.env.BENCH_HTTP_ONLY !== '1') {
   console.log('HTTP benchmark complete; preparing document fixtures');
   const docs = Number(process.env.BENCH_DOCUMENTS ?? 100);
   const invoiceId = (await pool.query(`SELECT id FROM invoices LIMIT 1`)).rows[0].id;
@@ -107,12 +120,18 @@ try {
     const restoreStart = performance.now(); const restored = await backup.restoreBackup(info.id);
     if (!restored.success) throw new Error(restored.message);
     if (JSON.stringify(before)!==JSON.stringify(await fingerprints())) throw new Error('Restored data fingerprints differ');
+    const { verifyRestoredArchive } = await import('../server/services/restoreVerification');
+    const restoreMs = Math.round(performance.now() - restoreStart);
+    const verificationStart = performance.now();
+    await verifyRestoredArchive(db, objects, path.join(directory, 'backups', info.id), directory);
+    const verificationMs = Math.round(performance.now() - verificationStart);
     let verifiedObjects = 0;
     for(const row of (await pool.query('SELECT object_key FROM signed_acts')).rows) { await objects.get(row.object_key); verifiedObjects++; }
     results.backup = { invoices: previous, expenses: previous*3, documentMiB: docs, archiveBytes: (await stat(path.join(directory,'backups',info.id))).size,
-      createMs, restoreMs: Math.round(performance.now()-restoreStart), peakRssMiB:Math.round(peakRss/1048576), peakHeapMiB:Math.round(peakHeap/1048576), verifiedObjects, recoveredEmptyObjectVolume: true, allTableFingerprintsMatch: true };
+      createMs, verificationMs, restoreMs, peakRssMiB:Math.round(peakRss/1048576), peakHeapMiB:Math.round(peakHeap/1048576), verifiedObjects, recoveredEmptyObjectVolume: true, allTableFingerprintsMatch: true };
     console.log(JSON.stringify(results.backup));
   } finally { clearInterval(sampler); }
+  }
   let exported = 0; const exportStart = performance.now();
   for await (const page of invoiceExportPages(db, { role: 'admin' }, {})) exported += page.length;
   results.export = { invoices: exported, durationMs: Math.round(performance.now()-exportStart) };

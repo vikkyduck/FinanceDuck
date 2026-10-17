@@ -187,14 +187,14 @@ const AppContent = () => {
       <SidebarProvider>
         <div className="flex min-h-screen w-full">
           <AppSidebar />
-          <div className="flex-1 flex flex-col">
+          <div className="min-w-0 flex-1 flex flex-col">
             <header className="h-12 border-b border-border bg-background/80 backdrop-blur-xl flex items-center gap-2 sm:gap-3 px-2 sm:px-4 md:px-6 sticky top-0 z-40">
               <SidebarTrigger />
               <div className="flex-1 sm:flex sm:justify-center min-w-0">
                 <TopSearchBar />
               </div>
             </header>
-            <main className="flex-1">
+            <main className="min-w-0 flex-1">
               <ErrorBoundary>
                 <AnimatedRoutes />
               </ErrorBoundary>

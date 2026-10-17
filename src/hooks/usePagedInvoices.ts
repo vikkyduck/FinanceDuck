@@ -8,7 +8,7 @@ import type { UserRole } from '@shared/schema';
 import { useInvoiceFilters, type InvoiceStatus } from './useInvoiceFilters';
 
 interface InvoicePage {
-  invoices: InvoiceDto[]; total: number;
+  invoices: InvoiceDto[]; total: number; pages: number;
   statusCounts: Record<InvoiceStatus, number>;
   clients: { id: string; name: string }[];
   partners: { id: string; name: string }[];
@@ -31,7 +31,7 @@ export function usePagedInvoices(role: UserRole, initialStatus: InvoiceStatus | 
     placeholderData: keepPreviousData, queryFn: async () => invoicePageSchema.parse(await apiGet<unknown>(`/invoices?${params}`)) as InvoicePage, staleTime: 30000, refetchInterval: realtime ? 120000 : false,
   });
   return { ...filters, invoices: query.data?.invoices.map(invoiceListView) ?? [],
-    loading: query.isLoading, error: query.error, page, setPage, total: query.data?.total ?? 0,
+    loading: query.isLoading, error: query.error, page, setPage, total: query.data?.total ?? 0, pages: query.data?.pages ?? 0,
     clients: query.data?.clients ?? [], partners: query.data?.partners ?? [], statusCounts: query.data?.statusCounts ?? emptyCounts,
   };
 }

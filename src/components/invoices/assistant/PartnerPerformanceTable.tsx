@@ -1,5 +1,7 @@
-import type { AssistantInvoiceDto } from "@shared/contracts";
-import { useState } from "react";
+import { assistantGroupsSchema } from '@shared/assistantContract';
+import { apiGet } from '@/lib/api';
+import { InvoicePagination } from '../InvoicePagination';
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronDown, ChevronRight, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,71 +16,15 @@ interface Props {
 export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
   const [expandedPartner, setExpandedPartner] = useState<string | null>(null);
 
-  const { data: partnerStats, isLoading } = useQuery({
-    queryKey: ['assistant-partner-stats', selectedYear],
-    queryFn: async () => {
-      const response = await fetch(
-        `/api/assistant/stats-invoices?year=${selectedYear}`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) return [];
-      const invoices: AssistantInvoiceDto[] = await response.json();
-
-      if (!invoices || invoices.length === 0) {
-        return [];
-      }
-
-      const partnerMap = new Map<string, {
-        id: string;
-        name: string;
-        total: number;
-        invoiceCount: number;
-        clients: Map<string, { name: string; total: number; count: number }>;
-      }>();
-
-      invoices.forEach(inv => {
-        const partnerName = inv.partner_name;
-        const partnerId = inv.partner_id;
-        const clientName = inv.client_name;
-        const clientId = inv.client_id;
-        const amount = inv.client_bill || 0;
-
-        if (!partnerName || !clientName || !partnerId || !clientId) return;
-
-        if (!partnerMap.has(partnerId)) {
-          partnerMap.set(partnerId, {
-            id: partnerId,
-            name: partnerName,
-            total: 0,
-            invoiceCount: 0,
-            clients: new Map()
-          });
-        }
-
-        const p = partnerMap.get(partnerId)!;
-        p.total += amount;
-        p.invoiceCount++;
-
-        if (!p.clients.has(clientId)) {
-          p.clients.set(clientId, { name: clientName, total: 0, count: 0 });
-        }
-        const c = p.clients.get(clientId)!;
-        c.total += amount;
-        c.count++;
-      });
-
-      const totalAmount = Array.from(partnerMap.values())
-        .reduce((sum, p) => sum + p.total, 0);
-
-      return Array.from(partnerMap.values())
-        .map(p => ({
-          ...p,
-          percentage: (p.total / totalAmount) * 100,
-          clients: Array.from(p.clients.values())
-        }))
-        .sort((a, b) => b.total - a.total);
-    }
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); setExpandedPartner(null); }, [selectedYear]);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['/api/invoices', 'assistant-partner-groups', selectedYear, page],
+    queryFn: () => apiGet(`/assistant/invoice-groups?year=${selectedYear}&page=${page}&limit=25`, assistantGroupsSchema),
   });
+  const partnerStats = data?.rows.map(row => ({ ...row, total: Number(row.total),
+    percentage: Number(data.amount) ? Number(row.total) / Number(data.amount) * 100 : 0 }));
+  if (error) return <p role="alert">Не удалось загрузить партнёров. <button onClick={() => refetch()}>Повторить</button></p>;
 
   if (isLoading) {
     return (
@@ -124,7 +70,7 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
                   <div className="text-left">
                     <p className="font-semibold">{partner.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {partner.clients.length} клиентов · {partner.invoiceCount} счетов
+                      {partner.clientCount} клиентов · {partner.invoiceCount} счетов
                     </p>
                   </div>
                 </div>
@@ -150,29 +96,30 @@ export const PartnerPerformanceTable = ({ selectedYear }: Props) => {
                   className="border-t bg-muted/20"
                 >
                   <div className="p-4 space-y-2">
-                    {partner.clients.map((client) => (
-                      <div
-                        key={client.name}
-                        className="flex items-center justify-between py-2 px-3 rounded bg-background/50"
-                      >
-                        <div>
-                          <p className="font-medium text-sm">{client.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {client.count} {client.count === 1 ? 'счёт' : 'счетов'}
-                          </p>
-                        </div>
-                        <p className="font-semibold">
-                          {formatMoney(client.total)}
-                        </p>
-                      </div>
-                    ))}
+                    <PartnerClients key={`${partner.id}-${selectedYear}`} partnerId={partner.id} year={selectedYear} />
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         ))}
+        <InvoicePagination page={page} pages={data?.pages ?? 0} total={data?.total ?? 0} onPage={setPage} disabled={isFetching} />
       </CardContent>
     </Card>
   );
 };
+
+function PartnerClients({ partnerId, year }: { partnerId: string; year: number }) {
+  const [page, setPage] = useState(1);
+  const query = useQuery({ queryKey: ['/api/invoices', 'assistant-partner-clients', partnerId, year, page],
+    queryFn: () => apiGet(`/assistant/invoice-groups?year=${year}&partnerId=${partnerId}&page=${page}&limit=25`, assistantGroupsSchema) });
+  if (query.error) return <p role="alert">Не удалось загрузить клиентов. <button onClick={() => query.refetch()}>Повторить</button></p>;
+  return <>
+    {query.isLoading && <p>Загрузка…</p>}
+    {query.data?.rows.map(client => <div key={client.id} className="flex items-center justify-between py-2 px-3 rounded bg-background/50">
+      <div><p className="font-medium text-sm">{client.name}</p><p className="text-xs text-muted-foreground">{client.invoiceCount} счетов</p></div>
+      <p className="font-semibold">{formatMoney(Number(client.total))}</p>
+    </div>)}
+    <InvoicePagination page={page} pages={query.data?.pages ?? 0} total={query.data?.total ?? 0} onPage={setPage} disabled={query.isFetching} />
+  </>;
+}

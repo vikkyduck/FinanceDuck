@@ -156,7 +156,7 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
         paymentDate
       });
 
-      const calculations = calculateInvoice(dbScheme, validated.clientBill, partnerRate, 0, 0, 0, 0, marginRate);
+      const calculations = calculateInvoice({ scheme: dbScheme, clientBill: validated.clientBill, partnerCommRate: partnerRate, agencyMarginRate: marginRate });
       // БЭК читает ставку из calculations.commissionRate (camelCase) — гарантируем её наличие.
       const calculationsPayload = { ...calculations, commissionRate };
       const formattedPaymentDate = validated.paymentDate ? format(validated.paymentDate, 'yyyy-MM-dd') : undefined;

@@ -11,7 +11,10 @@ import { createAuthRouter } from './routes/auth';
 import { createRecurringRouter } from './routes/recurring';
 
 const authMiddleware = createAuthMiddleware(sessions);
-const authRouter = createAuthRouter(sessions, authMiddleware);
+const authRouter = createAuthRouter(sessions, authMiddleware, {
+  reserveLoginAttempt: vi.fn(), reserveIpAttempt: vi.fn(), clearLoginAttempts: vi.fn(),
+  clearAllLoginAttempts: vi.fn(), getLockedCodes: vi.fn(),
+});
 const recurringRouter = createRecurringRouter(sessions, authMiddleware);
 let server: Server; let url: string;
 beforeAll(async () => {

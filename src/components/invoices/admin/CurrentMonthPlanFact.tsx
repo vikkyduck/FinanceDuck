@@ -27,7 +27,7 @@ export const CurrentMonthPlanFact = () => {
 
   const { data: planFactData, isLoading, isError } = useQuery<PlanFactData[]>({
     queryKey: ['/api/admin/plan-fact', currentYear],
-    queryFn: () => apiGet(`/api/admin/plan-fact?year=${currentYear}`),
+    queryFn: () => apiGet(`/admin/plan-fact?year=${currentYear}`),
     staleTime: 30000,
     retry: 2,
   });

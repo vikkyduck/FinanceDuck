@@ -1,3 +1,5 @@
+import Decimal from 'decimal.js';
+import { moneyString } from '../../shared/money';
 import { serviceUsage } from "../../shared/schema";
 import { CommandError } from "../lib/commandError";
 /**
@@ -19,7 +21,7 @@ import {
   eq, and, desc, asc, inArray, isNull, or, isNotNull, sql,
 } from "drizzle-orm";
 import { invoiceFilters, invoiceOrder, invoiceScope, type InvoiceQuery } from "../invoiceQuery";
-import { calculateFinancials, parseNum } from "../../shared/financialEngine";
+import { calculateBookedFinancials, parseNum, type FinancialInputs } from "../../shared/financialEngine";
 
 type DB = typeof _db;
 // Тип транзакции Drizzle. Хелперы принимают DB | Tx, чтобы одинаково
@@ -49,12 +51,12 @@ export function derivePeriodicClientBill(invoice: {
   serviceType?: string | null;
   pricePerPeriod?: string | number | null;
   totalPeriods?: number | null;
-}): number | undefined {
+}): string | undefined {
   if (invoice.serviceType !== 'periodic') return undefined;
-  const price = parseNum(invoice.pricePerPeriod ?? 0);
+  const price = new Decimal(invoice.pricePerPeriod ?? 0);
   const total = Number(invoice.totalPeriods ?? 0);
-  if (!Number.isFinite(price) || !Number.isFinite(total) || total < 1) return undefined;
-  return Math.round(price * total * 100) / 100;
+  if (!price.isFinite() || !Number.isFinite(total) || total < 1) return undefined;
+  return moneyString(price.mul(total));
 }
 
 /**
@@ -69,20 +71,19 @@ export function derivePeriodicClientBill(invoice: {
  * < 0 — нетто-расход (со счёта-источника). Меняем только clientRemaining.
  */
 export function applyTransferOverrides(
-  transferBalance: number,
+  transferBalance: Decimal.Value,
   computed: Partial<InvoiceCalculation>,
 ): Partial<InvoiceCalculation> {
-  if (!Number.isFinite(transferBalance) || transferBalance === 0) return computed;
-  const remaining = parseNum(computed.clientRemaining ?? 0);
-  const adjusted = remaining + transferBalance;
+  if (new Decimal(transferBalance).isZero()) return computed;
+  const adjusted = new Decimal(computed.clientRemaining ?? 0).plus(transferBalance);
   return {
     ...computed,
-    clientRemaining: adjusted.toString(),
+    clientRemaining: moneyString(adjusted),
   };
 }
 
 /** Сумма всех приходов и расходов по переносам — нетто для счёта. */
-export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise<number> {
+export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise<string> {
   const res = await db.execute<{ balance: string }>(sql`
     SELECT
       COALESCE((SELECT SUM(amount)::numeric FROM invoice_transfers WHERE to_invoice_id   = ${invoiceId}), 0) -
@@ -90,7 +91,7 @@ export async function getTransferBalance(db: DBorTx, invoiceId: string): Promise
       AS balance
   `);
   const row = (res.rows ?? res)[0];
-  return parseNum(row?.balance ?? 0);
+  return moneyString(row?.balance ?? 0);
 }
 
 /** Cached projection of the explicit usage ledger. Caller holds the invoice lock. */
@@ -129,13 +130,13 @@ export function applyPeriodicOverrides(
   computed: Partial<InvoiceCalculation>,
 ): Partial<InvoiceCalculation> {
   if (invoice.serviceType !== 'periodic') return computed;
-  const price = parseNum(invoice.pricePerPeriod ?? 0);
+  const price = new Decimal(invoice.pricePerPeriod ?? 0);
   const total = Number(invoice.totalPeriods ?? 0);
   const used  = Math.max(0, Math.min(Number(invoice.periodsUsed ?? 0), total));
-  if (!Number.isFinite(price) || total < 1) return computed;
+  if (!price.isFinite() || total < 1) return computed;
 
-  const spent     = Math.round(price * used * 100) / 100;
-  const remaining = Math.round(price * (total - used) * 100) / 100;
+  const spent     = moneyString(price.mul(used));
+  const remaining = moneyString(price.mul(total - used));
 
   return {
     ...computed,
@@ -144,48 +145,13 @@ export function applyPeriodicOverrides(
   };
 }
 
-export function calculateInvoiceServer(
-  scheme: InvoiceScheme,
-  clientBill: number,
-  partnerCommissionRate?: number,
-  executorExpenses = 0,
-  expensesPaidByPartner = 0,
-  expensesPaidByAdmin = 0,
-  plannedExpenses = 0,
-  agencyMarginRate = 0,
-): Partial<InvoiceCalculation> {
-  const f = calculateFinancials(
-    scheme,
-    clientBill,
-    partnerCommissionRate ?? 0,
-    executorExpenses,
-    expensesPaidByPartner,
-    expensesPaidByAdmin,
-    plannedExpenses,
-    agencyMarginRate,
-  );
-
-  const r: Partial<InvoiceCalculation> = {
+export function calculateInvoiceServer(input: FinancialInputs): Partial<InvoiceCalculation> {
+  return {
     commissionRate: null, commissionAmount: null, amountToAdmin: null,
     agencyMargin: null, partnerShareFromMargin: null, adminShareFromMargin: null,
     clientBaseAfterMargin: null, clientRemaining: null,
-    clientSpent: (f.clientSpent ?? executorExpenses).toFixed(2),
-    clientBill:            f.clientBill.toString(),
-    executorExpensesTotal: f.executorExpensesTotal.toString(),
-    partnerTransferDue:    f.partnerTransferDue.toString(),
-    netProfitAdmin:        f.netProfitAdmin.toString(),
-    adminShare50:          f.adminShare50.toString(),
-    catShare50:            f.catShare50.toString(),
+    ...calculateBookedFinancials(input),
   };
-  if (f.commissionRate          !== undefined) r.commissionRate          = f.commissionRate.toString();
-  if (f.commissionAmount        !== undefined) r.commissionAmount        = f.commissionAmount.toString();
-  if (f.amountToAdmin           !== undefined) r.amountToAdmin           = f.amountToAdmin.toString();
-  if (f.agencyMargin            !== undefined) r.agencyMargin            = f.agencyMargin.toString();
-  if (f.partnerShareFromMargin  !== undefined) r.partnerShareFromMargin  = f.partnerShareFromMargin.toString();
-  if (f.adminShareFromMargin    !== undefined) r.adminShareFromMargin    = f.adminShareFromMargin.toString();
-  if (f.clientBaseAfterMargin   !== undefined) r.clientBaseAfterMargin   = f.clientBaseAfterMargin.toString();
-  if (f.clientRemaining         !== undefined) r.clientRemaining         = f.clientRemaining.toString();
-  return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,21 +208,20 @@ async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promi
     partner: sql<string>`coalesce(sum(${invoiceExpenses.amount}) filter (where not ${invoiceExpenses.paidByAdmin}), 0)`,
     admin: sql<string>`coalesce(sum(${invoiceExpenses.amount}) filter (where ${invoiceExpenses.paidByAdmin}), 0)`,
   }).from(invoiceExpenses).where(eq(invoiceExpenses.invoiceId, invoiceId));
-  const total = parseNum(sums.total), byPartner = parseNum(sums.partner), byAdmin = parseNum(sums.admin);
   const existing = invoice.calculations;
-  const bill = derivePeriodicClientBill(invoice) ?? parseNum(invoice.clientBill ?? existing?.clientBill);
+  const bill = derivePeriodicClientBill(invoice) ?? moneyString(invoice.clientBill ?? existing?.clientBill ?? 0);
   const partnerRate = parseNum(invoice.partnerCommissionRate ?? existing?.commissionRate);
   const marginRate = invoice.scheme === 'agency' ? parseNum(existing?.commissionRate) : 0;
-  let computed = calculateInvoiceServer(invoice.scheme, bill, partnerRate, total, byPartner, byAdmin, parseNum(invoice.plannedExpenses), marginRate);
+  let computed = calculateInvoiceServer({ scheme: invoice.scheme, clientBill: bill, partnerCommRate: partnerRate, executorExpenses: sums.total, expensesByPartner: sums.partner, expensesByAdmin: sums.admin, plannedExpenses: invoice.plannedExpenses ?? 0, agencyMarginRate: marginRate });
   computed = applyPeriodicOverrides(invoice, computed);
   computed = applyTransferOverrides(await getTransferBalance(db, invoiceId), computed);
-  await db.update(invoices).set({ clientBill: bill.toFixed(2), updatedAt: new Date() }).where(eq(invoices.id, invoiceId));
+  await db.update(invoices).set({ clientBill: bill, updatedAt: new Date() }).where(eq(invoices.id, invoiceId));
   if (existing) {
     const [updated] = await db.update(invoiceCalculations).set({ ...computed, updatedAt: new Date() })
       .where(eq(invoiceCalculations.invoiceId, invoiceId)).returning();
     return updated;
   }
-  const [created] = await db.insert(invoiceCalculations).values({ invoiceId, clientBill: bill.toFixed(2), ...computed }).returning();
+  const [created] = await db.insert(invoiceCalculations).values({ invoiceId, clientBill: bill, ...computed }).returning();
   return created;
 }
 
@@ -288,7 +253,7 @@ export async function getInvoices(db: DBorTx, role: UserRole, partnerId?: string
 
 export async function getInvoiceListMetadata(db: DBorTx, actor: { role: UserRole; partnerId?: string; clientId?: string }, filters: Partial<InvoiceQuery>) {
   const countQuery = db.select({ total: sql<number>`COUNT(*)::int` }).from(invoices).$dynamic();
-  if (filters.search?.trim()) countQuery.leftJoin(clients, eq(clients.id, invoices.clientId)).leftJoin(partners, eq(partners.id, invoices.partnerId));
+  if (filters.positiveBalance) countQuery.leftJoin(invoiceCalculations, eq(invoiceCalculations.invoiceId, invoices.id));
   const [count] = await countQuery.where(invoiceFilters(actor, filters));
   const [counts] = await db.select({
     all: sql<number>`COUNT(*)::int`, draft: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'draft')::int`,
@@ -529,7 +494,7 @@ export async function createInvoiceTransfer(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const { fromInvoiceId, toInvoiceId, amount, notes, createdBy } = args;
   if (fromInvoiceId === toInvoiceId) return { ok: false, error: "Счёт-источник и счёт-получатель совпадают" };
-  if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: "Сумма должна быть положительной" };
+  if (!Number.isFinite(amount) || amount <= 0 || new Decimal(moneyString(amount)).lte(0)) return { ok: false, error: "Сумма должна быть положительной" };
 
   // Вся операция — одна транзакция. Строку расчётов счёта-источника берём
   // под FOR UPDATE, поэтому параллельные переносы сериализуются и не могут
@@ -552,15 +517,15 @@ export async function createInvoiceTransfer(
       .for("update")
       .limit(1);
 
-    const remaining = parseNum(
+    const remaining = new Decimal(
       lockedCalc?.clientRemaining ?? fromInv.calculations?.clientRemaining ?? "0",
     );
-    if (amount > remaining + 1e-6) {
+    if (new Decimal(moneyString(amount)).gt(remaining)) {
       return { ok: false, error: `На счёте-источнике доступно ${remaining}, нельзя перенести ${amount}` };
     }
 
     const [created] = await tx.insert(invoiceTransfers).values({
-      fromInvoiceId, toInvoiceId, amount: amount.toString(),
+      fromInvoiceId, toInvoiceId, amount: moneyString(amount),
       notes: notes ?? null, createdBy,
     }).returning({ id: invoiceTransfers.id });
 

@@ -2,9 +2,10 @@ import { and, or, eq, ilike, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { invoices, clients, partners, invoiceCalculations } from '../shared/schema';
 import type { InvoiceActor } from './invoiceAccess';
+import { MAX_BROWSE_ROWS } from '../shared/pagination';
 
-export const invoiceQueryInput = z.object({
-  page: z.coerce.number().int().min(1).max(100000).optional(),
+export const invoiceQueryFields = z.object({
+  page: z.coerce.number().int().min(1).max(MAX_BROWSE_ROWS).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(100),
   clientId: z.string().uuid().optional(), partnerId: z.string().uuid().optional(),
   invoiceId: z.string().uuid().optional(),
@@ -14,7 +15,12 @@ export const invoiceQueryInput = z.object({
   sort: z.enum(['date-desc', 'date-asc', 'amount-desc', 'amount-asc']).default('date-desc'),
   dateFrom: z.string().date().optional(),
   dateTo: z.string().date().optional(),
+  includeUndated: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
+  excludeCancelled: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
+  positiveBalance: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
+export const invoiceQueryInput = invoiceQueryFields.refine(query => query.page * query.limit <= MAX_BROWSE_ROWS, 'Уточните фильтры: достигнут предел просмотра')
+  .refine(query => !query.dateFrom || !query.dateTo || query.dateFrom <= query.dateTo, 'Начало периода позже конца');
 export type InvoiceQuery = z.infer<typeof invoiceQueryInput>;
 
 export function invoiceScope(actor: InvoiceActor): SQL | undefined {
@@ -36,11 +42,16 @@ export function invoiceFilters(actor: InvoiceActor, query: Partial<InvoiceQuery>
   if (query.status === 'overdue') terms.push(sql`${invoices.status} = 'sent' AND ${invoices.actualPaymentDate} IS NULL AND ${invoices.paymentDate} < CURRENT_DATE`);
   else if (query.status && query.status !== 'all') terms.push(eq(invoices.status, query.status));
   if (query.month) terms.push(sql`${invoices.createdAt} >= ${query.month + '-01'}::date AND ${invoices.createdAt} < ${query.month + '-01'}::date + INTERVAL '1 month'`);
-  if (query.dateFrom) terms.push(sql`${invoices.paymentDate} >= ${query.dateFrom}::date`);
-  if (query.dateTo) terms.push(sql`${invoices.paymentDate} <= ${query.dateTo}::date`);
+  const dates = and(query.dateFrom ? sql`${invoices.paymentDate} >= ${query.dateFrom}::date` : undefined,
+    query.dateTo ? sql`${invoices.paymentDate} <= ${query.dateTo}::date` : undefined);
+  if (dates) terms.push(query.includeUndated ? or(dates, sql`${invoices.paymentDate} IS NULL`) : dates);
+  if (query.excludeCancelled) terms.push(sql`${invoices.status} <> 'cancelled'`);
+  if (query.positiveBalance) terms.push(sql`${invoiceCalculations.clientRemaining} > 0`);
   if (query.search?.trim()) {
     const pattern = `%${query.search.trim().replace(/[\\%_]/g, '\\$&')}%`;
-    terms.push(or(ilike(invoices.invoiceNumber, pattern), ilike(clients.name, pattern), ilike(partners.name, pattern), ilike(invoices.notes, pattern)));
+    terms.push(or(ilike(invoices.invoiceNumber, pattern), ilike(invoices.notes, pattern),
+      sql`${invoices.clientId} IN (SELECT ${clients.id} FROM ${clients} WHERE ${clients.name} ILIKE ${pattern})`,
+      sql`${invoices.partnerId} IN (SELECT ${partners.id} FROM ${partners} WHERE ${partners.name} ILIKE ${pattern})`));
   }
   return and(...terms);
 }

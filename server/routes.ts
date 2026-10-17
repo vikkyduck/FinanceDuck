@@ -1,3 +1,5 @@
+import { createDocumentStatusRouter } from './routes/documentStatus';
+import { createLoginAttemptLimiter } from './rateLimiter';
 import { storage } from "./storage";
 import { db } from "./db";
 import { invoiceCommands } from "./services/invoiceCommands";
@@ -34,7 +36,8 @@ export function registerHealthCheck(app: Express) {
 
 export function registerRoutes(app: Express): void {
   const authMiddleware = createAuthMiddleware(storage);
-  app.use(createAuthRouter(storage, authMiddleware));
+  app.use(createAuthRouter(storage, authMiddleware, createLoginAttemptLimiter(db)));
+  app.use(createDocumentStatusRouter(authMiddleware, db));
   app.use(createClientsRouter(storage, authMiddleware));
   app.use(createPartnersRouter(storage, authMiddleware));
   app.use(createDashboardRouter(storage, authMiddleware));

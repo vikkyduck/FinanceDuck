@@ -19,7 +19,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', storage); vi.stubGlobal('sessionStorage', storage);
   vi.stubGlobal('window', new EventTarget()); loginSequence = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith('/login')
-    ? { success: true, csrfToken: `session-${++loginSequence}`, user: { role: loginSequence === 1 ? 'admin' : 'client', clientId: 'client' } }
+    ? { success: true, csrfToken: `session-${++loginSequence}`, user: { role: loginSequence === 1 ? 'admin' : 'client', clientId: '00000000-0000-4000-8000-000000000001' } }
     : url.endsWith('/validate') ? { valid: false } : { success: true } })));
 });
 afterEach(() => { act(() => tree?.unmount()); vi.unstubAllGlobals(); });

@@ -27,7 +27,7 @@ export function useInvoiceCommands({
 }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { invoice, setInvoice, expenses, loading, error } = useInvoice(
+  const { invoice, setStatus, expenses, loading, error } = useInvoice(
     invoiceId,
     open,
   );
@@ -241,7 +241,7 @@ export function useInvoiceCommands({
     setUpdatingStatus(true);
 
     const previousStatus = invoice.status;
-    setInvoice((prev) => ({ ...prev, status: pendingStatusChange.status }));
+    setStatus(pendingStatusChange.status);
 
     try {
       await apiPatch(`/invoices/${invoiceId}`, {
@@ -253,7 +253,7 @@ export function useInvoiceCommands({
       });
       fetchInvoiceDetails();
     } catch (error: unknown) {
-      setInvoice((prev) => ({ ...prev, status: previousStatus }));
+      setStatus(previousStatus);
       toast({
         title: "Ошибка",
         description: error instanceof Error ? error.message : String(error),
@@ -748,7 +748,7 @@ export function useInvoiceCommands({
     toast,
     queryClient,
     invoice,
-    setInvoice,
+    setStatus,
     expenses,
     loading,
     error,

@@ -1,7 +1,6 @@
-import type { InvoiceDto } from "@shared/contracts";
+import { partnerInvoiceSummarySchema } from '@shared/invoiceContract';
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isAgencyScheme } from "@/lib/invoiceHelpers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -113,22 +112,6 @@ interface PartnerSchemeSummary {
   }>;
 }
 
-interface InvoiceData {
-  id: string;
-  invoiceNumber: string;
-  status: string;
-  scheme: string;
-  paymentDate: string | null;
-  createdAt: string;
-  calculations?: {
-    partnerTransferDue?: string;
-    plannedExpenses?: string;
-    expensesPaidByPartner?: string;
-    commissionAmount?: string;
-    partnerShareFromMargin?: string;
-  };
-}
-
 export const PartnerDashboard = () => {
   const { partnerId, isLoading: authLoading } = useAuth();
   const { viewMode, setViewMode } = useViewMode();
@@ -174,53 +157,15 @@ export const PartnerDashboard = () => {
     refetchOnWindowFocus: true,
   });
 
-  const { data: invoices = [], isLoading: invoicesLoading } = useQuery<InvoiceData[]>({
-    queryKey: ['/api/invoices'],
-    queryFn: async () => {
-      const data = await apiGet<InvoiceDto[]>('/invoices');
-      return data.map((inv) => ({
-        id: inv.id,
-        invoiceNumber: inv.invoiceNumber,
-        status: inv.status,
-        scheme: inv.scheme,
-        paymentDate: inv.paymentDate ?? null,
-        createdAt: inv.createdAt,
-        calculations: inv.calculations ? {
-          partnerTransferDue: inv.calculations.partnerTransferDue ?? undefined,
-          commissionAmount: inv.calculations.commissionAmount ?? undefined,
-          partnerShareFromMargin: inv.calculations.partnerShareFromMargin ?? undefined,
-        } : undefined,
-      }));
-    },
-    enabled: !!partnerId,
-    refetchInterval: 120000,
-    refetchOnWindowFocus: true,
+  const { data: invoiceSummary, isLoading: invoicesLoading, error: summaryError } = useQuery({
+    queryKey: ['/api/invoices', 'partner-summary', partnerId, new Date().getFullYear()],
+    queryFn: () => apiGet(`/invoices/partner-summary?year=${new Date().getFullYear()}`, partnerInvoiceSummarySchema),
+    enabled: !!partnerId, refetchInterval: 120000,
   });
 
   const metrics = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    let yearlyCommission = 0;
-    let totalPaidInvoices = 0;
-
-    for (const inv of invoices) {
-      if (inv.status !== 'paid') continue;
-      
-      totalPaidInvoices++;
-      
-      const calc = inv.calculations || {};
-      const commissionAmount = parseFloat(calc.commissionAmount || "0");
-      const partnerShareFromMargin = parseFloat(calc.partnerShareFromMargin || "0");
-      const partnerCommission = isAgencyScheme(inv.scheme) ? partnerShareFromMargin : commissionAmount;
-      
-      const invoiceYear = inv.paymentDate 
-        ? new Date(inv.paymentDate).getFullYear()
-        : new Date(inv.createdAt).getFullYear();
-      
-      if (invoiceYear === currentYear) {
-        yearlyCommission += partnerCommission;
-      }
-    }
-
+    const totalPaidInvoices = invoiceSummary?.totalPaidInvoices ?? 0;
+    const yearlyCommission = Number(invoiceSummary?.yearlyCommission ?? 0);
     const signedActsCount = documentRisk 
       ? totalPaidInvoices - documentRisk.missingActsCount 
       : 0;
@@ -235,7 +180,7 @@ export const PartnerDashboard = () => {
       signedActsCount,
       totalPaidInvoices,
     };
-  }, [invoices, documentRisk, agency30Summaries, partnerSchemeSummaries]);
+  }, [invoiceSummary, documentRisk, agency30Summaries, partnerSchemeSummaries]);
 
   const currentYear = new Date().getFullYear();
   const loading = debtLoading || invoicesLoading;
@@ -271,6 +216,7 @@ export const PartnerDashboard = () => {
   if (authLoading) {
     return (
       <DashboardLayout>
+      {summaryError && <p role="alert">Не удалось загрузить итоги по счетам. Обновите данные.</p>}
         <div className="space-y-6">
           <Skeleton className="h-12 w-64" />
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -285,6 +231,7 @@ export const PartnerDashboard = () => {
 
   return (
     <DashboardLayout>
+      {summaryError && <p role="alert">Не удалось загрузить итоги по счетам. Обновите данные.</p>}
       <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
         <DashboardHeader
           title={partnerInfo?.name ? `Здравствуйте, ${partnerInfo.name.split(' ')[0]}` : "Панель партнёра"}

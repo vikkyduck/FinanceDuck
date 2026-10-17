@@ -1,5 +1,7 @@
+import { useInvoiceData } from '@/hooks/useInvoiceData';
+import { isAgencyScheme, parseNum } from '@shared/financialEngine';
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { INVOICE_STATUS_LABELS as statusLabels } from "@/lib/invoiceHelpers";
 import { ArrowLeft, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiPatch } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { SignedActsSection } from "@/components/invoices/SignedActsSection";
 import { format } from "date-fns";
@@ -16,38 +18,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useDownloadReport } from "@/hooks/useDownloadReport";
 import { useReportPreview } from "@/hooks/useReportPreview";
 import { ReportPreviewDialog } from "@/components/shared/ReportPreviewDialog";
-
-interface Invoice {
-  id: string;
-  invoiceNumber: string | null;
-  status: string;
-  scheme: string;
-  paymentDate: string | null;
-  issueDate: string | null;
-  notes: string | null;
-  hideFromAssistant: boolean;
-  clientId: string;
-  partnerId: string;
-  calculations?: {
-    clientBill: string | null;
-    partnerReward: string | null;
-    adminShare50: string | null;
-    catShare50: string | null;
-    netProfitAdmin: string | null;
-    expensesPaidByPartner: string | null;
-    expensesPaidByAdmin: string | null;
-    partnerTransferDue: string | null;
-  };
-  client?: { name: string };
-  partner?: { name: string };
-}
-
-interface Expense {
-  id: string;
-  description: string;
-  amount: string;
-  paidBy: string;
-}
 
 const statusColors: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   draft: "secondary",
@@ -70,11 +40,9 @@ export default function InvoicePage() {
   const downloading = isDownloadingKey();
   const { previewing, previewOpen, preview, fetchPreview, closePreview, confirmDownload } = useReportPreview();
 
-  const { data: invoice, isLoading: invoiceLoading } = useQuery<Invoice>({
-    queryKey: ['/api/invoices', id],
-    queryFn: () => apiGet<Invoice>(`/invoices/${id}`),
-    enabled: !!id,
-  });
+  const { data, isLoading: invoiceLoading, error, refetch } = useInvoiceData(id ?? null);
+  const invoice = data?.invoice;
+  const expenses = data?.expenses ?? [];
 
   const handleDownloadClientReport = () => {
     if (!id) return;
@@ -86,17 +54,11 @@ export default function InvoicePage() {
     });
   };
 
-  const { data: expenses = [] } = useQuery<Expense[]>({
-    queryKey: ['/api/invoices', id, 'expenses'],
-    queryFn: () => apiGet<Expense[]>(`/invoices/${id}/expenses`).catch(() => []),
-    enabled: !!id,
-  });
-
   const handleStatusChange = async (newStatus: string) => {
     if (!id) return;
     try {
       await apiPatch(`/invoices/${id}`, { status: newStatus });
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/invoices', 'detail', id] });
       queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
       toast({ title: "Статус обновлен" });
     } catch (error) {
@@ -128,19 +90,18 @@ export default function InvoicePage() {
           Назад
         </Button>
         <div className="text-center text-muted-foreground">
-          Счет не найден
+          {error ? 'Не удалось загрузить счёт и расходы' : 'Счет не найден'}
+          {error && <Button onClick={() => refetch()}>Повторить</Button>}
         </div>
       </div>
     );
   }
 
   const calc = invoice.calculations;
-  const clientBill = parseFloat(calc?.clientBill || '0');
-  const partnerReward = parseFloat(calc?.partnerReward || '0');
-  const netProfitAdmin = parseFloat(calc?.netProfitAdmin || '0');
-  const expensesPaidByPartner = parseFloat(calc?.expensesPaidByPartner || '0');
-  const expensesPaidByAdmin = parseFloat(calc?.expensesPaidByAdmin || '0');
-  const totalExpenses = expensesPaidByPartner + expensesPaidByAdmin;
+  const clientBill = calc?.clientBill ?? invoice.clientBill;
+  const partnerReward = isAgencyScheme(invoice.scheme) ? calc?.partnerShareFromMargin : calc?.commissionAmount;
+  const totalExpenses = calc?.executorExpensesTotal;
+  const displayMoney = (value: string | null | undefined) => value == null ? '—' : formatCurrency(parseNum(value));
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-4 sm:space-y-6">
@@ -196,8 +157,8 @@ export default function InvoicePage() {
             <div>
               <span className="text-sm text-muted-foreground">Дата создания</span>
               <p className="font-medium">
-                {invoice.issueDate 
-                  ? format(new Date(invoice.issueDate), 'dd.MM.yyyy', { locale: ru })
+                {invoice.createdAt
+                  ? format(new Date(invoice.createdAt), 'dd.MM.yyyy', { locale: ru })
                   : 'Не указана'}
               </p>
             </div>
@@ -235,7 +196,7 @@ export default function InvoicePage() {
         <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0 space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Счет клиенту:</span>
-            <span className="font-semibold text-lg">{formatCurrency(clientBill)}</span>
+            <span className="font-semibold text-lg">{displayMoney(clientBill)}</span>
           </div>
           
           {isAdmin && (
@@ -243,17 +204,17 @@ export default function InvoicePage() {
               <Separator />
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Вознаграждение партнера:</span>
-                <span className="font-medium">{formatCurrency(partnerReward)}</span>
+                <span className="font-medium">{displayMoney(partnerReward)}</span>
               </div>
-              {totalExpenses > 0 && (
+              {totalExpenses != null && (
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Расходы:</span>
-                  <span className="font-medium text-muted-foreground">{formatCurrency(totalExpenses)}</span>
+                  <span className="font-medium text-muted-foreground">{displayMoney(totalExpenses)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Чистая прибыль:</span>
-                <span className="font-semibold text-primary">{formatCurrency(netProfitAdmin)}</span>
+                <span className="font-semibold text-primary">{displayMoney(calc?.netProfitAdmin)}</span>
               </div>
             </>
           )}
@@ -273,10 +234,10 @@ export default function InvoicePage() {
                   <div>
                     <span className="text-sm font-medium">{expense.description}</span>
                     <span className="text-xs text-muted-foreground ml-2">
-                      ({expense.paidBy === 'partner' ? 'Партнер' : 'Админ'})
+                      {expense.paidByAdmin == null ? '' : expense.paidByAdmin ? '(Админ)' : '(Партнер)'}
                     </span>
                   </div>
-                  <span className="text-sm">{formatCurrency(parseFloat(expense.amount))}</span>
+                  <span className="text-sm">{displayMoney(expense.amount)}</span>
                 </div>
               ))}
             </div>

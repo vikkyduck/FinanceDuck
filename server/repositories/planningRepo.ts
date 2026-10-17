@@ -224,10 +224,9 @@ export async function getAdminForecast(db: DB, monthsAhead: number): Promise<For
     const partnerCommissionRate = recurring.partnerCommissionRate 
       ? parseNum(recurring.partnerCommissionRate) 
       : undefined;
-    const defaultExpenses = parseNum(recurring.defaultExpenses);
     
     // Calculate expected admin profit for this recurring invoice (including default expenses)
-    const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
+    const calculation = calculateInvoiceServer({ scheme, clientBill: recurring.amount, partnerCommRate: partnerCommissionRate, plannedExpenses: recurring.defaultExpenses ?? 0 });
     const expectedProfit = parseNum(calculation.netProfitAdmin);
     
     if (expectedProfit <= 0) continue;

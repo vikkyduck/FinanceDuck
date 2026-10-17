@@ -1,3 +1,4 @@
+import { authResponseSchema } from '@shared/authContract';
 import { LoginResult, AuthState, AuthContext } from './auth-context';
 import type { AuthResponse } from "@shared/contracts";
 import { useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
@@ -47,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: 'include',
       });
 
-      const data: AuthResponse = await response.json();
+      const data: AuthResponse = authResponseSchema.parse(await response.json());
       if (generation !== authGeneration.current) return false;
 
       if (!data?.valid || !data.csrfToken) {
@@ -90,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         let data: AuthResponse;
         try {
-          data = await response.json();
+          data = authResponseSchema.parse(await response.json());
         } catch {
           if (attempt < maxRetries) {
             await new Promise(r => setTimeout(r, 500 * attempt));
@@ -150,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshSession = useCallback(async (): Promise<boolean> => {
     try {
       const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include', headers: { 'X-CSRF-Token': localStorage.getItem('csrf_token') ?? '' } });
-      const data = await response.json();
+      const data = authResponseSchema.parse(await response.json());
       return response.ok && !!data?.success;
     } catch {
       return false;

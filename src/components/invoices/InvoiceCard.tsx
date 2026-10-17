@@ -38,7 +38,7 @@ export const InvoiceCard = ({
   const clientBill = invoice.client_bill ?? 0;
   const executorExpensesTotal = invoice.executor_expenses_total ?? 0;
   const commissionRate = invoice.partner_commission_rate ?? invoice.commission_rate ?? undefined;
-  const calc = calculateInvoice(scheme, clientBill, commissionRate, executorExpensesTotal);
+  const calc = calculateInvoice({ scheme, clientBill, partnerCommRate: commissionRate, executorExpenses: executorExpensesTotal });
 
   const clientRemaining = invoice.client_remaining ?? calc.client_remaining ?? 0;
   const partnerMarginShare = invoice.partner_share_from_margin ?? calc.partner_share_from_margin ?? 0;

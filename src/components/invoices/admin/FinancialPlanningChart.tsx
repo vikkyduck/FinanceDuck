@@ -32,7 +32,7 @@ const monthNames = [
 export const FinancialPlanningChart = ({ year }: FinancialPlanningChartProps) => {
   const { data, isLoading } = useQuery<PlanFactData[]>({
     queryKey: ['/api/admin/plan-fact', year],
-    queryFn: () => apiGet<PlanFactData[]>(`/api/admin/plan-fact?year=${year}`),
+    queryFn: () => apiGet<PlanFactData[]>(`/admin/plan-fact?year=${year}`),
   });
 
   const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {

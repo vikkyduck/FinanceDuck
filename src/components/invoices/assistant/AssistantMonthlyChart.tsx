@@ -1,4 +1,5 @@
-import type { AssistantInvoiceDto } from "@shared/contracts";
+import { assistantSummarySchema } from '@shared/assistantContract';
+import { apiGet } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMoney } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
@@ -13,27 +14,11 @@ interface Props {
 }
 
 export const AssistantMonthlyChart = ({ selectedYear }: Props) => {
-  const { data: chartData, isLoading, refetch } = useQuery({
+  const { data: chartData, isLoading, error, refetch } = useQuery({
     queryKey: ['assistant-monthly-chart', selectedYear],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/assistant/stats-invoices?year=${selectedYear}`,
-        { credentials: 'include' }
-      );
-      if (!response.ok) return { data: [], average: 0, bestMonth: null };
-      const invoices: AssistantInvoiceDto[] = await response.json();
-
-      if (!invoices || invoices.length === 0) {
-        return { data: [], average: 0, bestMonth: null };
-      }
-
-      const monthlyTotals: Record<number, number> = {};
-      
-      invoices.forEach(inv => {
-        const month = new Date(inv.actual_payment_date!).getMonth();
-        monthlyTotals[month] = (monthlyTotals[month] || 0) + (inv.client_bill || 0);
-      });
-
+      const summary = await apiGet(`/assistant/invoice-summary?year=${selectedYear}`, assistantSummarySchema);
+      const monthlyTotals = Object.fromEntries(summary.monthly.map(row => [row.month, Number(row.total)]));
       const data = Array.from({ length: 12 }, (_, i) => ({
         month: format(new Date(selectedYear, i), 'MMM', { locale: ru }),
         amount: monthlyTotals[i] || 0,
@@ -69,6 +54,8 @@ export const AssistantMonthlyChart = ({ selectedYear }: Props) => {
     onUpdate: () => refetch(),
     enabled: true,
   });
+
+  if (error) return <p role="alert">Не удалось загрузить статистику. <button onClick={() => refetch()}>Повторить</button></p>;
 
   if (isLoading || !chartData) {
     return (

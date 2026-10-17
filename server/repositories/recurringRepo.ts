@@ -234,9 +234,8 @@ export async function getRecurringInvoicesForMonth(db: DB, year: number, month: 
     const partnerCommissionRate = recurring.partnerCommissionRate 
       ? parseNum(recurring.partnerCommissionRate) 
       : undefined;
-    const defaultExpenses = parseNum(recurring.defaultExpenses);
     
-    const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
+    const calculation = calculateInvoiceServer({ scheme, clientBill: recurring.amount, partnerCommRate: partnerCommissionRate, plannedExpenses: recurring.defaultExpenses ?? 0 });
     const expectedProfit = parseNum(calculation.netProfitAdmin);
     
     if (expectedProfit <= 0) continue;
@@ -342,9 +341,8 @@ export async function getRecurringExpectedForMonth(db: DB, year: number, month: 
     const partnerCommissionRate = recurring.partnerCommissionRate 
       ? parseNum(recurring.partnerCommissionRate) 
       : undefined;
-    const defaultExpenses = parseNum(recurring.defaultExpenses);
     
-    const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
+    const calculation = calculateInvoiceServer({ scheme, clientBill: recurring.amount, partnerCommRate: partnerCommissionRate, plannedExpenses: recurring.defaultExpenses ?? 0 });
     const expectedProfit = parseNum(calculation.netProfitAdmin);
     
     if (expectedProfit <= 0) continue;
@@ -397,10 +395,9 @@ export async function getRecurringExpectedAmounts(db: DB): Promise<{ monthly: nu
     const partnerCommissionRate = recurring.partnerCommissionRate 
       ? parseNum(recurring.partnerCommissionRate) 
       : undefined;
-    const defaultExpenses = parseNum(recurring.defaultExpenses);
     
     // Calculate expected admin profit (including default expenses)
-    const calculation = calculateInvoiceServer(scheme, amount, partnerCommissionRate, 0, 0, 0, defaultExpenses);
+    const calculation = calculateInvoiceServer({ scheme, clientBill: recurring.amount, partnerCommRate: partnerCommissionRate, plannedExpenses: recurring.defaultExpenses ?? 0 });
     const expectedProfit = parseNum(calculation.netProfitAdmin);
     
     if (expectedProfit <= 0) continue;

@@ -1,0 +1,394 @@
+{
+  "httpRun": {
+    "date": "2026-10-17T19:19:48.680Z",
+    "node": "v25.4.0",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "cpu": "Apple M2",
+    "cores": 8,
+    "memoryMiB": 8192,
+    "acceptance": "HTTP p95 <= 750 ms, p99 <= 1500 ms, zero errors, at least 100 requests and 10 seconds per concurrency level; fixture-only, not production capacity",
+    "postgres": "PostgreSQL 16.13 on x86_64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.3.2), 64-bit",
+    "http": [
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 1,
+        "requests": 114,
+        "errors": 0,
+        "p50": 56,
+        "p95": 241,
+        "p99": 446,
+        "requestsPerSecond": 11.2,
+        "rssMiB": 105,
+        "endpoints": {
+          "/api/invoices": {
+            "requests": 12,
+            "p95": 176
+          },
+          "/api/invoices/client-balances?limit=25": {
+            "requests": 12,
+            "p95": 446
+          },
+          "/api/invoices/partner-summary?year=2026": {
+            "requests": 12,
+            "p95": 36
+          },
+          "/api/assistant/invoice-summary?year=2026": {
+            "requests": 12,
+            "p95": 428
+          },
+          "/api/assistant/invoice-groups?year=2026&limit=25": {
+            "requests": 11,
+            "p95": 247
+          },
+          "/api/clients/acts-status?limit=25": {
+            "requests": 11,
+            "p95": 51
+          },
+          "/api/closing-docs-status?limit=25": {
+            "requests": 11,
+            "p95": 25
+          },
+          "/api/invoices?page=1&limit=100&search=BENCH-99": {
+            "requests": 11,
+            "p95": 130
+          },
+          "/api/invoices?page=9&limit=100": {
+            "requests": 11,
+            "p95": 75
+          },
+          "/bench/monthly": {
+            "requests": 11,
+            "p95": 482
+          }
+        }
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 3,
+        "requests": 168,
+        "errors": 0,
+        "p50": 135,
+        "p95": 508,
+        "p99": 691,
+        "requestsPerSecond": 16.6,
+        "rssMiB": 136,
+        "endpoints": {
+          "/api/invoices": {
+            "requests": 17,
+            "p95": 321
+          },
+          "/api/invoices/partner-summary?year=2026": {
+            "requests": 17,
+            "p95": 326
+          },
+          "/api/invoices/client-balances?limit=25": {
+            "requests": 17,
+            "p95": 460
+          },
+          "/api/clients/acts-status?limit=25": {
+            "requests": 17,
+            "p95": 115
+          },
+          "/api/closing-docs-status?limit=25": {
+            "requests": 17,
+            "p95": 94
+          },
+          "/api/assistant/invoice-summary?year=2026": {
+            "requests": 17,
+            "p95": 684
+          },
+          "/api/assistant/invoice-groups?year=2026&limit=25": {
+            "requests": 17,
+            "p95": 698
+          },
+          "/api/invoices?page=1&limit=100&search=BENCH-99": {
+            "requests": 17,
+            "p95": 558
+          },
+          "/api/invoices?page=9&limit=100": {
+            "requests": 16,
+            "p95": 277
+          },
+          "/bench/monthly": {
+            "requests": 16,
+            "p95": 511
+          }
+        }
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 5,
+        "requests": 250,
+        "errors": 0,
+        "p50": 145,
+        "p95": 492,
+        "p99": 683,
+        "requestsPerSecond": 24.3,
+        "rssMiB": 118,
+        "endpoints": {
+          "/api/invoices/partner-summary?year=2026": {
+            "requests": 25,
+            "p95": 88
+          },
+          "/api/invoices": {
+            "requests": 25,
+            "p95": 149
+          },
+          "/api/closing-docs-status?limit=25": {
+            "requests": 25,
+            "p95": 61
+          },
+          "/api/clients/acts-status?limit=25": {
+            "requests": 25,
+            "p95": 125
+          },
+          "/api/invoices/client-balances?limit=25": {
+            "requests": 25,
+            "p95": 238
+          },
+          "/api/invoices?page=9&limit=100": {
+            "requests": 25,
+            "p95": 197
+          },
+          "/api/invoices?page=1&limit=100&search=BENCH-99": {
+            "requests": 25,
+            "p95": 381
+          },
+          "/api/assistant/invoice-groups?year=2026&limit=25": {
+            "requests": 25,
+            "p95": 601
+          },
+          "/api/assistant/invoice-summary?year=2026": {
+            "requests": 25,
+            "p95": 715
+          },
+          "/bench/monthly": {
+            "requests": 25,
+            "p95": 482
+          }
+        }
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 10,
+        "requests": 302,
+        "errors": 0,
+        "p50": 195,
+        "p95": 820,
+        "p99": 992,
+        "requestsPerSecond": 29,
+        "rssMiB": 145,
+        "endpoints": {
+          "/api/invoices/partner-summary?year=2026": {
+            "requests": 30,
+            "p95": 132
+          },
+          "/api/closing-docs-status?limit=25": {
+            "requests": 30,
+            "p95": 159
+          },
+          "/api/clients/acts-status?limit=25": {
+            "requests": 30,
+            "p95": 209
+          },
+          "/api/invoices": {
+            "requests": 31,
+            "p95": 239
+          },
+          "/api/invoices/client-balances?limit=25": {
+            "requests": 31,
+            "p95": 363
+          },
+          "/api/invoices?page=9&limit=100": {
+            "requests": 30,
+            "p95": 275
+          },
+          "/api/invoices?page=1&limit=100&search=BENCH-99": {
+            "requests": 30,
+            "p95": 613
+          },
+          "/api/assistant/invoice-groups?year=2026&limit=25": {
+            "requests": 30,
+            "p95": 1005
+          },
+          "/bench/monthly": {
+            "requests": 30,
+            "p95": 726
+          },
+          "/api/assistant/invoice-summary?year=2026": {
+            "requests": 30,
+            "p95": 909
+          }
+        }
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 20,
+        "requests": 185,
+        "errors": 0,
+        "p50": 975,
+        "p95": 2829,
+        "p99": 3800,
+        "requestsPerSecond": 16.5,
+        "rssMiB": 91,
+        "endpoints": {
+          "/api/closing-docs-status?limit=25": {
+            "requests": 18,
+            "p95": 1155
+          },
+          "/api/invoices/partner-summary?year=2026": {
+            "requests": 19,
+            "p95": 1666
+          },
+          "/api/clients/acts-status?limit=25": {
+            "requests": 18,
+            "p95": 1134
+          },
+          "/api/invoices/client-balances?limit=25": {
+            "requests": 19,
+            "p95": 1870
+          },
+          "/api/assistant/invoice-summary?year=2026": {
+            "requests": 19,
+            "p95": 2962
+          },
+          "/api/assistant/invoice-groups?year=2026&limit=25": {
+            "requests": 19,
+            "p95": 3221
+          },
+          "/bench/monthly": {
+            "requests": 18,
+            "p95": 2326
+          },
+          "/api/invoices": {
+            "requests": 19,
+            "p95": 3222
+          },
+          "/api/invoices?page=9&limit=100": {
+            "requests": 18,
+            "p95": 3485
+          },
+          "/api/invoices?page=1&limit=100&search=BENCH-99": {
+            "requests": 18,
+            "p95": 3812
+          }
+        }
+      }
+    ],
+    "export": {
+      "invoices": 100000,
+      "durationMs": 9213
+    },
+    "databaseBytes": "118266903"
+  },
+  "archiveRun": {
+    "date": "2026-10-17T19:08:03.437Z",
+    "node": "v25.4.0",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "cpu": "Apple M2",
+    "cores": 8,
+    "memoryMiB": 8192,
+    "acceptance": "HTTP p95 <= 750 ms, p99 <= 1500 ms, zero errors, at least 100 requests and 10 seconds per concurrency level; fixture-only, not production capacity",
+    "postgres": "PostgreSQL 16.13 on x86_64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.3.2), 64-bit",
+    "http": [
+      {
+        "invoices": 10000,
+        "expenses": 30000,
+        "concurrency": 1,
+        "requests": 792,
+        "errors": 0,
+        "p50": 11,
+        "p95": 34,
+        "p99": 41,
+        "requestsPerSecond": 78.8,
+        "rssMiB": 157
+      },
+      {
+        "invoices": 10000,
+        "expenses": 30000,
+        "concurrency": 5,
+        "requests": 1449,
+        "errors": 0,
+        "p50": 23,
+        "p95": 97,
+        "p99": 186,
+        "requestsPerSecond": 144.2,
+        "rssMiB": 207
+      },
+      {
+        "invoices": 10000,
+        "expenses": 30000,
+        "concurrency": 10,
+        "requests": 2135,
+        "errors": 0,
+        "p50": 36,
+        "p95": 130,
+        "p99": 192,
+        "requestsPerSecond": 212.6,
+        "rssMiB": 205
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 1,
+        "requests": 103,
+        "errors": 0,
+        "p50": 54,
+        "p95": 320,
+        "p99": 323,
+        "requestsPerSecond": 10.3,
+        "rssMiB": 154
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 5,
+        "requests": 246,
+        "errors": 0,
+        "p50": 143,
+        "p95": 834,
+        "p99": 960,
+        "requestsPerSecond": 23.4,
+        "rssMiB": 163
+      },
+      {
+        "invoices": 100000,
+        "expenses": 300000,
+        "concurrency": 10,
+        "requests": 256,
+        "errors": 0,
+        "p50": 250,
+        "p95": 1800,
+        "p99": 1902,
+        "requestsPerSecond": 23.6,
+        "rssMiB": 153
+      }
+    ],
+    "backup": {
+      "invoices": 100000,
+      "expenses": 300000,
+      "documentMiB": 10,
+      "archiveBytes": 34891202,
+      "createMs": 9711,
+      "verificationMs": 84907,
+      "restoreMs": 68484,
+      "peakRssMiB": 385,
+      "peakHeapMiB": 86,
+      "verifiedObjects": 10,
+      "recoveredEmptyObjectVolume": true,
+      "allTableFingerprintsMatch": true
+    },
+    "export": {
+      "invoices": 100000,
+      "durationMs": 41286
+    },
+    "databaseBytes": "203258903"
+  }
+}

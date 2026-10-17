@@ -6,15 +6,10 @@ import {
   AuthenticatedRequest,
   requireRole,
 } from "../middleware";
-import {
-  reserveLoginAttempt,
-  reserveIpAttempt,
-  clearLoginAttempts,
-  clearAllLoginAttempts,
-  getLockedCodes,
-} from "../rateLimiter";
+import type { LoginAttemptLimiter } from '../rateLimiter';
 
-export function createAuthRouter(storage: AuthStore, authMiddleware: AuthMiddleware) {
+export function createAuthRouter(storage: AuthStore, authMiddleware: AuthMiddleware, limiter: LoginAttemptLimiter) {
+const { reserveLoginAttempt, reserveIpAttempt, clearLoginAttempts, clearAllLoginAttempts, getLockedCodes } = limiter;
 const authRouter = Router();
 
 /**

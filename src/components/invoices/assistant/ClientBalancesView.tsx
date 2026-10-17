@@ -1,8 +1,12 @@
-import { useState, useMemo } from "react";
+import type { InvoiceDto } from '@shared/contracts';
+import { clientBalancesSchema } from '@shared/invoiceContract';
+import { useInvoicePage } from '@/hooks/useInvoicePage';
+import { InvoicePagination } from '../InvoicePagination';
+import { useState, useEffect } from "react";
 import { formatMoney } from "@/lib/format";
 import { isAgencyScheme, INVOICE_STATUS_LABELS as STATUS_LABELS } from "@/lib/invoiceHelpers";
 import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, subQuarters, startOfYear, endOfYear, subYears } from "date-fns";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -15,25 +19,7 @@ import { useDownloadReport } from "@/hooks/useDownloadReport";
 import { useReportPreview } from "@/hooks/useReportPreview";
 import { ReportPreviewDialog } from "@/components/shared/ReportPreviewDialog";
 
-// Raw shape coming from /api/invoices (array of invoices, snake_case from DB)
-interface RawInvoice {
-  id: string;
-  invoiceNumber?: string;
-  status: string;
-  scheme: string;
-  clientBill?: string | number;
-  clientId?: string | null;
-  paymentDate?: string | null;
-  plannedExpenses?: string | number | null;
-  // joined client object
-  client?: { id: string; name: string } | null;
-  calculations?: {
-    clientBill?: string | number | null;
-    clientRemaining?: string | number | null;
-    clientBaseAfterMargin?: string | number | null;
-    executorExpensesTotal?: string | number | null;
-  } | null;
-}
+type RawInvoice = InvoiceDto;
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
@@ -63,8 +49,7 @@ function formatRub(amount: number) {
 
 function getWorkingBudget(inv: RawInvoice): number {
   if (isAgencyScheme(inv.scheme)) {
-    const base = n(inv.calculations?.clientBaseAfterMargin);
-    return base > 0 ? base : n(inv.calculations?.clientBill ?? inv.clientBill);
+    return n(inv.calculations?.clientBaseAfterMargin ?? inv.calculations?.clientBill ?? inv.clientBill);
   }
   // For closed commission: client pays clientBill (from calculations, since invoices.clientBill is null in DB)
   return n(inv.calculations?.clientBill ?? inv.clientBill);
@@ -75,71 +60,17 @@ function getSpent(inv: RawInvoice): number {
 }
 
 function getRemaining(inv: RawInvoice): number {
-  if (isAgencyScheme(inv.scheme)) {
-    // Agency schemes: clientRemaining = clientBaseAfterMargin - expenses (stored correctly in DB)
-    const rem = n(inv.calculations?.clientRemaining);
-    if (rem !== 0) return rem;
-    return getWorkingBudget(inv) - getSpent(inv);
-  }
-  // Closed commission (partner_10/15, commission_based):
-  // clientRemaining is now stored in DB via financialEngine (0 for single-delivery,
-  // or proportional for ongoing services when plannedExpenses > 0).
-  // Use stored value; fall back to client-side formula for old records (clientRemaining = NULL).
-  const stored = inv.calculations?.clientRemaining;
-  if (stored !== null && stored !== undefined) {
-    return n(stored);
-  }
-  // Fallback for pre-migration records: compute the same formula locally
-  const plannedExpenses = n(inv.plannedExpenses);
-  const executorExpenses = n(inv.calculations?.executorExpensesTotal);
-  const clientBill = n(inv.calculations?.clientBill ?? inv.clientBill);
-  if (plannedExpenses > 0) {
-    return Math.max(0, clientBill * (1 - executorExpenses / plannedExpenses));
-  }
-  return 0;
+  return n(inv.calculations?.clientRemaining);
 }
 
 interface ClientGroup {
   clientId: string;
   clientName: string;
-  invoices: RawInvoice[];
+  invoiceCount: number;
   totalBudget: number;
   totalSpent: number;
   totalRemaining: number;
   activeCount: number;
-}
-
-function buildClientGroups(invoices: RawInvoice[]): ClientGroup[] {
-  const map = new Map<string, ClientGroup>();
-
-  for (const inv of invoices) {
-    if (inv.status === "cancelled") continue;
-    const key = inv.clientId ?? "__no_client__";
-    const name = inv.client?.name ?? "Без клиента";
-
-    if (!map.has(key)) {
-      map.set(key, {
-        clientId: key,
-        clientName: name,
-        invoices: [],
-        totalBudget: 0,
-        totalSpent: 0,
-        totalRemaining: 0,
-        activeCount: 0,
-      });
-    }
-
-    const group = map.get(key)!;
-    group.invoices.push(inv);
-    group.totalBudget += getWorkingBudget(inv);
-    group.totalSpent += getSpent(inv);
-    group.totalRemaining += getRemaining(inv);
-    if (inv.status === "sent" || inv.status === "draft") group.activeCount++;
-  }
-
-  return Array.from(map.values()).sort((a, b) =>
-    a.clientName.localeCompare(b.clientName, "ru")
-  );
 }
 
 function InvoiceRow({ inv }: { inv: RawInvoice }) {
@@ -252,8 +183,11 @@ function computePresetRange(preset: string): { from: string; to: string } | null
   return { from: format(from, "yyyy-MM-dd"), to: format(to, "yyyy-MM-dd") };
 }
 
-function ClientCard({ group, isAdmin, totalInvoiceCount }: { group: ClientGroup; isAdmin: boolean; totalInvoiceCount?: number }) {
+function ClientCard({ group, isAdmin, filters }: { group: ClientGroup; isAdmin: boolean; filters: { dateFrom?: string; dateTo?: string; includeUndated: boolean } }) {
   const [expanded, setExpanded] = useState(false);
+  const [invoicePage, setInvoicePage] = useState(1);
+  const details = useInvoicePage({ ...filters, clientId: group.clientId, excludeCancelled: true, page: invoicePage, limit: 25 }, expanded);
+  useEffect(() => setInvoicePage(1), [filters.dateFrom, filters.dateTo, filters.includeUndated]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const { download: downloadReport, isDownloadingKey } = useDownloadReport();
@@ -313,24 +247,7 @@ function ClientCard({ group, isAdmin, totalInvoiceCount }: { group: ClientGroup;
                   {group.clientName}
                 </p>
                 <p className="text-xs text-slate-400 mt-0.5" data-testid={`text-invoice-count-${group.clientId}`}>
-                  {totalInvoiceCount !== undefined && totalInvoiceCount > group.invoices.length ? (
-                    <>
-                      <span className="text-blue-500 font-medium">{group.invoices.length} из {totalInvoiceCount}</span>
-                      {" "}
-                      {totalInvoiceCount % 100 >= 11 && totalInvoiceCount % 100 <= 14
-                        ? "счетов"
-                        : totalInvoiceCount % 10 === 1
-                        ? "счёта"
-                        : totalInvoiceCount % 10 >= 2 && totalInvoiceCount % 10 <= 4
-                        ? "счёта"
-                        : "счетов"}
-                    </>
-                  ) : (
-                    <>
-                      {group.invoices.length}{" "}
-                      {group.invoices.length === 1 ? "счёт" : group.invoices.length < 5 ? "счёта" : "счетов"}
-                    </>
-                  )}
+                  {group.invoiceCount} счетов
                   {group.activeCount > 0 && (
                     <span className="ml-1 text-blue-500">· {group.activeCount} активных</span>
                   )}
@@ -436,9 +353,11 @@ function ClientCard({ group, isAdmin, totalInvoiceCount }: { group: ClientGroup;
 
         {expanded && (
           <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-            {group.invoices.map((inv) => (
+            {details.error ? <p role="alert">Не удалось загрузить счета. <Button onClick={() => details.refetch()}>Повторить</Button></p> : details.isLoading ? <p>Загрузка…</p> : null}
+            {(details.data?.invoices ?? []).map((inv) => (
               <InvoiceRow key={inv.id} inv={inv} />
             ))}
+            <InvoicePagination page={invoicePage} pages={details.data?.pages ?? 0} total={group.invoiceCount} onPage={setInvoicePage} disabled={details.isFetching} />
           </div>
         )}
       </CardContent>
@@ -446,10 +365,8 @@ function ClientCard({ group, isAdmin, totalInvoiceCount }: { group: ClientGroup;
   );
 }
 
-function SummaryBar({ groups }: { groups: ClientGroup[] }) {
-  const totalBudget = groups.reduce((s, g) => s + g.totalBudget, 0);
-  const totalSpent = groups.reduce((s, g) => s + g.totalSpent, 0);
-  const totalRemaining = groups.reduce((s, g) => s + g.totalRemaining, 0);
+function SummaryBar({ summary }: { summary: { clients: number; totalBudget: string; totalSpent: string; totalRemaining: string } }) {
+  const totalBudget = Number(summary.totalBudget), totalSpent = Number(summary.totalSpent), totalRemaining = Number(summary.totalRemaining);
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -457,7 +374,7 @@ function SummaryBar({ groups }: { groups: ClientGroup[] }) {
         <Users className="h-4 w-4 text-slate-400 shrink-0" />
         <div>
           <p className="text-[10px] text-slate-400 uppercase tracking-wide">Клиентов</p>
-          <p className="text-lg font-bold" data-testid="text-total-clients">{groups.length}</p>
+          <p className="text-lg font-bold" data-testid="text-total-clients">{summary.clients}</p>
         </div>
       </div>
       <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 flex items-center gap-2">
@@ -490,12 +407,6 @@ function SummaryBar({ groups }: { groups: ClientGroup[] }) {
 export function ClientBalancesView() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
-
-  const { data, isLoading } = useQuery<RawInvoice[]>({
-    queryKey: ['/api/invoices'],
-    queryFn: () => apiGet<RawInvoice[]>('/invoices'),
-    staleTime: 30000,
-  });
 
   const [search, setSearch] = useState<string>(
     () => (isAdmin ? localStorage.getItem("adminBalancesSearch") ?? "" : "")
@@ -551,27 +462,17 @@ export function ClientBalancesView() {
     }
   };
 
-  const invoices = useMemo(() => Array.isArray(data) ? data : [], [data]);
-
-  const dateFilteredInvoices = useMemo(() => {
-    if (!filterFrom && !filterTo) return invoices;
-    return invoices.filter((inv) => {
-      if (!inv.paymentDate) return includeUndated;
-      const d = inv.paymentDate.slice(0, 10);
-      if (filterFrom && d < filterFrom) return false;
-      if (filterTo && d > filterTo) return false;
-      return true;
-    });
-  }, [invoices, filterFrom, filterTo, includeUndated]);
-
-  const groups = useMemo(() => buildClientGroups(dateFilteredInvoices), [dateFilteredInvoices]);
-  const allGroups = useMemo(() => buildClientGroups(invoices), [invoices]);
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return groups;
-    const q = search.toLowerCase();
-    return groups.filter((g) => g.clientName.toLowerCase().includes(q));
-  }, [groups, search]);
+  const [page, setPage] = useState(1);
+  const params = new URLSearchParams({ page: String(page), limit: '25', search, includeUndated: String(includeUndated) });
+  if (filterFrom) params.set('dateFrom', filterFrom);
+  if (filterTo) params.set('dateTo', filterTo);
+  useEffect(() => setPage(1), [search, filterFrom, filterTo, includeUndated]);
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['/api/invoices', 'client-balances', params.toString()], placeholderData: keepPreviousData,
+    queryFn: () => apiGet(`/invoices/client-balances?${params}`, clientBalancesSchema), staleTime: 30000,
+  });
+  const filtered: ClientGroup[] = (data?.groups ?? []).map(group => ({ ...group,
+    totalBudget: Number(group.totalBudget), totalSpent: Number(group.totalSpent), totalRemaining: Number(group.totalRemaining) }));
 
   const hasDateFilter = !!(filterFrom || filterTo);
   const hasAnyFilter = !!(search || filterFrom || filterTo || includeUndated);
@@ -600,18 +501,11 @@ export function ClientBalancesView() {
     );
   }
 
-  if (allGroups.length === 0) {
-    return (
-      <div className="text-center py-12 text-slate-400">
-        <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-        <p>Нет счетов с привязанными клиентами</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
-      <SummaryBar groups={groups} />
+      {error && <p role="alert">Не удалось загрузить балансы. <Button onClick={() => refetch()}>Повторить</Button></p>}
+      {data && <SummaryBar summary={data.summary} />}
 
       {isAdmin && (
         <div className="flex flex-wrap gap-1">
@@ -706,7 +600,7 @@ export function ClientBalancesView() {
 
       {hasDateFilter && (
         <p className="text-xs text-blue-600 dark:text-blue-400" data-testid="text-date-filter-active">
-          Показано {dateFilteredInvoices.length} из {invoices.length} счетов
+          Найдено {data?.summary.invoices ?? 0} счетов
           {" · "}счета с датой оплаты
           {filterFrom && ` с ${filterFrom}`}
           {filterTo && ` по ${filterTo}`}
@@ -721,19 +615,9 @@ export function ClientBalancesView() {
       )}
 
       <div className="space-y-3">
-        {filtered.map((group) => {
-          const allGroup = hasDateFilter
-            ? allGroups.find((g) => g.clientId === group.clientId)
-            : undefined;
-          return (
-            <ClientCard
-              key={group.clientId}
-              group={group}
-              isAdmin={isAdmin}
-              totalInvoiceCount={allGroup?.invoices.length}
-            />
-          );
-        })}
+        {filtered.map(group => <ClientCard key={group.clientId} group={group} isAdmin={isAdmin}
+          filters={{ dateFrom: filterFrom || undefined, dateTo: filterTo || undefined, includeUndated }} />)}
+        <InvoicePagination page={page} pages={data?.pages ?? 0} total={data?.summary.clients ?? 0} onPage={setPage} disabled={isFetching} />
       </div>
 
       <p className="text-[11px] text-slate-400 text-center pt-1">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,10 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { format } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { formatCurrency } from "@/lib/invoiceCalculations";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { InvoicePicker } from '../InvoicePicker';
+import type { InvoiceDto } from '@shared/contracts';
 import { useRateLimit } from "@/hooks/useRateLimit";
-import { invoiceService, type InvoiceListItem } from "@/lib/services/invoices";
+import { invoiceService } from "@/lib/services/invoices";
 import { Loader2, AlertTriangle } from "lucide-react";
 
 interface RecordPaymentDialogProps {
@@ -34,39 +35,10 @@ export const RecordPaymentDialog = ({
   const [date, setDate] = useState<Date>(new Date());
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
-  const [invoiceId, setInvoiceId] = useState<string | null>(null);
-  const [invoiceOptions, setInvoiceOptions] = useState<Array<{ id: string; label: string }>>([]);
-  const [loadingInvoices, setLoadingInvoices] = useState(false);
-  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDto | null>(null);
+  const invoiceId = selectedInvoice?.id;
+  useEffect(() => setSelectedInvoice(null), [partnerId, open]);
   const { checkLimit } = useRateLimit('form');
-
-  useEffect(() => {
-    const loadInvoices = async () => {
-      if (!open) return;
-      setLoadingInvoices(true);
-      setInvoiceError(null);
-      try {
-        const invoices = await invoiceService.fetchInvoices(partnerId);
-        
-        const options = invoices
-          .filter((inv: InvoiceListItem) => inv.status === 'paid')
-          .map((inv: InvoiceListItem) => {
-            const toTransfer = Number(inv.partner_transfer_due) || 0;
-            return {
-              id: inv.id,
-              label: `${inv.invoice_number} - ${formatCurrency(toTransfer)}`
-            };
-          });
-        setInvoiceOptions(options);
-      } catch (error) {
-        console.error("Error loading invoices:", error);
-        setInvoiceError("Не удалось загрузить список счетов");
-      } finally {
-        setLoadingInvoices(false);
-      }
-    };
-    loadInvoices();
-  }, [open, partnerId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +78,7 @@ export const RecordPaymentDialog = ({
       setAmount("");
       setDate(new Date());
       setNotes("");
-      setInvoiceId(null);
+      setSelectedInvoice(null);
       onSuccess();
       onOpenChange(false);
     } catch (error: unknown) {
@@ -144,21 +116,7 @@ export const RecordPaymentDialog = ({
 
           <div>
             <Label>Счёт</Label>
-            <Select value={invoiceId || ""} onValueChange={setInvoiceId} disabled={loadingInvoices}>
-              <SelectTrigger data-testid="select-invoice">
-                <SelectValue placeholder={loadingInvoices ? "Загрузка..." : "Выберите счёт (опционально)"} />
-              </SelectTrigger>
-              <SelectContent>
-                {invoiceOptions.map((inv) => (
-                  <SelectItem key={inv.id} value={inv.id}>
-                    {inv.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {invoiceError && (
-              <p className="text-sm text-destructive mt-1">{invoiceError}</p>
-            )}
+            <InvoicePicker key={partnerId} selected={selectedInvoice} onSelect={setSelectedInvoice} partnerId={partnerId} paidOnly disabled={!open} label="Выберите счёт (опционально)" />
           </div>
 
           <div>

@@ -1,3 +1,4 @@
+import { MAX_MONEY, moneyString } from '../../shared/money';
 import { z } from 'zod';
 import Decimal from 'decimal.js';
 import { INVOICE_SCHEMES, INVOICE_STATUSES } from '../../shared/domainTypes';
@@ -14,7 +15,8 @@ export type ExpenseFields = Pick<InsertInvoiceExpense, typeof EXPENSE_WRITABLE_F
 export type RecordExpense = ExpenseFields & { invoiceId: string; createdBy?: string };
 
 const money = z.union([z.number().finite().nonnegative().max(9999999999999.99), z.string().trim().regex(/^\d{1,13}(?:[.,]\d{1,4})?$/)])
-  .transform(value => new Decimal(String(value).replace(',', '.')).toFixed(2, Decimal.ROUND_HALF_UP));
+  .transform(value => new Decimal(String(value).replace(',', '.')).toFixed(2, Decimal.ROUND_HALF_UP))
+  .refine(value => new Decimal(value).lte(MAX_MONEY), 'Сумма превышает допустимый предел');
 const rate = money.refine(value => Number(value) <= 100, 'Процент должен быть от 0 до 100');
 const text = z.string().max(10000).nullish();
 export const invoiceTerms = z.object({
@@ -40,5 +42,6 @@ export function parseCommand<S extends z.ZodTypeAny>(schema: S, value: unknown):
 export function validatePeriodicTerms(terms: ChangeInvoiceTerms & { periodsUsed?: number }) {
   if (terms.serviceType !== 'periodic') return;
   if (!terms.totalPeriods || terms.pricePerPeriod == null) throw new CommandError('Периодической услуге нужны цена и число периодов', 400);
+  moneyString(new Decimal(terms.pricePerPeriod).mul(terms.totalPeriods));
   if ((terms.periodsUsed ?? 0) > terms.totalPeriods) throw new CommandError('Использованные периоды превышают общее число', 400);
 }

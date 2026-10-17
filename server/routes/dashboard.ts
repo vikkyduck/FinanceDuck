@@ -1,3 +1,4 @@
+import { invoiceQueryInput } from '../invoiceQuery';
 import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
 import type { DashboardStore } from "../routeStores";
@@ -249,9 +250,11 @@ dashboardRouter.get("/api/financial-summary", authMiddleware, async (req: Authen
     const clientId = req.user?.clientId;
     const stats = await storage.getDashboardStats(role, partnerId, clientId);
     const filteredStats = projectStatsForRole(stats, role);
-    const invoices = await storage.getInvoices(role, partnerId, clientId);
+    const query = invoiceQueryInput.safeParse(req.query);
+    if (!query.success) return res.status(400).json({ error: 'Invalid invoice filters' });
+    const invoices = await storage.getInvoices(role, partnerId, clientId, query.data);
     const filteredInvoices = invoices.map(inv => projectInvoiceForRole(inv, role));
-    const summary: Record<string, unknown> = { stats: filteredStats, invoices: filteredInvoices, role, dataSource: "invoice_calculations" };
+    const summary: Record<string, unknown> = { stats: filteredStats, invoices: filteredInvoices, page: query.data.page, limit: query.data.limit, role, dataSource: "invoice_calculations" };
     if (role === "admin") summary.partnerDebts = await storage.getPartnerDebtSummaries();
     if (role === "partner" && partnerId) {
       const partnerDebts = await storage.getPartnerDebtSummaries();

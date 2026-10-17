@@ -1,4 +1,6 @@
-import type { InvoiceDto } from "@shared/contracts";
+import { accountantLogsSchema } from '@shared/invoiceContract';
+import { useInvoicePage } from '@/hooks/useInvoicePage';
+import { InvoicePagination } from './InvoicePagination';
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,16 +22,6 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { useExportMyInvoices } from "@/hooks/useExportMyInvoices";
-
-interface ActionLog {
-  id: string;
-  actionType: string;
-  description: string;
-  createdAt: string;
-  tokenCode?: string;
-  tokenRole?: string;
-  details?: string;
-}
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
   create_invoice: "Создание счёта",
@@ -55,16 +47,15 @@ export const AccountantDashboard = () => {
   const [docUrl, setDocUrl] = useState("");
   const { handleExport, isExporting } = useExportMyInvoices();
 
-  const { data: logs } = useQuery<{ logs: ActionLog[]; total: number }>({
+  const [documentPage, setDocumentPage] = useState(1);
+  const [documentSearch, setDocumentSearch] = useState('');
+  const { data: logs, isLoading: logsLoading, error: logsError, refetch: reloadLogs } = useQuery({
     queryKey: ['/api/accountant-logs'],
-    queryFn: () => apiGet('/api/accountant-logs?limit=50'),
+    queryFn: () => apiGet('/accountant-logs?limit=50', accountantLogsSchema),
     enabled: activeTab === 'logs',
   });
-
-  const { data: invoicesData } = useQuery<InvoiceDto[]>({
-    queryKey: ['/api/invoices'],
-    queryFn: () => apiGet('/api/invoices'),
-  });
+  const documents = useInvoicePage({ page: documentPage, search: documentSearch, limit: 100 }, activeTab === 'documents');
+  const invoicesData = documents.data?.invoices ?? [];
 
   const updateClosingDoc = useMutation({
     mutationFn: async ({ invoiceId, url }: { invoiceId: string; url: string | null }) => {
@@ -158,7 +149,9 @@ export const AccountantDashboard = () => {
               <CardTitle className="text-lg">Закрывающие документы</CardTitle>
             </CardHeader>
             <CardContent>
-              {!invoicesData || invoicesData.length === 0 ? (
+              <Input aria-label="Поиск документов по счетам" placeholder="Номер счёта или клиент" value={documentSearch}
+                onChange={event => { setDocumentSearch(event.target.value); setDocumentPage(1); }} />
+              {documents.error ? <p role="alert">Не удалось загрузить документы. <Button onClick={() => documents.refetch()}>Повторить</Button></p> : documents.isLoading ? <p>Загрузка…</p> : invoicesData.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">Нет доступных счетов</p>
               ) : (
                 <div className="overflow-x-auto">
@@ -257,6 +250,7 @@ export const AccountantDashboard = () => {
                   </Table>
                 </div>
               )}
+              <InvoicePagination page={documentPage} pages={documents.data?.pages ?? 0} total={documents.data?.total ?? 0} onPage={setDocumentPage} disabled={documents.isFetching} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -267,7 +261,7 @@ export const AccountantDashboard = () => {
               <CardTitle className="text-lg">Журнал действий бухгалтерии</CardTitle>
             </CardHeader>
             <CardContent>
-              {!logs || logs.logs.length === 0 ? (
+              {logsError ? <p role="alert">Не удалось загрузить журнал. <Button onClick={() => reloadLogs()}>Повторить</Button></p> : logsLoading ? <p>Загрузка…</p> : !logs || logs.logs.length === 0 ? (
                 <p className="text-muted-foreground text-center py-8">Нет записей</p>
               ) : (
                 <div className="space-y-3">

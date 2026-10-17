@@ -195,7 +195,7 @@ describe('Scoped queries and report contracts', () => {
     const metadata = await invoices.getInvoiceListMetadata(database(), actor, query);
     expect(metadata.total).toBe(2); expect(metadata.statusCounts.all).toBe(2);
     expect(metadata.clients.map(row => row.id)).toEqual([other.id]); expect(metadata.partners).toEqual([]);
-    const response = JSON.parse(JSON.stringify({ invoices: stripSensitiveFieldsFromList(first, 'client'), ...metadata }));
+    const response = JSON.parse(JSON.stringify({ invoices: stripSensitiveFieldsFromList(first, 'client'), ...metadata, page: 1, pages: 2 }));
     expect(invoicePageSchema.safeParse(response).success).toBe(true);
     expect(await invoices.getInvoices(database(), 'client', undefined, undefined, query)).toEqual([]);
     await invoices.createInvoiceExpense(database(), { invoiceId: a.id, description: 'Scoped export', amount: '50', createdBy: actorId });

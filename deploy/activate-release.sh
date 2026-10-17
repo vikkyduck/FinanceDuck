@@ -2,6 +2,8 @@
 # Versioned migrations must be backward compatible with the previous application.
 # Usage ledger is additive, but the old application must not run after manual period changes.
 set -Eeuo pipefail
+exec 9>/var/lock/finance-duck-maintenance.lock
+flock -n 9 || { echo "Another maintenance operation is running"; exit 1; }
 release="${1:?Release directory required}"
 commit="${2:?Commit required}"
 [[ "$release" =~ ^/opt/finance-duck-releases/[a-zA-Z0-9_-]+$ && "$commit" =~ ^[a-f0-9]{40}$ ]] || exit 2

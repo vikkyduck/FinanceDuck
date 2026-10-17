@@ -1,3 +1,6 @@
+import type { z } from 'zod';
+import { apiResponseContract } from '@shared/apiContract';
+
 export interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -8,7 +11,8 @@ const uncertainCommands = new Map<string, string>();
 
 export async function apiRequest<T>(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  schema?: z.ZodType<T>
 ): Promise<T> {
   const csrfToken = localStorage.getItem("csrf_token");
   
@@ -56,16 +60,19 @@ export async function apiRequest<T>(
   }
 
   const data = await response.json();
+  const validator = schema ?? apiResponseContract(url, method);
+  const validated = validator ? validator.parse(data) : data;
   confirm();
-  return data;
+  return validated;
 }
 
 export async function api<T>(endpoint: string, options?: RequestInit): Promise<T> {
   return apiRequest<T>(`/api${endpoint}`, options);
 }
 
-export async function apiGet<T>(endpoint: string): Promise<T> {
-  return api<T>(endpoint, { method: "GET" });
+export async function apiGet<T>(endpoint: string, schema?: z.ZodType<T>): Promise<T> {
+  if (!endpoint.startsWith('/') || endpoint.startsWith('/api/')) throw new Error('API endpoint must start with / and omit the /api prefix');
+  return apiRequest<T>(`/api${endpoint}`, { method: "GET" }, schema);
 }
 
 export async function apiPost<T>(endpoint: string, data?: unknown): Promise<T> {

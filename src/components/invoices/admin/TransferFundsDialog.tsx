@@ -1,5 +1,7 @@
+import { useInvoicePage } from '@/hooks/useInvoicePage';
+import { InvoicePicker } from '../InvoicePicker';
 import type { InvoiceDto } from "@shared/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiPost } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 
 /**
@@ -25,70 +27,27 @@ interface TransferFundsDialogProps {
   onTransferred?: () => void;
 }
 
-interface InvoiceLite {
-  id: string;
-  clientId: string | null;
-  clientTitle: string | null;
-  invoiceNumber: string | null;
-  scheme: string;
-  clientBill: number;
-  clientRemaining: number;
-  clientName?: string | null;
-}
-
 export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: TransferFundsDialogProps) => {
-  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
   const [clientId, setClientId] = useState<string>("");
-  const [fromId, setFromId] = useState<string>("");
-  const [toId, setToId] = useState<string>("");
+  const [fromInvoice, setFromInvoice] = useState<InvoiceDto | null>(null);
+  const [toInvoice, setToInvoice] = useState<InvoiceDto | null>(null);
+  const fromId = fromInvoice?.id;
+  const toId = toInvoice?.id;
+  const directory = useInvoicePage({ page: 1, limit: 1 }, open);
+  const clientOptions = directory.data?.clients ?? [];
+  const loading = directory.isLoading;
   const [amount, setAmount] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
 
   useEffect(() => {
     if (!open) return;
-    setClientId(""); setFromId(""); setToId(""); setAmount(""); setNotes("");
-    setLoading(true);
-    apiGet<InvoiceDto[]>("/invoices")
-      .then((rows) => {
-        const list: InvoiceLite[] = rows.map((r) => ({
-          id: r.id,
-          clientId: r.clientId ?? r.client?.id ?? null,
-          clientTitle: r.clientTitle ?? null,
-          invoiceNumber: r.invoiceNumber ?? null,
-          scheme: r.scheme,
-          clientBill: Number(r.clientBill ?? r.calculations?.clientBill ?? 0),
-          clientRemaining: Number(r.calculations?.clientRemaining ?? 0),
-          clientName: r.client?.name ?? null,
-        }));
-        setInvoices(list);
-      })
-      .catch((e) => toast.error((e instanceof Error ? e.message : String(e)) || "Не удалось загрузить счета"))
-      .finally(() => setLoading(false));
+    setClientId(""); setFromInvoice(null); setToInvoice(null); setAmount(""); setNotes("");
   }, [open]);
-
-  // Список клиентов из счетов
-  const clientOptions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const i of invoices) {
-      if (!i.clientId) continue;
-      if (!map.has(i.clientId)) map.set(i.clientId, i.clientName || "—");
-    }
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [invoices]);
-
-  const clientInvoices = useMemo(
-    () => invoices.filter((i) => i.clientId === clientId),
-    [invoices, clientId],
-  );
-
-  const fromInvoice = clientInvoices.find((i) => i.id === fromId);
-  const toInvoice   = clientInvoices.find((i) => i.id === toId);
 
   // Запятая как десятичный разделитель — привычный ввод, Number её не понимает
   const amt = Number(String(amount).replace(",", ".").trim());
-  const available = fromInvoice ? fromInvoice.clientRemaining : 0;
+  const available = fromInvoice ? Number(fromInvoice.calculations?.clientRemaining ?? 0) : 0;
   const valid = !!clientId
     && !!fromId && !!toId && fromId !== toId
     && Number.isFinite(amt) && amt > 0
@@ -131,9 +90,6 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
     }
   };
 
-  const invoiceLabel = (i: InvoiceLite) =>
-    `${i.clientTitle || i.invoiceNumber || i.id.slice(0, 6)} — доступно ${exactMoney(i.clientRemaining)}`;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -145,13 +101,13 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? (
+        {directory.error ? <p role="alert">Не удалось загрузить клиентов. <Button onClick={() => directory.refetch()}>Повторить</Button></p> : loading ? (
           <div className="py-8 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : (
           <div className="space-y-3">
             <div className="space-y-1">
               <Label>Клиент</Label>
-              <Select value={clientId} onValueChange={(v) => { setClientId(v); setFromId(""); setToId(""); }}>
+              <Select value={clientId} onValueChange={(v) => { setClientId(v); setFromInvoice(null); setToInvoice(null); }}>
                 <SelectTrigger><SelectValue placeholder="Выберите клиента" /></SelectTrigger>
                 <SelectContent>
                   {clientOptions.map((c) => (
@@ -164,32 +120,14 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-end gap-2">
               <div className="space-y-1">
                 <Label>Со счёта</Label>
-                <Select value={fromId} onValueChange={setFromId} disabled={!clientId}>
-                  <SelectTrigger><SelectValue placeholder="Источник" /></SelectTrigger>
-                  <SelectContent>
-                    {/* Источник без денег выбрать нельзя — иначе выбор молча
-                        ведёт в тупик с неактивной кнопкой. */}
-                    {clientInvoices.map((i) => (
-                      <SelectItem key={i.id} value={i.id} disabled={i.id === toId || i.clientRemaining <= 0}>
-                        {invoiceLabel(i)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <InvoicePicker key={`from-${clientId}`} selected={fromInvoice} onSelect={setFromInvoice} clientId={clientId}
+                  positiveBalance excludeId={toId} disabled={!clientId || !open} label="Источник" />
               </div>
               <ArrowRight className="h-4 w-4 mb-2 mx-auto text-muted-foreground hidden sm:block" />
               <div className="space-y-1">
                 <Label>На счёт</Label>
-                <Select value={toId} onValueChange={setToId} disabled={!clientId}>
-                  <SelectTrigger><SelectValue placeholder="Получатель" /></SelectTrigger>
-                  <SelectContent>
-                    {clientInvoices.map((i) => (
-                      <SelectItem key={i.id} value={i.id} disabled={i.id === fromId}>
-                        {invoiceLabel(i)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <InvoicePicker key={`to-${clientId}`} selected={toInvoice} onSelect={setToInvoice} clientId={clientId}
+                  excludeId={fromId} disabled={!clientId || !open} label="Получатель" />
               </div>
             </div>
 

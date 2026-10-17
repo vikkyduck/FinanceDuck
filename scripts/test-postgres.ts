@@ -70,6 +70,21 @@ try {
   const [logs] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.assistantActionLogs).where(eq(schema.assistantActionLogs.entityId, repeated[0].id));
   assert.equal(logs.count, 1);
   console.log('PASS: concurrent retries commit one invoice and one audit event');
+
+  const { JobRunner } = await import('../server/services/jobRunner');
+  let executions = 0;
+  const job = { key: 'concurrent-job', run: async () => { executions++; }, nextRunAt: () => new Date(Date.now() + 3600000) };
+  const claimed = await Promise.all(Array.from({ length: 12 }, () => new JobRunner(db).run(job)));
+  assert.equal(claimed.filter(Boolean).length, 1);
+  assert.equal(executions, 1);
+  console.log('PASS: 12 independent job runners execute one durable job');
+
+  const expense = await commands.createExpense({ role: 'admin', tokenId: actor.id }, { invoiceId: repeated[0].id, description: 'delete concurrently', amount: '10' });
+  const deleted = await Promise.all(Array.from({ length: 12 }, () => commands.deleteExpense({ role: 'admin', tokenId: actor.id, requestKey: 'delete-once' }, expense.id)));
+  assert.equal(deleted.filter(result => result.success).length, 12);
+  const [deleteLogs] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.assistantActionLogs).where(eq(schema.assistantActionLogs.actionType, 'delete_expense'));
+  assert.equal(deleteLogs.count, 1);
+  console.log('PASS: 12 concurrent deletion retries commit one mutation and audit event');
 } finally {
   await pool?.end();
   await control.query(`DROP DATABASE IF EXISTS "${name}"`);

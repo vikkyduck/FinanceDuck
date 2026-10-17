@@ -116,6 +116,18 @@ export async function clearAllLoginAttempts(): Promise<number> {
   return result.rowCount ?? 0;
 }
 
+/** Bounded retention; never removes a current attempt window or active lock. */
+export async function pruneExpiredLoginAttempts(database = db, now = Date.now(), batchSize = 5000): Promise<number> {
+  const result = await database.execute(sql`
+    DELETE FROM login_rate_limits WHERE code IN (
+      SELECT code FROM login_rate_limits
+      WHERE last_attempt < ${now - ATTEMPT_WINDOW_MS}
+        AND (locked_until IS NULL OR locked_until <= ${now})
+      ORDER BY last_attempt LIMIT ${batchSize} FOR UPDATE SKIP LOCKED
+    ) RETURNING code`);
+  return result.rows.length;
+}
+
 export async function getLockedCodes(): Promise<
   { code: string; lockedUntil: number; attempts: number }[]
 > {

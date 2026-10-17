@@ -63,8 +63,9 @@ invoicesRouter.post("/api/invoices", authMiddleware, requireRole("admin", "assis
       "create",
     );
     const invoice = await invoiceCommands.create(commandActor(req), { ...invoiceData, createdBy: req.user!.token.id }, calculations || {});
-    const fullInvoice = await storage.getInvoice(invoice.id);
-    const filtered = stripSensitiveFieldsForRole(fullInvoice || invoice, role);
+    const fullInvoice = await findAuthorizedInvoice(storage, req.user!, invoice.id);
+    if (!fullInvoice) return res.status(404).json({ error: "Invoice not found" });
+    const filtered = stripSensitiveFieldsForRole(fullInvoice, role);
     res.status(201).json(filtered);
   } catch (error) {
     if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
@@ -218,14 +219,6 @@ invoicesRouter.patch("/api/expenses/:id", authMiddleware, requireRole("admin", "
 invoicesRouter.delete("/api/expenses/:id", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const actor = req.user!;
-    const role = actor.role;
-    const expense = await storage.getInvoiceExpense(id);
-    if (!expense) return res.status(404).json({ error: "Expense not found" });
-    if (!await findAuthorizedInvoice(storage, actor, expense.invoiceId)) {
-      return res.status(404).json({ error: "Expense not found" });
-    }
-
     await invoiceCommands.deleteExpense(commandActor(req), id);
     res.json({ success: true });
   } catch (error) {

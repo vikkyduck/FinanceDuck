@@ -23,6 +23,7 @@ export const backupTables = {
   invoiceNumberCounters: schema.invoiceNumberCounters,
   notificationOutbox: schema.notificationOutbox,
   commandReceipts: schema.commandReceipts,
+  scheduledJobs: schema.scheduledJobs,
 } as const;
 type TableKey = keyof typeof backupTables;
 type Rows = Record<string, unknown>[];
@@ -41,7 +42,7 @@ export interface BackupInfo {
 }
 
 export interface BackupData {
-  version: "3.0";
+  version: "4.0";
   objects: Record<string, string>;
   createdAt: string;
   type: "auto" | "manual";
@@ -52,19 +53,21 @@ export interface BackupData {
 export function validateBackup(backup: unknown): BackupData {
   if (!backup || typeof backup !== "object") throw new Error("Неверный формат бэкапа");
   const value = backup as BackupData;
-  if (!["2.0", "3.0"].includes(value.version)) throw new Error("Неполный или устаревший формат бэкапа. Автоматическое восстановление версии 1 запрещено");
+  if (!["2.0", "3.0", "4.0"].includes(value.version)) throw new Error("Неполный или устаревший формат бэкапа. Автоматическое восстановление версии 1 запрещено");
   if (!value.data || !Number.isFinite(Date.parse(value.createdAt)) || !["auto", "manual"].includes(value.type)) {
     throw new Error("Неверные метаданные бэкапа");
   }
   const data = {} as BackupData["data"];
   for (const [key, table] of Object.entries(backupTables)) {
-    const rows = value.data[key as TableKey];
+    const legacy = String(value.version) !== "4.0";
+    const rows = legacy && key === "scheduledJobs" ? [] : value.data[key as TableKey];
     if (!Array.isArray(rows)) throw new Error(`Отсутствует таблица ${key}`);
     const columns = getTableColumns(table);
     const validator = createSelectSchema(table).strict();
     data[key as TableKey] = rows.map(row => {
       const revived = { ...row };
-      if (String(value.version) === "2.0" && key === "signedActs" && !("objectKey" in revived)) revived.objectKey = null;
+      if (legacy && key === "signedActs" && !("objectKey" in revived)) revived.objectKey = null;
+      if (legacy && key === "invoices" && !("recurringOccurrenceKey" in revived)) revived.recurringOccurrenceKey = null;
       for (const [name, column] of Object.entries(columns)) {
         if (column.dataType === "date" && typeof revived[name] === "string") {
           revived[name] = new Date(revived[name] as string);
@@ -73,12 +76,23 @@ export function validateBackup(backup: unknown): BackupData {
       return validator.parse(revived);
     });
   }
+  // Old complete snapshots predate immutable occurrence keys. Preserve duplicate financial
+  // rows and assign the canonical key to the earliest invoice, as migration 0002 does.
+  if (String(value.version) !== '4.0' && value.data.invoices.some(row => !('recurringOccurrenceKey' in row))) {
+    const used = new Set(data.invoices.map(row => row.recurringOccurrenceKey).filter(Boolean));
+    const ordered = [...data.invoices].sort((a, b) => new Date(String(a.createdAt)).getTime() - new Date(String(b.createdAt)).getTime() || String(a.id).localeCompare(String(b.id)));
+    for (const row of ordered) {
+      if (!row.recurringInvoiceId || !row.issueDate || row.recurringOccurrenceKey) continue;
+      const key = `${row.recurringInvoiceId}:${row.issueDate}`;
+      if (!used.has(key)) { row.recurringOccurrenceKey = key; used.add(key); }
+    }
+  }
   const objects = value.objects ?? {};
   for (const row of data.signedActs) {
     if (typeof row.objectKey !== 'string') continue;
     if (!/^[a-f0-9]{64}$/.test(row.objectKey) || typeof objects[row.objectKey] !== 'string' || objectDigest(Buffer.from(objects[row.objectKey], 'base64')) !== row.objectKey) throw new Error('Missing or corrupt document in backup');
   }
-  return { ...value, version: '3.0', data, objects };
+  return { ...value, version: '4.0', data, objects };
 }
 
 function parseBackupType(filename: string): "auto" | "manual" {
@@ -103,7 +117,7 @@ export class BackupService {
     }, { isolationLevel: "repeatable read", accessMode: "read only" });
     const objects: Record<string, string> = {};
     for (const row of data.signedActs) if (typeof row.objectKey === 'string' && !objects[row.objectKey]) objects[row.objectKey] = (await this.objects.get(row.objectKey)).toString('base64');
-    const backup: BackupData = { version: "3.0", createdAt, type, data, objects };
+    const backup: BackupData = { version: "4.0", createdAt, type, data, objects };
     const json = JSON.stringify(backup);
     const content = backupCryptoEnabled ? JSON.stringify(encryptBackup(json, { createdAt, type })) : json;
     // Atomic publish: an interrupted write never appears as a restorable file.

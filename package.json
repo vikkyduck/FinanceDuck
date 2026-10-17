@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx server/vite.ts",
     "build:client": "vite build",
-    "build:server": "esbuild server/vite.ts server/migrate.ts server/migrateDocuments.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outdir=dist-server --entry-names=[name] && mv dist-server/vite.js dist-server/index.js",
+    "build:server": "esbuild server/vite.ts server/migrate.ts server/migrateDocuments.ts server/worker.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outdir=dist-server --entry-names=[name] && mv dist-server/vite.js dist-server/index.js",
     "build": "npm run build:client && npm run build:server",
+    "worker": "NODE_ENV=production node dist-server/worker.js",
+    "dev:worker": "tsx server/worker.ts",
     "start": "NODE_ENV=production node dist-server/index.js",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",

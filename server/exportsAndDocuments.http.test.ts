@@ -48,3 +48,23 @@ it('rejects malformed export filters before starting an XLSX stream', async () =
     }
   });
 });
+
+it('bounds printable client reports before rendering and never silently truncates them', async () => {
+  const clientId = '00000000-0000-4000-8000-000000000001';
+  let pagesRead = 0;
+  const storage = { async *invoiceExportPages() {
+    for (let batch = 0; batch < 30; batch++) {
+      pagesRead++;
+      yield Array.from({ length: 200 }, () => ({ clientId, status: 'paid' }));
+    }
+  } } as unknown as ExportStore;
+  await withServer(createExportRouter(storage, authenticate), async url => {
+    for (const endpoint of ['client-report/preview', 'client-report-print', 'client-report-pdf', 'client-report']) {
+      pagesRead = 0;
+      const response = await fetch(`${url}/api/admin/export/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }) });
+      expect(response.status).toBe(413);
+      expect((await response.json()).error).toContain('2000');
+      expect(pagesRead).toBe(11);
+    }
+  });
+});

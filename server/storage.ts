@@ -394,9 +394,9 @@ export class DatabaseStorage implements StorageOperations {
   async getDueRecurringInvoices(upToDate?: Date, scope?: recurringRepo.RecurringScope)                         { return recurringRepo.getDueRecurringInvoices(this.database, upToDate, scope); }
   async getActiveRecurringInvoicesForCashFlow(scope?: recurringRepo.RecurringScope)                          { return recurringRepo.getActiveRecurringInvoicesForCashFlow(this.database, scope); }
   async generateInvoiceNumber()                                          { return invoiceRepo.generateInvoiceNumber(this.database); }
-  async createDraftFromRecurring(recurringId: string, invoiceDate?: string, scope?: recurringRepo.RecurringScope) { return recurringRepo.createDraftFromRecurring(this.database, recurringId, invoiceDate, scope); }
-  async processAllDueRecurringInvoices()                                 { return recurringRepo.processAllDueRecurringInvoices(this.database); }
-  async generateBackdatedInvoices(recurringId: string, fromDate: string) { return recurringRepo.generateBackdatedInvoices(this.database, recurringId, fromDate); }
+  async createDraftFromRecurring(recurringId: string, invoiceDate?: string, scope?: recurringRepo.RecurringScope, actorId?: string) { return recurringRepo.createDraftFromRecurring(this.database, recurringId, invoiceDate, scope, actorId); }
+  async processAllDueRecurringInvoices(actorId?: string)                  { return recurringRepo.processAllDueRecurringInvoices(this.database, actorId); }
+  async generateBackdatedInvoices(recurringId: string, fromDate: string, actorId?: string) { return recurringRepo.generateBackdatedInvoices(this.database, recurringId, fromDate, actorId); }
   async updateRecurringInvoice(id: string, data: Partial<InsertRecurringInvoice>, scope?: recurringRepo.RecurringScope)                    { return recurringRepo.updateRecurringInvoice(this.database, id, data, scope); }
   async deleteRecurringInvoice(id: string)                               { return recurringRepo.deleteRecurringInvoice(this.database, id); }
 

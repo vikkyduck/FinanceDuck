@@ -29,15 +29,15 @@ export async function deliverNotifications(database = db, send: (target: Telegra
 }
 
 export function startOutboxWorker() {
-  let running = false;
-  const tick = async () => {
+  let running: Promise<void> | undefined;
+  const tick = () => {
     if (running) return;
-    running = true;
-    try { await deliverNotifications(); } catch { console.error('[outbox] Worker failed; retry scheduled'); }
-    finally { running = false; }
+    running = deliverNotifications().then(() => undefined)
+      .catch(() => { console.error('[outbox] Worker failed; retry scheduled'); })
+      .finally(() => { running = undefined; });
   };
   const timer = setInterval(tick, 10000);
   timer.unref();
   void tick();
-  return () => clearInterval(timer);
+  return async () => { clearInterval(timer); await running; };
 }

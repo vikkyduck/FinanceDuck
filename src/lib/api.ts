@@ -3,26 +3,47 @@ export interface ApiResponse<T> {
   error?: string;
 }
 
+let pendingSession: string | null = null;
+const uncertainCommands = new Map<string, string>();
+
 export async function apiRequest<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
   const csrfToken = localStorage.getItem("csrf_token");
   
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...(["POST", "PATCH", "PUT", "DELETE"].includes(options.method ?? "GET") ? { "Idempotency-Key": crypto.randomUUID() } : {}),
-    ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
-    ...options.headers,
+  const method = (options.method ?? 'GET').toUpperCase();
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+  // Only invoice commands have transactional receipts. Other mutations must not
+  // be automatically repeated after an ambiguous network failure.
+  const retrySafe = ['POST', 'PATCH', 'DELETE'].includes(method)
+    && /^\/api\/(?:invoices(?:\/transfer|\/[^/]+(?:\/expenses)?)?|expenses\/[^/]+|transfers\/[^/]+)$/.test(url)
+    && (options.body === undefined || typeof options.body === 'string');
+  if (pendingSession !== csrfToken) { uncertainCommands.clear(); pendingSession = csrfToken; }
+  const signature = retrySafe ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
+    new TextEncoder().encode(JSON.stringify([method, url, options.body ?? ''])))), byte => byte.toString(16).padStart(2, '0')).join('') : undefined;
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method) && !headers.has('Idempotency-Key')) {
+    const key = signature ? uncertainCommands.get(signature) ?? crypto.randomUUID() : crypto.randomUUID();
+    headers.set('Idempotency-Key', key);
+  }
+  if (signature) uncertainCommands.set(signature, headers.get('Idempotency-Key')!);
+  const confirm = () => {
+    if (signature && pendingSession === csrfToken && uncertainCommands.get(signature) === headers.get('Idempotency-Key')) uncertainCommands.delete(signature);
   };
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
+  const send = () => fetch(url, { ...options, method, headers, credentials: 'include' });
+  let response: Response;
+  try { response = await send(); }
+  catch (error) {
+    if (!retrySafe || options.signal?.aborted || !(error instanceof TypeError)
+      || csrfToken !== localStorage.getItem('csrf_token')) throw error;
+    // Reuse the exact headers/body, including the command key and session.
+    response = await send();
+  }
 
   if (!response.ok) {
+    if (response.status < 500) confirm();
     if (response.status === 401 && csrfToken === localStorage.getItem('csrf_token')) window.dispatchEvent(new Event('auth-expired'));
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `Request failed: ${response.status}`);
@@ -30,10 +51,13 @@ export async function apiRequest<T>(
 
   // Handle 204 No Content response (e.g., DELETE requests)
   if (response.status === 204) {
+    confirm();
     return undefined as T;
   }
 
-  return response.json();
+  const data = await response.json();
+  confirm();
+  return data;
 }
 
 export async function api<T>(endpoint: string, options?: RequestInit): Promise<T> {

@@ -1,3 +1,5 @@
+import { invoiceTerms, calculationInput, expenseInput, parseCommand, validatePeriodicTerms, type CreateInvoiceInput, type ChangeInvoiceTerms, type CalculationInput, type RecordExpense, type ExpenseFields } from './invoiceCommandInput';
+import { invoiceNotice } from './invoiceNotice';
 import { CommandError } from "../lib/commandError";
 export { CommandError } from "../lib/commandError";
 import { createHash } from 'node:crypto';
@@ -5,11 +7,11 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import * as repo from '../repositories/invoiceRepo';
 import { assistantActionLogs, commandReceipts, notificationOutbox, invoiceTransfers } from '../../shared/schema';
-import type { InsertInvoice, InsertInvoiceExpense, InvoiceCalculation, AssistantActionType } from '../../shared/schema';
+import type { AssistantActionType } from '../../shared/schema';
 import type { InvoiceActor } from '../invoiceAccess';
 import { constrainInvoiceWrite } from '../invoiceAccess';
 import { isClientFinancialVisible, isClientUsageVisible } from '../permissions';
-import { escapeHtml, publicUrl } from '../lib/telegram';
+import { escapeHtml } from '../lib/telegram';
 
 export interface CommandActor extends InvoiceActor {
   tokenId: string; requestKey?: string; ip?: string; userAgent?: string;
@@ -21,50 +23,72 @@ const money = (value: string | number | null | undefined) => new Intl.NumberForm
 export class InvoiceCommands {
   constructor(private readonly database = db) {}
 
-  private async run<T>(actor: CommandActor, ids: string[], action: AssistantActionType, input: unknown, execute: (tx: Tx) => Promise<{ result: T; entityId: string; description: string; notification?: { clientId: string; body: string } }>): Promise<T> {
+  private async run<T>(actor: CommandActor, targets: string[] | ((tx: Tx) => Promise<string[]>), action: AssistantActionType, input: unknown, execute: (tx: Tx) => Promise<{ result: T; entityId: string; description: string; notification?: { clientId: string; body: string } }>): Promise<T> {
     if (!['admin', 'assistant', 'accountant'].includes(actor.role)) throw new CommandError('Forbidden', 403);
     return this.database.transaction(async tx => {
       const key = actor.requestKey ? `${actor.tokenId}:${actor.requestKey}` : undefined;
       if (key && key.length > 256) throw new CommandError('Invalid idempotency key', 400);
-      const fingerprint = createHash('sha256').update(JSON.stringify({ action, ids, input })).digest('hex');
+      const fingerprint = createHash('sha256').update(JSON.stringify({ action, input })).digest('hex');
+      const authorize = async (ids: string[], replay = false) => {
+        await repo.lockInvoices(tx, ids);
+        for (const id of ids) {
+          if (!await repo.getInvoice(tx, id, actor.role, actor.partnerId, actor.clientId)) {
+            // Deletion receipts contain only success, and deletion remains admin-only.
+            if (replay && action === 'delete_invoice' && actor.role === 'admin') continue;
+            throw new CommandError('Invoice not found', 404);
+          }
+        }
+      };
       if (key) {
         const inserted = await tx.insert(commandReceipts).values({ key, fingerprint }).onConflictDoNothing().returning();
         if (!inserted.length) {
           const [receipt] = await tx.select().from(commandReceipts).where(eq(commandReceipts.key, key)).for('update');
-          if (receipt.fingerprint !== fingerprint) throw new CommandError('Idempotency key already used for another command');
-          if (receipt.result) return JSON.parse(receipt.result) as T;
+          const cached = receipt.result ? JSON.parse(receipt.result) : null;
+          const envelope = cached?.receiptVersion === 1;
+          const ids: string[] = envelope ? cached.invoiceIds : typeof targets === 'function' ? await targets(tx) : targets;
+          const legacyFingerprint = createHash('sha256').update(JSON.stringify({ action, ids, input })).digest('hex');
+          if (receipt.fingerprint !== fingerprint && receipt.fingerprint !== legacyFingerprint) throw new CommandError('Idempotency key already used for another command');
+          if (cached) {
+            const result = envelope ? cached.result : cached;
+            await authorize(action === 'create_invoice' ? [result.id] : ids, true);
+            return result as T;
+          }
         }
       }
-      await repo.lockInvoices(tx, ids);
-      for (const id of ids) {
-        if (!await repo.getInvoice(tx, id, actor.role, actor.partnerId, actor.clientId)) throw new CommandError('Invoice not found', 404);
-      }
+      const ids = typeof targets === 'function' ? await targets(tx) : targets;
+      await authorize(ids);
       const outcome = await execute(tx);
       await tx.insert(assistantActionLogs).values({
         accessTokenId: actor.tokenId, actionType: action, entityType: 'invoice', entityId: outcome.entityId,
         description: outcome.description, details: JSON.stringify(input), ipAddress: actor.ip, userAgent: actor.userAgent,
       });
       if (outcome.notification) await tx.insert(notificationOutbox).values(outcome.notification);
-      if (key) await tx.update(commandReceipts).set({ result: JSON.stringify(outcome.result ?? null) }).where(eq(commandReceipts.key, key));
+      if (key) await tx.update(commandReceipts).set({ result: JSON.stringify({ receiptVersion: 1, invoiceIds: ids.length ? ids : [outcome.entityId], result: outcome.result ?? null }) }).where(eq(commandReceipts.key, key));
       return outcome.result;
     });
   }
 
-  create(actor: CommandActor, input: InsertInvoice, calculations: Partial<InvoiceCalculation> = {}) {
+  create(actor: CommandActor, input: CreateInvoiceInput, calculations: CalculationInput = {}) {
+    const terms = parseCommand(invoiceTerms, input);
+    const projection = parseCommand(calculationInput, calculations);
+    validatePeriodicTerms(terms);
     return this.run(actor, [], 'create_invoice', { input, calculations }, async tx => {
-      const invoice = await repo.createInvoice(tx, { ...constrainInvoiceWrite(actor.role, input, 'create'), createdBy: actor.tokenId }, calculations);
+      const invoice = await repo.createInvoice(tx, { ...constrainInvoiceWrite(actor.role, terms, 'create'), createdBy: actor.tokenId }, projection);
       const full = (await repo.getInvoice(tx, invoice.id))!;
-      return { result: invoice, entityId: invoice.id, description: `Создан счёт: ${invoice.invoiceNumber}`, notification: this.invoiceNotice(full, 'Новый счёт') };
+      return { result: invoice, entityId: invoice.id, description: `Создан счёт: ${invoice.invoiceNumber}`, notification: invoiceNotice(full, 'Новый счёт') };
     });
   }
 
-  update(actor: CommandActor, id: string, input: Partial<InsertInvoice>, calculations: Partial<InvoiceCalculation> = {}) {
+  update(actor: CommandActor, id: string, input: ChangeInvoiceTerms, calculations: CalculationInput = {}) {
+    const terms = parseCommand(invoiceTerms.partial(), input);
+    const projection = parseCommand(calculationInput, calculations);
     return this.run(actor, [id], 'update_invoice', { input, calculations }, async tx => {
       const before = (await repo.getInvoice(tx, id))!;
-      const invoice = (await repo.updateInvoice(tx, id, constrainInvoiceWrite(actor.role, input, 'update'), calculations))!;
+      validatePeriodicTerms({ ...before, ...terms });
+      const invoice = (await repo.updateInvoice(tx, id, constrainInvoiceWrite(actor.role, terms, 'update'), projection))!;
       const full = (await repo.getInvoice(tx, id))!;
       return { result: invoice, entityId: id, description: `Обновлён счёт: ${invoice.invoiceNumber}`,
-        notification: before.status !== 'paid' && invoice.status === 'paid' ? this.invoiceNotice(full, 'Оплата получена') : undefined };
+        notification: before.status !== 'paid' && invoice.status === 'paid' ? invoiceNotice(full, 'Оплата получена') : undefined };
     });
   }
 
@@ -77,9 +101,10 @@ export class InvoiceCommands {
     });
   }
 
-  createExpense(actor: CommandActor, input: InsertInvoiceExpense) {
+  createExpense(actor: CommandActor, input: RecordExpense) {
+    const fields = parseCommand(expenseInput, input);
     return this.run(actor, [input.invoiceId], 'create_expense', input, async tx => {
-      const expense = await repo.createInvoiceExpense(tx, { ...input, createdBy: actor.tokenId });
+      const expense = await repo.createInvoiceExpense(tx, { ...fields, invoiceId: input.invoiceId, createdBy: actor.tokenId });
       const invoice = (await repo.getInvoice(tx, input.invoiceId))!;
       const periodic = invoice.serviceType === 'periodic';
       const notification = isClientUsageVisible(invoice) ? { clientId: invoice.clientId,
@@ -88,18 +113,23 @@ export class InvoiceCommands {
     });
   }
 
-  async updateExpense(actor: CommandActor, id: string, input: Partial<InsertInvoiceExpense>) {
+  async updateExpense(actor: CommandActor, id: string, input: Partial<ExpenseFields>) {
+    const fields = parseCommand(expenseInput.partial(), input);
     const expense = await repo.getInvoiceExpense(this.database, id);
     if (!expense) throw new CommandError('Expense not found', 404);
     return this.run(actor, [expense.invoiceId], 'update_expense', { id, input }, async tx => ({
-      result: await repo.updateInvoiceExpense(tx, id, input), entityId: expense.invoiceId, description: `Обновлён расход: ${expense.description}`,
+      result: await repo.updateInvoiceExpense(tx, id, fields), entityId: expense.invoiceId, description: `Обновлён расход: ${expense.description}`,
     }));
   }
 
   async deleteExpense(actor: CommandActor, id: string) {
-    const expense = await repo.getInvoiceExpense(this.database, id);
-    if (!expense) throw new CommandError('Expense not found', 404);
-    return this.run(actor, [expense.invoiceId], 'delete_expense', { id }, async tx => {
+    return this.run(actor, async tx => {
+      const expense = await repo.getInvoiceExpense(tx, id);
+      if (!expense) throw new CommandError('Expense not found', 404);
+      return [expense.invoiceId];
+    }, 'delete_expense', { id }, async tx => {
+      const expense = await repo.getInvoiceExpense(tx, id);
+      if (!expense) throw new CommandError('Expense not found', 404);
       await repo.deleteInvoiceExpense(tx, id);
       return { result: { success: true }, entityId: expense.invoiceId, description: `Удалён расход: ${expense.description}` };
     });
@@ -121,19 +151,19 @@ export class InvoiceCommands {
 
   async deleteTransfer(actor: CommandActor, id: string) {
     if (actor.role !== 'admin') throw new CommandError('Forbidden', 403);
-    const [transfer] = await this.database.select().from(invoiceTransfers).where(eq(invoiceTransfers.id, id));
-    if (!transfer) throw new CommandError('Transfer not found', 404);
-    return this.run(actor, [transfer.fromInvoiceId, transfer.toInvoiceId], 'transfer_funds_delete', { id }, async tx => {
+    return this.run(actor, async tx => {
+      const [transfer] = await tx.select().from(invoiceTransfers).where(eq(invoiceTransfers.id, id));
+      if (!transfer) throw new CommandError('Transfer not found', 404);
+      return [transfer.fromInvoiceId, transfer.toInvoiceId];
+    }, 'transfer_funds_delete', { id }, async tx => {
+      const [transfer] = await tx.select().from(invoiceTransfers).where(eq(invoiceTransfers.id, id));
+      if (!transfer) throw new CommandError('Transfer not found', 404);
       await repo.deleteInvoiceTransfer(tx, id);
       return { result: { success: true }, entityId: transfer.fromInvoiceId, description: 'Удалён перенос средств' };
     });
   }
 
-  private invoiceNotice(invoice: NonNullable<Awaited<ReturnType<typeof repo.getInvoice>>>, title: string) {
-    const amount = isClientFinancialVisible(invoice.scheme) ? invoice.calculations?.clientBaseAfterMargin ?? invoice.clientBill : invoice.clientBill;
-    const link = publicUrl(`/invoices/${invoice.id}`);
-    return { clientId: invoice.clientId, body: `<b>${title}</b> · ${escapeHtml(invoice.clientTitle || invoice.invoiceNumber)}\nСумма: ${money(amount)}${link ? `\n<a href="${escapeHtml(link)}">Открыть счёт</a>` : ''}` };
-  }
+
 }
 
 export const invoiceCommands = new InvoiceCommands();

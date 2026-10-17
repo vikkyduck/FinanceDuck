@@ -1,3 +1,4 @@
+import { CommandError } from '../lib/commandError';
 import type { AuthMiddleware } from "../middleware";
 import { stripSensitiveFieldsForRole } from "../permissions";
 import { Router, Response } from "express";
@@ -32,7 +33,7 @@ recurringRouter.get("/api/recurring-invoices/due", authMiddleware, requireRole("
 });
 
 recurringRouter.post("/api/recurring-invoices/process", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
-  try { res.json(await storage.processAllDueRecurringInvoices()); }
+  try { res.json(await storage.processAllDueRecurringInvoices(req.user!.token.id)); }
   catch (error) { console.error("Process recurring invoices error:", error); res.status(500).json({ error: "Failed to process recurring invoices" }); }
 });
 
@@ -47,9 +48,9 @@ recurringRouter.post("/api/recurring-invoices/:id/create-draft", authMiddleware,
     const { invoiceDate } = req.body;
     if (!await storage.getRecurringInvoice(id, scopeFor(req))) return res.status(404).json({ error: 'Recurring invoice not found' });
     if (invoiceDate !== undefined && !isoDate.safeParse(invoiceDate).success) return res.status(400).json({ error: 'Invalid invoiceDate' });
-    const draft = await storage.createDraftFromRecurring(id, invoiceDate, scopeFor(req));
+    const draft = await storage.createDraftFromRecurring(id, invoiceDate, scopeFor(req), req.user!.token.id);
     res.status(201).json(stripSensitiveFieldsForRole(draft, req.user!.role));
-  } catch (error: unknown) { console.error("Create draft from recurring error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to create draft" }); }
+  } catch (error: unknown) { if (error instanceof CommandError) return res.status(error.status).json({ error: error.message }); console.error("Create draft from recurring error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to create draft" }); }
 });
 
 recurringRouter.post("/api/recurring-invoices/:id/backdate", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
@@ -57,8 +58,8 @@ recurringRouter.post("/api/recurring-invoices/:id/backdate", authMiddleware, req
     const id = String(req.params.id);
     const { fromDate } = req.body;
     if (!isoDate.safeParse(fromDate).success) return res.status(400).json({ error: "fromDate is required" });
-    res.json(await storage.generateBackdatedInvoices(id, fromDate));
-  } catch (error: unknown) { console.error("Generate backdated invoices error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate backdated invoices" }); }
+    res.json(await storage.generateBackdatedInvoices(id, fromDate, req.user!.token.id));
+  } catch (error: unknown) { if (error instanceof CommandError) return res.status(error.status).json({ error: error.message }); console.error("Generate backdated invoices error:", error); res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate backdated invoices" }); }
 });
 
 recurringRouter.patch("/api/recurring-invoices/:id", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {

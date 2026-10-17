@@ -391,13 +391,15 @@ export interface RecurringRepository {
     recurringId: string,
     invoiceDate?: string,
     scope?: recurringRepo.RecurringScope,
+    actorId?: string,
   ): ReturnType<typeof recurringRepo.createDraftFromRecurring>;
-  processAllDueRecurringInvoices(): ReturnType<
+  processAllDueRecurringInvoices(actorId?: string): ReturnType<
     typeof recurringRepo.processAllDueRecurringInvoices
   >;
   generateBackdatedInvoices(
     recurringId: string,
     fromDate: string,
+    actorId?: string,
   ): ReturnType<typeof recurringRepo.generateBackdatedInvoices>;
 }
 

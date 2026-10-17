@@ -29,6 +29,13 @@
       "when": 1792254980907,
       "tag": "0003_document_objects",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792258602680,
+      "tag": "0004_little_manta",
+      "breakpoints": true
     }
   ]
 }

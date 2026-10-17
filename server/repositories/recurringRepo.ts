@@ -13,7 +13,7 @@ import { parseNum } from "../../shared/financialEngine";
 import type { RecurringInvoiceForMonth } from "../storage";
 import { nextOccurrence, calendarDate } from "../../shared/recurringSchedule";
 import { calculateInvoiceServer } from "./invoiceRepo";
-import * as invoiceRepo from "./invoiceRepo";
+import { generateOccurrence } from "../services/recurringCommands";
 
 type DB = typeof _db;
 
@@ -120,58 +120,19 @@ export async function deleteRecurringInvoice(db: DB, id: string): Promise<void> 
   await db.delete(recurringInvoices).where(eq(recurringInvoices.id, id));
 }
 
-async function generateOccurrence(db: DB, recurringId: string, invoiceDate?: string, scope: RecurringScope = "all"): Promise<{ invoice: Invoice; created: boolean }> {
-  return db.transaction(async tx => {
-    const [recurring] = await tx.select().from(recurringInvoices)
-      .where(and(eq(recurringInvoices.id, recurringId), visibility(scope))).for("update");
-    if (!recurring) throw new Error('Recurring invoice not found');
-    const targetDate = invoiceDate || recurring.nextInvoiceDate;
-    const occurrenceKey = `${recurringId}:${targetDate}`;
-    const [existing] = await tx.select().from(invoices)
-      .where(or(eq(invoices.recurringOccurrenceKey, occurrenceKey),
-        and(eq(invoices.recurringInvoiceId, recurringId), eq(invoices.issueDate, targetDate))))
-      .orderBy(asc(invoices.createdAt), asc(invoices.id)).limit(1);
-    if (existing) return { invoice: existing, created: false };
-    if ((!invoiceDate && !recurring.isActive) || targetDate < recurring.startDate || (recurring.endDate && targetDate > recurring.endDate)) {
-      throw new Error('Дата вне расписания повторяющегося счёта');
-    }
-    const invoiceNumber = await invoiceRepo.generateInvoiceNumber(tx);
-    const invoice = await invoiceRepo.createInvoice(tx, {
-      invoiceNumber, clientId: recurring.clientId, partnerId: recurring.partnerId,
-      scheme: recurring.scheme, partnerCommissionRate: recurring.partnerCommissionRate,
-      clientBill: recurring.amount, description: recurring.description,
-      issueDate: targetDate, status: 'draft', hideFromAssistant: recurring.hideFromAssistant,
-      recurringInvoiceId: recurring.id, recurringOccurrenceKey: occurrenceKey, createdBy: recurring.createdBy,
-    });
-    if (Number(recurring.defaultExpenses) > 0) {
-      await invoiceRepo.createInvoiceExpense(tx, {
-        invoiceId: invoice.id, description: 'Расходы по умолчанию', amount: recurring.defaultExpenses!,
-        paidByAdmin: true, createdBy: recurring.createdBy, date: targetDate,
-      });
-    }
-    // Backdating past occurrences never advances a future schedule.
-    if (targetDate >= recurring.nextInvoiceDate) {
-      const next = nextOccurrence(targetDate, recurring.frequency, Number(recurring.dayOfMonth));
-      await tx.update(recurringInvoices).set({ nextInvoiceDate: next,
-        isActive: !(recurring.endDate && next > recurring.endDate), updatedAt: new Date(),
-      }).where(eq(recurringInvoices.id, recurringId));
-    }
-    return { invoice, created: true };
-  });
+
+export async function createDraftFromRecurring(db: DB, recurringId: string, invoiceDate?: string, scope: RecurringScope = "all", actorId?: string): Promise<Invoice> {
+  return (await generateOccurrence(db, recurringId, invoiceDate, scope, actorId)).invoice;
 }
 
-export async function createDraftFromRecurring(db: DB, recurringId: string, invoiceDate?: string, scope: RecurringScope = "all"): Promise<Invoice> {
-  return (await generateOccurrence(db, recurringId, invoiceDate, scope)).invoice;
-}
-
-export async function processAllDueRecurringInvoices(db: DB): Promise<{ created: number; errors: string[] }> {
+export async function processAllDueRecurringInvoices(db: DB, actorId?: string): Promise<{ created: number; errors: string[] }> {
   const due = await getDueRecurringInvoices(db);
   let created = 0;
   const errors: string[] = [];
   for (const recurring of due) {
     try {
       // Pass the observed occurrence: overlapping workers converge on its unique key.
-      if ((await generateOccurrence(db, recurring.id, recurring.nextInvoiceDate)).created) created++;
+      if ((await generateOccurrence(db, recurring.id, recurring.nextInvoiceDate, "all", actorId, true)).created) created++;
     } catch (error) {
       errors.push(`Failed for recurring ${recurring.id}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -179,7 +140,7 @@ export async function processAllDueRecurringInvoices(db: DB): Promise<{ created:
   return { created, errors };
 }
 
-export async function generateBackdatedInvoices(db: DB, recurringId: string, fromDate: string): Promise<{ created: number; invoices: Invoice[] }> {
+export async function generateBackdatedInvoices(db: DB, recurringId: string, fromDate: string, actorId?: string): Promise<{ created: number; invoices: Invoice[] }> {
   const recurring = await getRecurringInvoice(db, recurringId);
   if (!recurring) throw new Error('Recurring invoice not found');
   const date = new Date(`${fromDate}T00:00:00Z`);
@@ -192,7 +153,7 @@ export async function generateBackdatedInvoices(db: DB, recurringId: string, fro
   for (let steps = 0; cursor <= until && steps < 1200; steps++) {
     if (recurring.endDate && cursor > recurring.endDate) break;
     if (cursor >= fromDate && cursor >= recurring.startDate) {
-      const occurrence = await generateOccurrence(db, recurringId, cursor);
+      const occurrence = await generateOccurrence(db, recurringId, cursor, "all", actorId);
       if (occurrence.created) result.push(occurrence.invoice);
     }
     cursor = nextOccurrence(cursor, recurring.frequency, anchor);

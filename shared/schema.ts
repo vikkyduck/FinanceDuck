@@ -225,6 +225,20 @@ export const commandReceipts = pgTable("command_receipts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Durable scheduling state shared by worker processes. Business jobs are retry-safe.
+export const scheduledJobs = pgTable("scheduled_jobs", {
+  key: text("key").primaryKey(),
+  state: text("state").notNull().default('idle'),
+  leaseToken: uuid("lease_token"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull().defaultNow(),
+  attempts: integer("attempts").notNull().default(0),
+  lastStartedAt: timestamp("last_started_at", { withTimezone: true }),
+  lastFinishedAt: timestamp("last_finished_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  result: text("result"),
+});
+
 export const partnerPayments = pgTable("partner_payments", {
   id: uuid("id").defaultRandom().primaryKey(),
   partnerId: uuid("partner_id").references(() => partners.id).notNull(),
@@ -368,7 +382,7 @@ export const loginRateLimits = pgTable("login_rate_limits", {
   attemptCount: integer("attempt_count").default(0).notNull(),
   lastAttempt: bigint("last_attempt", { mode: "number" }).notNull(),
   lockedUntil: bigint("locked_until", { mode: "number" }),
-});
+}, table => [index("idx_login_rate_limits_expiry").on(table.lastAttempt)]);
 
 export type Partner = typeof partners.$inferSelect;
 export type InsertPartner = typeof partners.$inferInsert;

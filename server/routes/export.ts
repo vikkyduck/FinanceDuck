@@ -1,3 +1,5 @@
+import { readClientReportInvoices } from '../services/clientReportQuery';
+import { CommandError } from '../lib/commandError';
 import { z } from "zod";
 import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
@@ -172,7 +174,7 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
     const { invoiceId, clientId, dateFrom, dateTo } = req.body;
 
     const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
-    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allInvoices = await readClientReportInvoices(storage, req.user!, query);
 
     let invoices = allInvoices;
     if (invoiceId) {
@@ -227,6 +229,8 @@ exportRouter.post("/api/admin/export/client-report/preview", authMiddleware, req
 
     res.json({ count, totalBudget, totalExpenses, totalRemaining });
   } catch (error: unknown) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid report filters" });
     console.error("Client report preview error:", error);
     res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate preview" });
   }
@@ -244,7 +248,7 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
     }
 
     const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
-    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allInvoices = await readClientReportInvoices(storage, req.user!, query);
     const allClients = [...new Map(allInvoices.flatMap(invoice => invoice.client ? [[invoice.client.id, invoice.client] as const] : [])).values()];
 
     let invoices = allInvoices;
@@ -459,6 +463,8 @@ exportRouter.post("/api/admin/export/client-report-print", authMiddleware, requi
     res.setHeader("Cache-Control", "no-store");
     res.send(html);
   } catch (error: unknown) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid report filters" });
     console.error("Client report print error:", error);
     res.status(500).send(`<!doctype html><meta charset="utf-8"><body style="font-family: sans-serif; padding: 32px;">Ошибка: ${((error instanceof Error ? error.message : String(error)) || "").replace(/[<>]/g, "")}</body>`);
   }
@@ -473,7 +479,7 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
     }
 
     const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
-    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allInvoices = await readClientReportInvoices(storage, req.user!, query);
     const allClients = [...new Map(allInvoices.flatMap(invoice => invoice.client ? [[invoice.client.id, invoice.client] as const] : [])).values()];
     let invoices = allInvoices;
     if (invoiceId)      invoices = allInvoices.filter(inv => inv.id === invoiceId);
@@ -713,6 +719,8 @@ exportRouter.post("/api/admin/export/client-report-pdf", authMiddleware, require
 
     doc.end();
   } catch (error: unknown) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid report filters" });
     console.error("Client report PDF error:", error);
     if (!res.headersSent) {
       res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate PDF" });
@@ -740,7 +748,7 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
     workbook.created = new Date();
 
     const query = invoiceQueryInput.parse({ invoiceId: req.body.invoiceId || undefined, clientId: req.body.clientId || undefined, dateFrom: req.body.dateFrom || undefined, dateTo: req.body.dateTo || undefined });
-    const allInvoices = await storage.getInvoices(req.user!.role, req.user!.partnerId, req.user!.clientId, query);
+    const allInvoices = await readClientReportInvoices(storage, req.user!, query);
     const allClients = [...new Map(allInvoices.flatMap(invoice => invoice.client ? [[invoice.client.id, invoice.client] as const] : [])).values()];
 
     let invoices = allInvoices;
@@ -927,6 +935,8 @@ exportRouter.post("/api/admin/export/client-report", authMiddleware, requireRole
     );
     res.send(Buffer.from(buffer));
   } catch (error: unknown) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid report filters" });
     console.error("Client report export error:", error);
     res.status(500).json({ error: (error instanceof Error ? error.message : String(error)) || "Failed to generate client report" });
   }

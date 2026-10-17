@@ -1,0 +1,25 @@
+[Unit]
+Description=FinanceDuck durable background jobs
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=financeduck
+Group=financeduck
+WorkingDirectory=/opt/finance-duck
+EnvironmentFile=/opt/finance-duck/.env
+ExecStart=/usr/bin/node /opt/finance-duck/dist-server/worker.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+StandardOutput=append:/var/log/finance-duck/worker.log
+StandardError=append:/var/log/finance-duck/worker-error.log
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/finance-duck /var/log/finance-duck
+
+[Install]
+WantedBy=multi-user.target

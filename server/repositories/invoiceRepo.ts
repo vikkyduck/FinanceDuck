@@ -260,8 +260,8 @@ export async function getInvoiceListMetadata(db: DBorTx, actor: { role: UserRole
     sent: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'sent')::int`, paid: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'paid')::int`,
     cancelled: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'cancelled')::int`,
     overdue: sql<number>`COUNT(*) FILTER (WHERE ${invoices.status} = 'sent' AND ${invoices.actualPaymentDate} IS NULL AND ${invoices.paymentDate} < CURRENT_DATE)::int`,
-  }).from(invoices).where(invoiceScope(actor));
-  const scope = invoiceScope(actor) ?? sql`true`;
+  }).from(invoices).where(invoiceFilters(actor, { archive: filters.archive }));
+  const scope = invoiceFilters(actor, { archive: filters.archive }) ?? sql`true`;
   const clientOptions = await db.select({ id: clients.id, name: clients.name }).from(clients)
     .where(sql`EXISTS (SELECT 1 FROM ${invoices} WHERE ${invoices.clientId} = ${clients.id} AND ${scope})`).orderBy(clients.name);
   const partnerOptions = actor.role === 'client' ? [] : await db.select({ id: partners.id, name: partners.name }).from(partners)

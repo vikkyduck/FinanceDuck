@@ -21,6 +21,7 @@ export interface InvoiceCalcView {
 
 export interface InvoiceDetailsView {
   id: string;
+  archived_at?: string | null;
   invoice_number?: string | null;
   client_id?: string | null;
   partner_id?: string | null;
@@ -49,6 +50,7 @@ export interface InvoiceDetailsView {
 export function invoiceDetailsView(invoiceData: InvoiceDto): InvoiceDetailsView {
   return {
         id: invoiceData.id,
+        archived_at: invoiceData.archivedAt,
         invoice_number: invoiceData.invoiceNumber,
         client_id: invoiceData.clientId,
         partner_id: invoiceData.partnerId,

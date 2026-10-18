@@ -1,3 +1,4 @@
+import { InvoiceArchiveFilter } from './filters/InvoiceArchiveFilter';
 import { invalidateFinancialQueries } from '@/lib/financialQueries';
 import { InvoicePagination } from './InvoicePagination';
 import { usePagedInvoices } from "@/hooks/usePagedInvoices";
@@ -84,12 +85,13 @@ export const UnifiedInvoicesList = ({
   const isMobile = useIsMobile();
   
   const {
-    invoices, loading, error: invoicesError, page, setPage, total, pages,
+    invoices, loading, error: invoicesError, page, setPage, total, pages, archive, setArchive,
     searchQuery, setSearchQuery, statusFilter, setStatusFilter, sortBy, setSortBy,
     clientFilter, setClientFilter, partnerFilter, setPartnerFilter, monthFilter, setMonthFilter,
     clients, partners, statusCounts,
   } = usePagedInvoices(role, statusParam || initialStatusFilter, enableRealtime);
   const filteredInvoices = invoices;
+  const archiveFilter = role === 'admin' ? <InvoiceArchiveFilter value={archive} onChange={setArchive} /> : null;
   const pagination = <InvoicePagination page={page} pages={pages} total={total} onPage={setPage} disabled={loading} />;
 
   const { setRef } = useStaggerAnimation(filteredInvoices.length, viewMode === 'table' ? 60 : 80);
@@ -299,15 +301,15 @@ export const UnifiedInvoicesList = ({
 
   if (statusCounts.all === 0 && !invoicesError) {
     return (
-      <EmptyState
+      <>{archiveFilter}<EmptyState
         icon={FileText}
-        title="Счета отсутствуют"
+        title={archive === 'archived' ? "Архив пуст" : "Счета отсутствуют"}
         description={
           role === 'assistant' 
             ? "Создайте первый счёт, чтобы начать работу" 
             : "У вас пока нет выставленных счетов"
         }
-      />
+      /></>
     );
   }
 
@@ -317,7 +319,7 @@ export const UnifiedInvoicesList = ({
   if (isMobile || viewMode === 'cards') {
     return (
       <>
-        {pagination}
+        {archiveFilter}{pagination}
       <InvoiceFilters
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -422,7 +424,7 @@ export const UnifiedInvoicesList = ({
   if (viewMode === 'table') {
     return (
       <>
-        {pagination}
+        {archiveFilter}{pagination}
       <InvoiceFilters
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -699,7 +701,7 @@ export const UnifiedInvoicesList = ({
   // Cards view
   return (
     <>
-      {pagination}
+      {archiveFilter}{pagination}
       <InvoiceFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}

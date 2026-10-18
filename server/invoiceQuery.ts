@@ -9,6 +9,7 @@ export const invoiceQueryFields = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(100),
   clientId: z.string().uuid().optional(), partnerId: z.string().uuid().optional(),
   invoiceId: z.string().uuid().optional(),
+  archive: z.enum(['active', 'archived', 'all']).optional(),
   search: z.string().max(200).optional(),
   status: z.enum(['all', 'draft', 'sent', 'paid', 'cancelled', 'overdue']).optional(),
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).optional(),
@@ -36,6 +37,9 @@ export function invoiceScope(actor: InvoiceActor): SQL | undefined {
 
 export function invoiceFilters(actor: InvoiceActor, query: Partial<InvoiceQuery> = {}) {
   const terms: (SQL | undefined)[] = [invoiceScope(actor)];
+  // Explicit admin list filter; reports and exports include history by default.
+  if (actor.role === 'admin' && query.archive === 'active') terms.push(sql`${invoices.archivedAt} IS NULL`);
+  if (actor.role === 'admin' && query.archive === 'archived') terms.push(sql`${invoices.archivedAt} IS NOT NULL`);
   if (query.invoiceId) terms.push(eq(invoices.id, query.invoiceId));
   if (query.clientId) terms.push(eq(invoices.clientId, query.clientId));
   if (query.partnerId) terms.push(eq(invoices.partnerId, query.partnerId));

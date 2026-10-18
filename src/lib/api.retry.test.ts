@@ -5,8 +5,8 @@ import { apiRequest } from './api';
 afterEach(() => vi.unstubAllGlobals());
 
 it.each([
-  ['POST', '/api/partner-payments'], ['PUT', '/api/partner-payments/payment'], ['DELETE', '/api/partner-payments/payment'],
-])('retries the protected %s payment command with the same body and key', async (method, url) => {
+  ['POST', '/api/invoices/fixture/archive'], ['POST', '/api/partner-payments'], ['PUT', '/api/partner-payments/payment'], ['DELETE', '/api/partner-payments/payment'],
+])('retries the protected %s command with the same body and key', async (method, url) => {
   vi.stubGlobal('localStorage', { getItem: () => `payment-${method}` });
   const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('lost response')).mockResolvedValueOnce(new Response('{"ok":true}'));
   vi.stubGlobal('fetch', fetcher);

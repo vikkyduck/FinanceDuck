@@ -22,7 +22,7 @@ const [clientA, clientB] = await db.insert(s.clients).values([
 ]).returning();
 let actorId = '';
 for (const [name, fields] of Object.entries({
-  admin: { role: 'admin' }, assistant: { role: 'assistant' },
+  admin: { role: 'admin' }, assistant: { role: 'assistant' }, accountant: { role: 'accountant' },
   client: { role: 'client', clientId: clientA.id },
   partnerA: { role: 'partner', partnerId: partnerA.id },
   partnerB: { role: 'partner', partnerId: partnerB.id },
@@ -117,6 +117,58 @@ it('R4: rejects invoice deletion with a payment at both HTTP and FK boundaries',
   await expect(db.delete(s.invoices).where(eq(s.invoices.id, inv.id))).rejects.toThrow();
   expect(await db.select().from(s.partnerPayments).where(eq(s.partnerPayments.id, payment.body.id))).toHaveLength(1);
   expect((await request('admin', `/api/invoices/${inv.id}`)).status).toBe(200);
+});
+
+it('archives and restores paid invoices without changing money, transfers, usage, payment history or role access', async () => {
+  const source = await invoice('ARCHIVE-SOURCE', { scheme: 'agency_30', status: 'paid' });
+  const target = await invoice('ARCHIVE-TARGET', { scheme: 'agency_30', status: 'paid', serviceType: 'periodic', pricePerPeriod: '500', totalPeriods: 2 });
+  await request('admin', '/api/invoices/transfer', 'POST', { fromInvoiceId: source.id, toInvoiceId: target.id, amount: '100.01' });
+  await request('admin', `/api/invoices/${target.id}/periods`, 'POST', { period: 1, closed: true });
+  await request('admin', '/api/partner-payments', 'POST', { invoiceId: target.id, partnerId: partnerA.id, amount: '80', paymentDate: '2026-10-18' });
+  const calculations = await db.select().from(s.invoiceCalculations);
+  const transfers = await db.select().from(s.invoiceTransfers);
+  const usage = await db.select().from(s.serviceUsage);
+  const payments = await db.select().from(s.partnerPayments);
+  const before = (await request('admin', `/api/invoices/${target.id}`)).body;
+  const reportBefore = (await request('admin', '/api/do-not-spend')).body;
+  const headers = { 'Idempotency-Key': 'archive-once' };
+  const result = await request('admin', `/api/invoices/${target.id}/archive`, 'POST', { archived: true }, headers);
+  expect(result.status).toBe(200); expect(result.body.archivedAt).toBeTruthy();
+  expect((await request('admin', `/api/invoices/${target.id}/archive`, 'POST', { archived: true }, headers)).body).toEqual(result.body);
+  expect((await request('admin', `/api/invoices/${target.id}/archive`, 'POST', { archived: false }, headers)).status).toBe(409);
+  expect((await request('admin', '/api/invoices?archive=active&search=ARCHIVE-TARGET')).body.total).toBe(0);
+  const archivedPage = (await request('admin', '/api/invoices?archive=archived&search=ARCHIVE-TARGET')).body;
+  expect(archivedPage.total).toBe(1);
+  expect(archivedPage.statusCounts).toMatchObject({ all: 1, paid: 1 });
+  expect((await request('admin', '/api/invoices?search=ARCHIVE-TARGET')).body.total).toBe(1);
+  for (const role of ['client', 'partnerA', 'assistant']) {
+    expect((await request(role, `/api/invoices/${target.id}`)).status).toBe(200);
+    expect((await request(role, '/api/invoices?search=ARCHIVE-TARGET')).body.total).toBe(1);
+    expect((await request(role, `/api/invoices/${target.id}/archive`, 'POST', { archived: false })).status).toBe(403);
+    expect((await request(role, '/api/invoices?archive=archived')).status).toBe(403);
+  }
+  expect((await request('accountant', `/api/invoices/${target.id}`)).status).toBe(404);
+  expect((await request('accountant', `/api/invoices/${target.id}/archive`, 'POST', { archived: true })).status).toBe(403);
+  expect((await request('accountant', '/api/invoices?archive=archived')).status).toBe(403);
+  const hiddenBefore = (await request('accountant', `/api/invoices/${hiddenAgency.id}`)).body;
+  expect((await request('admin', `/api/invoices/${hiddenAgency.id}/archive`, 'POST', { archived: true })).status).toBe(200);
+  expect((await request('accountant', `/api/invoices/${hiddenAgency.id}`)).body).toEqual(hiddenBefore);
+  expect((await request('assistant', `/api/invoices/${hiddenAgency.id}`)).status).toBe(404);
+  await request('admin', `/api/invoices/${hiddenAgency.id}/archive`, 'POST', { archived: false });
+  expect((await request('admin', `/api/invoices/${target.id}/archive`, 'POST', { archived: true, clientBill: '1' })).status).toBe(400);
+  expect((await request('admin', `/api/invoices/${target.id}`, 'DELETE')).status).toBe(409);
+  expect((await request('admin', '/api/do-not-spend')).body).toEqual(reportBefore);
+  expect(await db.select().from(s.invoiceCalculations)).toEqual(calculations);
+  expect(await db.select().from(s.invoiceTransfers)).toEqual(transfers);
+  expect(await db.select().from(s.serviceUsage)).toEqual(usage);
+  expect(await db.select().from(s.partnerPayments)).toEqual(payments);
+  const after = (await request('admin', `/api/invoices/${target.id}`)).body;
+  expect({ ...after, archivedAt: null }).toEqual(before);
+  const audit = await db.select().from(s.assistantActionLogs).where(eq(s.assistantActionLogs.entityId, target.id));
+  expect(audit.filter(row => JSON.parse(row.details!).operation === 'archive')).toHaveLength(1);
+  expect((await request('admin', `/api/invoices/${target.id}/archive`, 'POST', { archived: false })).status).toBe(200);
+  expect((await request('admin', '/api/invoices?archive=active&search=ARCHIVE-TARGET')).body.total).toBe(1);
+  expect((await request('admin', `/api/invoices/${target.id}`)).body).toEqual(before);
 });
 
 it('preserves many-to-one balance consolidation, original bills/commissions, and independent transfer cancellation', async () => {

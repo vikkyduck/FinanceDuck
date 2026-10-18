@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createTestDb, seedPartnerAndClient, type TestDb } from './test/testDb';
-import { BackupService } from './backupService';
+import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { BackupService, validateBackup } from './backupService';
 import { validateArchive } from './services/backupArchive';
 import { JobRunner } from './services/jobRunner';
 import * as s from '../shared/schema';
@@ -50,4 +52,40 @@ it('queues a durable manual backup, completes in the worker, and exposes truthfu
   await service.queueManualBackup(); expect((await service.manualBackupStatus()).pending).toBe(true);
   await new JobRunner(database()).run({ key:'manual-backup', run:()=>service.createBackup(), nextRunAt:()=>new Date('9999-01-01') });
   expect(await service.manualBackupStatus()).toMatchObject({ state:'idle', pending:false, filename:expect.stringMatching(/\.fdb$/) });
+});
+
+it('restores schema 5 archives and legacy JSON, while schema 6 preserves archive dates and rejects missing fields', async () => {
+  delete process.env.ACCESS_CODE_SECRET;
+  const [partner] = await db.select().from(s.partners);
+  const [client] = await db.select().from(s.clients);
+  const [invoice] = await db.insert(s.invoices).values({ invoiceNumber: 'ARCHIVE-COMPAT', scheme: 'agency_30',
+    partnerId: partner.id, clientId: client.id, createdBy: randomUUID(), clientBill: '1234.56',
+    archivedAt: new Date('2026-10-18T12:00:00Z') }).returning();
+  const info = await service.createBackup();
+  const file = path.join(directory, info.id);
+  const bytes = await readFile(file), offset = bytes.indexOf(10) + 1;
+  const header = JSON.parse(bytes.subarray(0, offset).toString());
+  expect(header.schema).toBe(6);
+  await db.update(s.invoices).set({ archivedAt: null }).where(eq(s.invoices.id, invoice.id));
+  expect((await service.restoreBackup(info.id)).success).toBe(true);
+  expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual(invoice);
+
+  const json = (await service.downloadBackup(info.id))!;
+  delete json.data.invoices[0].archivedAt;
+  expect(validateBackup(json).data.invoices[0].archivedAt).toBe(null);
+  const payload = gunzipSync(bytes.subarray(offset)).toString().trimEnd().split('\n').map(line => {
+    const item = JSON.parse(line);
+    if (item.kind === 'row' && item.table === 'invoices') delete item.row.archivedAt;
+    return JSON.stringify(item);
+  }).join('\n') + '\n';
+  const legacyFile = 'backup-manual-schema5.fdb';
+  await writeFile(path.join(directory, legacyFile), Buffer.concat([
+    Buffer.from(JSON.stringify({ ...header, schema: 5 }) + '\n'), gzipSync(payload),
+  ]));
+  await expect(validateArchive(path.join(directory, legacyFile))).resolves.toBeUndefined();
+  expect((await service.restoreBackup(legacyFile)).success).toBe(true);
+  expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual({ ...invoice, archivedAt: null });
+  const malformed = path.join(directory, 'backup-manual-schema6-missing-field.fdb');
+  await writeFile(malformed, Buffer.concat([bytes.subarray(0, offset), gzipSync(payload)]));
+  await expect(validateArchive(malformed)).rejects.toThrow();
 });

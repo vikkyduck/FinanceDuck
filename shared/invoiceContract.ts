@@ -11,6 +11,7 @@ export const invoiceDtoSchema = z.object({
   clientTitle: z.string().nullable().optional(), notes: z.string().nullable().optional(), description: z.string().nullable().optional(),
   paymentDate: z.string().nullable().optional(), issueDate: z.string().nullable().optional(), actualPaymentDate: z.string().nullable().optional(),
   closingDocumentUrl: z.string().nullable().optional(), hideFromAssistant: z.boolean().optional(),
+  archivedAt: z.string().datetime().nullable().optional(),
   serviceType: z.enum(['one_time', 'periodic']).optional(), periodUnit: z.enum(['month', 'day', 'hour']).optional(),
   totalPeriods: z.number().int().nullable().optional(), periodsUsed: z.number().int().nonnegative().optional(),
   partnerCommissionRate: money.optional(), commissionAmount: money.optional(),

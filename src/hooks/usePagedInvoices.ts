@@ -17,8 +17,10 @@ const emptyCounts = { all: 0, draft: 0, sent: 0, paid: 0, cancelled: 0, overdue:
 
 export function usePagedInvoices(role: UserRole, initialStatus: InvoiceStatus | undefined, realtime: boolean) {
   const filters = useInvoiceFilters([], initialStatus, role === 'client' ? { prefix: 'clientInvoices', fields: ['searchQuery', 'statusFilter', 'sortBy'] } : undefined);
+  const [archive, setArchive] = useState<'active' | 'archived' | 'all'>('active');
   const [page, setPage] = useState(1);
   const params = new URLSearchParams({ limit: '100', sort: filters.sortBy });
+  if (role === 'admin') params.set('archive', archive);
   if (filters.searchQuery) params.set('search', filters.searchQuery);
   if (filters.statusFilter !== 'all') params.set('status', filters.statusFilter);
   if (filters.clientFilter !== 'all') params.set('clientId', filters.clientFilter);
@@ -30,7 +32,12 @@ export function usePagedInvoices(role: UserRole, initialStatus: InvoiceStatus | 
   const query = useQuery({ queryKey: ['/api/invoices', 'paged', role, filterKey, page],
     placeholderData: keepPreviousData, queryFn: async () => invoicePageSchema.parse(await apiGet<unknown>(`/invoices?${params}`)) as InvoicePage, staleTime: 30000, refetchInterval: realtime ? 120000 : false,
   });
-  return { ...filters, invoices: query.data?.invoices.map(invoiceListView) ?? [],
+  useEffect(() => {
+    if (!query.isPlaceholderData && query.data && page > Math.max(1, query.data.pages)) {
+      setPage(Math.max(1, query.data.pages));
+    }
+  }, [page, query.data, query.isPlaceholderData]);
+  return { ...filters, archive, setArchive, invoices: query.data?.invoices.map(invoiceListView) ?? [],
     loading: query.isLoading, error: query.error, page, setPage, total: query.data?.total ?? 0, pages: query.data?.pages ?? 0,
     clients: query.data?.clients ?? [], partners: query.data?.partners ?? [], statusCounts: query.data?.statusCounts ?? emptyCounts,
   };

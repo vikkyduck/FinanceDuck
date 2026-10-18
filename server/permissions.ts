@@ -53,7 +53,7 @@ export const ROLE_INVOICE_PERMISSIONS: Record<UserRole, readonly string[]> = {
     'clientTitle',
     'clientBill', 'scheme', 'createdAt', 'updatedAt', 'createdBy',
     'paymentDate', 'actualPaymentDate', 'issueDate', 'notes', 'hideFromAssistant',
-    'plannedExpenses', 'closingDocumentUrl',
+    'plannedExpenses', 'closingDocumentUrl', 'archivedAt',
     ...PERIODIC_FIELDS,
   ],
   partner: [

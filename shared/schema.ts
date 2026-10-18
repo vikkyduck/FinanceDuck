@@ -109,6 +109,8 @@ export const invoices = pgTable("invoices", {
   actualPaymentDate: date("actual_payment_date"),
   notes: text("notes"),
   hideFromAssistant: boolean("hide_from_assistant").default(false).notNull(),
+  // Administrative work-list marker only; never changes financial status or role access.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   recurringInvoiceId: uuid("recurring_invoice_id"),
   // Immutable generation identity; legacy duplicate invoices retain a null key.
   recurringOccurrenceKey: text("recurring_occurrence_key"),

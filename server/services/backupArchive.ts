@@ -13,6 +13,10 @@ const MAX_LINE = 20 * 1024 * 1024;
 const validators = Object.fromEntries(Object.entries(backupTables).map(([key, table]) => [key, createSelectSchema(table).strict()]));
 const tableKeys = Object.keys(backupTables) as TableKey[];
 type Meta = { createdAt: string; type: 'manual' | 'auto' };
+/** Schema 5 / legacy JSON did not have the administrative archive marker. */
+export function upgradeLegacyRow(key: TableKey, row: Record<string, unknown>) {
+  return key === 'invoices' && !Object.hasOwn(row, 'archivedAt') ? { ...row, archivedAt: null } : row;
+}
 export type ArchiveItem = { kind: 'table'; table: TableKey } | { kind: 'end'; table: TableKey; count: number }
   | { kind: 'row'; table: TableKey; row: Record<string, unknown>; object?: string };
 
@@ -41,7 +45,7 @@ function archiveKey() {
 /** A repeatable-read cursor snapshot with bounded batches and stream backpressure. */
 export async function writeArchive(database: typeof db, objects: ObjectStore, target: string, meta: Meta) {
   const key = archiveKey(), iv = randomBytes(12);
-  const header = Buffer.from(JSON.stringify({ format: 'fdb1', schema: 5, ...meta, encrypted: !!key, iv: iv.toString('base64') }) + '\n');
+  const header = Buffer.from(JSON.stringify({ format: 'fdb1', schema: 6, ...meta, encrypted: !!key, iv: iv.toString('base64') }) + '\n');
   const cipher = key ? createCipheriv('aes-256-gcm', key, iv) : undefined;
   cipher?.setAAD(header);
   const temporary = target + '.tmp';
@@ -96,7 +100,7 @@ export async function* readArchive(file: string): AsyncGenerator<ArchiveItem> {
     if (newline < 0) throw new Error('Invalid archive header');
     const header = probe.subarray(0, newline + 1);
     const meta = JSON.parse(header.toString());
-    if (meta.format !== 'fdb1' || meta.schema !== 5 || typeof meta.encrypted !== 'boolean') throw new Error('Unsupported archive');
+    if (meta.format !== 'fdb1' || ![5, 6].includes(meta.schema) || typeof meta.encrypted !== 'boolean') throw new Error('Unsupported archive');
     const key = meta.encrypted ? archiveKey() : null;
     if (meta.encrypted && !key) throw new Error('Missing archive encryption key');
     const input = createReadStream(file, { fd: handle.fd, autoClose: false, start: header.length, end: size - 1 - (meta.encrypted ? 16 : 0) });
@@ -115,7 +119,9 @@ export async function* readArchive(file: string): AsyncGenerator<ArchiveItem> {
       while ((end = pending.indexOf(10)) >= 0) {
         if (end > MAX_LINE) throw new Error('Archive record too large');
         const line = pending.subarray(0, end); pending = pending.subarray(end + 1);
-        yield JSON.parse(line.toString()) as ArchiveItem;
+        const item = JSON.parse(line.toString()) as ArchiveItem;
+        if (meta.schema === 5 && item.kind === 'row') item.row = upgradeLegacyRow(item.table, item.row);
+        yield item;
       }
       if (pending.length > MAX_LINE) throw new Error('Archive record too large');
     }

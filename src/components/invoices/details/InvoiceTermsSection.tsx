@@ -1,3 +1,4 @@
+import { InvoiceArchiveAction } from './InvoiceArchiveAction';
 import { InvoicePeriodicTerms } from "./InvoicePeriodicTerms";
 import { InvoiceCommissionTerms } from "./InvoiceCommissionTerms";
 import { InvoicePaymentMetadata } from "./InvoicePaymentMetadata";
@@ -124,6 +125,7 @@ export function InvoiceTermsSection({ model }: { model: Props }) {
         <CardTitle className="text-lg">Информация о счете</CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {userRole === 'admin' && invoice && <InvoiceArchiveAction invoiceId={invoice.id} archived={Boolean(invoice.archived_at)} />}
         <div>
           <p className="text-sm text-muted-foreground">Клиент</p>
           <div className="flex items-center gap-2">

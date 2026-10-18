@@ -3,10 +3,11 @@ import { invoiceNotice } from './invoiceNotice';
 import { CommandError } from "../lib/commandError";
 export { CommandError } from "../lib/commandError";
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import * as repo from '../repositories/invoiceRepo';
-import { assistantActionLogs, commandReceipts, notificationOutbox, invoiceTransfers } from '../../shared/schema';
+import { assistantActionLogs, commandReceipts, notificationOutbox, invoiceTransfers, invoices } from '../../shared/schema';
 import type { AssistantActionType } from '../../shared/schema';
 import type { InvoiceActor } from '../invoiceAccess';
 import { constrainInvoiceWrite } from '../invoiceAccess';
@@ -89,6 +90,18 @@ export class InvoiceCommands {
       const full = (await repo.getInvoice(tx, id))!;
       return { result: invoice, entityId: id, description: `Обновлён счёт: ${invoice.invoiceNumber}`,
         notification: before.status !== 'paid' && invoice.status === 'paid' ? invoiceNotice(full, 'Оплата получена') : undefined };
+    });
+  }
+
+  setArchived(actor: CommandActor, invoiceId: string, body: unknown) {
+    if (actor.role !== 'admin') throw new CommandError('Forbidden', 403);
+    const id = parseCommand(z.string().uuid(), invoiceId);
+    const { archived } = parseCommand(z.object({ archived: z.boolean() }).strict(), body);
+    return this.run(actor, [id], 'update_invoice', { id, operation: 'archive', archived }, async tx => {
+      const before = (await repo.getInvoice(tx, id))!;
+      const [result] = await tx.update(invoices).set({ archivedAt: archived ? before.archivedAt ?? new Date() : null })
+        .where(eq(invoices.id, id)).returning({ id: invoices.id, archivedAt: invoices.archivedAt });
+      return { result, entityId: id, description: `${archived ? 'В архив' : 'Из архива'}: счёт ${before.invoiceNumber}` };
     });
   }
 

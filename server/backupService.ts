@@ -9,7 +9,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { backupTables, type TableKey, type Rows } from './services/backupTables';
 export { backupTables } from './services/backupTables';
-import { writeArchive, readArchive, validateArchive, validateRow, restoreRow } from './services/backupArchive';
+import { writeArchive, readArchive, validateArchive, validateRow, restoreRow, upgradeLegacyRow } from './services/backupArchive';
 const BACKUP_DIR = process.env.BACKUP_DIR || "/var/finance-duck/backups";
 // 30 ночных копий (~месяц). Было 7: «тихая» порча данных, не замеченная за
 // неделю, переживала все чистые копии. Объём свободного диска контролирует оператор.
@@ -48,7 +48,7 @@ export function validateBackup(backup: unknown): BackupData {
       const revived = { ...row };
       if (legacy && key === "signedActs" && !("objectKey" in revived)) revived.objectKey = null;
       if (legacy && key === "invoices" && !("recurringOccurrenceKey" in revived)) revived.recurringOccurrenceKey = null;
-      return validateRow(key as TableKey, revived);
+      return validateRow(key as TableKey, upgradeLegacyRow(key as TableKey, revived));
     });
   }
   // Old complete snapshots predate immutable occurrence keys. Preserve duplicate financial

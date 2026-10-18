@@ -23,7 +23,7 @@ export async function apiRequest<T>(
   // Invoice and partner-payment commands have transactional receipts. Other mutations must not
   // be automatically repeated after an ambiguous network failure.
   const retrySafe = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)
-    && /^\/api\/(?:invoices(?:\/transfer|\/[^/]+(?:\/(?:expenses|periods))?)?|expenses\/[^/]+|transfers\/[^/]+|partner-payments(?:\/[^/]+)?)$/.test(url)
+    && /^\/api\/(?:invoices(?:\/transfer|\/[^/]+(?:\/(?:expenses|periods|archive))?)?|expenses\/[^/]+|transfers\/[^/]+|partner-payments(?:\/[^/]+)?)$/.test(url)
     && (options.body === undefined || typeof options.body === 'string');
   if (pendingSession !== csrfToken) { uncertainCommands.clear(); pendingSession = csrfToken; }
   const signature = retrySafe ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',

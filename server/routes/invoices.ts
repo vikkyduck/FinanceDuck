@@ -26,6 +26,7 @@ invoicesRouter.get("/api/invoices", authMiddleware, async (req: AuthenticatedReq
     if (role === "admin" && req.query.partnerId) partnerId = req.query.partnerId as string;
     const parsed = invoiceQueryInput.safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid invoice filters' });
+    if (role !== 'admin' && parsed.data.archive) return res.status(403).json({ error: 'Archive is an administrative view' });
     const result = await storage.getInvoices(role, partnerId, clientId, parsed.data);
     const projected = stripSensitiveFieldsFromList(result, role);
     const metadata = await getInvoiceListMetadata(db, req.user!, parsed.data);
@@ -114,6 +115,15 @@ invoicesRouter.patch("/api/invoices/:id", authMiddleware, requireRole("admin", "
     if ((error instanceof CommandError || error instanceof MoneyRangeError)) return res.status(error.status).json({ error: error.message });
     console.error("Update invoice error:", error);
     res.status(500).json({ error: "Failed to update invoice" });
+  }
+});
+
+invoicesRouter.post('/api/invoices/:id/archive', authMiddleware, requireRole('admin'), async (req: AuthenticatedRequest, res: Response) => {
+  try { res.json(await invoiceCommands.setArchived(commandActor(req), req.params.id, req.body)); }
+  catch (error) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    console.error('Archive invoice error:', error);
+    res.status(500).json({ error: 'Не удалось изменить архив счёта' });
   }
 });
 

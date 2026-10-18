@@ -1,14 +1,14 @@
 /** Isolated PostgreSQL benchmark. Never uses DATABASE_URL; deletes only its generated fixture database. */
-import { Pool } from 'pg';
+import { getTableName } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { randomUUID, randomBytes } from 'node:crypto';
-import { mkdtemp, rm, writeFile, stat } from 'node:fs/promises';
-import { tmpdir, cpus, totalmem, platform, arch } from 'node:os';
-import path from 'node:path';
-import { once } from 'node:events';
 import express from 'express';
-import { getTableName } from 'drizzle-orm';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { arch, cpus, platform, tmpdir, totalmem } from 'node:os';
+import path from 'node:path';
+import { Pool } from 'pg';
 import * as schema from '../shared/schema';
 
 const url = new URL(process.env.TEST_POSTGRES_URL ?? 'postgres://postgres@127.0.0.1:55439/postgres');
@@ -23,7 +23,15 @@ try {
   url.pathname = '/' + name; process.env.DATABASE_URL = url.toString(); process.env.ACCESS_CODE_SECRET = 'isolated-benchmark-secret-not-production';
   pool = new Pool({ connectionString: url.toString(), max: 10, options: '-c statement_timeout=60000' });
   results.postgres = (await pool.query('SELECT version()')).rows[0].version;
-  const db = drizzle(pool, { schema });
+  const capturedQueries = new Map<string, { query: string; params: unknown[] }>();
+  let captureQueries = false;
+  const db = drizzle(pool, {
+    schema, logger: {
+      logQuery(query, params) {
+        if (captureQueries && /^select\b/i.test(query) && capturedQueries.size < 30 && !capturedQueries.has(query)) capturedQueries.set(query, { query, params });
+      }
+    }
+  });
   await migrate(db, { migrationsFolder: 'drizzle' });
   const { BackupService, backupTables } = await import('../server/backupService');
   const { FileObjectStore } = await import('../server/services/objectStore');
@@ -44,8 +52,8 @@ try {
   await pool.query(`INSERT INTO clients(id, name) SELECT fixture_uuid('client-'||n), 'Fixture client '||n FROM generate_series(1,200) n`);
   const app = express(); app.use(express.json());
   const partnerId = (await pool.query('SELECT id FROM partners LIMIT 1')).rows[0].id;
-  const auth: import('../server/middleware').AuthMiddleware = (req, _res, next) => {
-    req.user = { role: req.path.endsWith('/partner-summary') ? 'partner' : 'admin', partnerId, token: { id: actorId } } as typeof req.user; next();
+  const auth: import('../server/middleware').AuthMiddleware = async (req, _res, next) => {
+    req.user = { role: req.path.endsWith('/partner-summary') ? 'partner' : 'admin', partnerId, token: { id: actorId } } as typeof req.user; next(); return undefined;
   };
   app.use(createInvoicesRouter(new DatabaseStorage(db), auth, db, new InvoiceCommands(db)), createAssistantRouter(auth, db), createDocumentStatusRouter(auth, db));
   app.get('/bench/monthly', async (_req, res) => { res.json(await getAdminMonthlyData(db, 2026)); });
@@ -59,87 +67,123 @@ try {
     if (!Number.isSafeInteger(count) || count < previous || count > 1000000) throw new Error('Invalid benchmark count');
     await pool.query(`INSERT INTO invoices(id,invoice_number,client_id,partner_id,scheme,status,client_bill,created_by,created_at,actual_payment_date)
       SELECT fixture_uuid('invoice-'||n),'BENCH-'||n,fixture_uuid('client-'||(1+n%200)),fixture_uuid('partner-'||(1+n%20)),'agency_30','paid',1000,$3,
-      '2026-01-01'::timestamptz + (n%300)*interval '1 day','2026-01-01'::date+(n%300) FROM generate_series($1::int,$2::int) n`, [previous+1,count,actorId]);
+      '2026-01-01'::timestamptz + (n%300)*interval '1 day','2026-01-01'::date+(n%300) FROM generate_series($1::int,$2::int) n`, [previous + 1, count, actorId]);
     await pool.query(`INSERT INTO invoice_calculations(invoice_id,client_bill,executor_expenses_total,net_profit_admin,client_remaining)
-      SELECT fixture_uuid('invoice-'||n),1000,30,150,670 FROM generate_series($1::int,$2::int) n`, [previous+1,count]);
+      SELECT fixture_uuid('invoice-'||n),1000,30,150,670 FROM generate_series($1::int,$2::int) n`, [previous + 1, count]);
     await pool.query(`INSERT INTO invoice_expenses(invoice_id,description,amount,created_by,date)
-      SELECT fixture_uuid('invoice-'||n),'Fixture expense '||k,10,$3,'2026-01-01' FROM generate_series($1::int,$2::int) n CROSS JOIN generate_series(1,3) k`, [previous+1,count,actorId]);
+      SELECT fixture_uuid('invoice-'||n),'Fixture expense '||k,10,$3,'2026-01-01' FROM generate_series($1::int,$2::int) n CROSS JOIN generate_series(1,3) k`, [previous + 1, count, actorId]);
     previous = count; await pool.query('ANALYZE');
-    for (const concurrency of (process.env.BENCH_BACKUP_ONLY === '1' ? [] : (process.env.BENCH_CONCURRENCY ?? '1,5,20,40').split(',').map(Number))) {
+    const durationSeconds = Number(process.env.BENCH_DURATION_SECONDS ?? 10);
+    const soakSeconds = Number(process.env.BENCH_SOAK_SECONDS ?? 0);
+    if (!Number.isFinite(durationSeconds) || durationSeconds < 1 || durationSeconds > 1800 || !Number.isFinite(soakSeconds) || soakSeconds < 0 || soakSeconds > 3600) throw new Error('Invalid benchmark duration');
+    const phases = (process.env.BENCH_CONCURRENCY ?? '1,5,20,40').split(',').map(Number).map(concurrency => ({ concurrency, seconds: durationSeconds, phase: 'capacity' }));
+    if (soakSeconds) phases.push({ concurrency: Number(process.env.BENCH_SOAK_CONCURRENCY ?? 2), seconds: soakSeconds, phase: 'soak' });
+    for (const { concurrency, seconds, phase } of (process.env.BENCH_BACKUP_ONLY === '1' ? [] : phases)) {
+      if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 40) throw new Error('Invalid concurrency');
+      captureQueries = true;
+      const samples: { elapsedSeconds: number; rssMiB: number; heapMiB: number; poolWaiting: number; requests: number; errors: number }[] = [];
+      let healthFailures = 0;
+      const healthUrl = process.env.BENCH_HEALTH_URL;
+      const measure = async () => {
+        const memory = process.memoryUsage();
+        const sample = { elapsedSeconds: Math.round((performance.now() - start) / 1000), rssMiB: Math.round(memory.rss / 1048576), heapMiB: Math.round(memory.heapUsed / 1048576), poolWaiting: pool!.waitingCount, requests: times.length, errors };
+        samples.push(sample); console.log(JSON.stringify({ phase, sample }));
+        if (healthUrl) {
+          try { const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1500) }); if (!response.ok) healthFailures++; else healthFailures = 0; await response.arrayBuffer(); }
+          catch { healthFailures++; }
+        }
+      };
       const byRoute = new Map<string, number[]>();
       const times: number[] = []; let errors = 0, next = 0;
       // Warm the query plans and buffers outside the measurement.
-      for (let i=0;i<5;i++) await fetch(origin+'/api/invoices?page=1&limit=100').then(r=>r.arrayBuffer());
+      for (let i = 0; i < 5; i++) await fetch(origin + '/api/invoices?page=1&limit=100').then(r => r.arrayBuffer());
       const start = performance.now();
-      await Promise.all(Array.from({ length: concurrency }, async () => {
-        for (;;) {
-          const i = next++; if (i >= 100 && performance.now() - start >= 10000) return;
-          const routes = ['/api/invoices', '/api/invoices/client-balances?limit=25', '/api/invoices/partner-summary?year=2026',
-            '/api/assistant/invoice-summary?year=2026', '/api/assistant/invoice-groups?year=2026&limit=25', '/api/clients/acts-status?limit=25', '/api/closing-docs-status?limit=25',
-            '/api/invoices?page=1&limit=100&search=BENCH-99', `/api/invoices?page=${1+i%10}&limit=100`, '/bench/monthly'];
-          const route = routes[i % routes.length];
-          const t = performance.now();
-          try { const response = await fetch(origin+route, { signal: AbortSignal.timeout(60000) }); if (!response.ok) errors++; const body = await response.json(); if (Array.isArray(body.invoices) && body.invoices.length > 100) errors++; } catch { errors++; }
-          const elapsed = performance.now() - t; times.push(elapsed);
-          const samples = byRoute.get(route) ?? []; samples.push(elapsed); byRoute.set(route, samples);
-        }
-      }));
-      times.sort((a,b)=>a-b);
-      const row = { invoices: count, expenses: count*3, concurrency, requests: times.length, errors,
-        p50: Math.round(times[Math.ceil(times.length*.5)-1]), p95: Math.round(times[Math.ceil(times.length*.95)-1]), p99: Math.round(times[Math.ceil(times.length*.99)-1]),
-        requestsPerSecond: +(times.length/((performance.now()-start)/1000)).toFixed(1), rssMiB: Math.round(process.memoryUsage().rss/1048576) };
-      const endpoints = Object.fromEntries([...byRoute].map(([route, samples]) => { samples.sort((a,b) => a-b); return [route, { requests: samples.length, p95: Math.round(samples[Math.ceil(samples.length * .95)-1]) }]; }));
-      runs.push({ ...row, endpoints }); console.log(JSON.stringify(row));
+      const sampler = setInterval(() => { void measure(); }, 30000);
+      try {
+        await Promise.all(Array.from({ length: concurrency }, async () => {
+          for (; ;) {
+            const i = next++; if (healthFailures >= 2) throw new Error('Public health check degraded; stopping isolated load');
+            if (i >= 100 && performance.now() - start >= seconds * 1000) return;
+            const routes = ['/api/invoices', '/api/invoices/client-balances?limit=25', '/api/invoices/partner-summary?year=2026',
+              '/api/assistant/invoice-summary?year=2026', '/api/assistant/invoice-groups?year=2026&limit=25', '/api/clients/acts-status?limit=25', '/api/closing-docs-status?limit=25',
+              '/api/invoices?page=1&limit=100&search=BENCH-99', `/api/invoices?page=${1 + i % 10}&limit=100`, '/bench/monthly'];
+            const route = routes[i % routes.length];
+            const t = performance.now();
+            try { const response = await fetch(origin + route, { signal: AbortSignal.timeout(60000) }); if (!response.ok) errors++; const body = await response.json(); if (Array.isArray(body.invoices) && body.invoices.length > 100) errors++; } catch { errors++; }
+            const elapsed = performance.now() - t; times.push(elapsed);
+            const samples = byRoute.get(route) ?? []; samples.push(elapsed); byRoute.set(route, samples);
+          }
+        }));
+      } finally { clearInterval(sampler); captureQueries = false; }
+      await measure();
+      times.sort((a, b) => a - b);
+      const row = {
+        phase, durationSeconds: Math.round((performance.now() - start) / 1000), invoices: count, expenses: count * 3, concurrency, requests: times.length, errors,
+        p50: Math.round(times[Math.ceil(times.length * .5) - 1]), p95: Math.round(times[Math.ceil(times.length * .95) - 1]), p99: Math.round(times[Math.ceil(times.length * .99) - 1]),
+        requestsPerSecond: +(times.length / ((performance.now() - start) / 1000)).toFixed(1), rssMiB: Math.round(process.memoryUsage().rss / 1048576)
+      };
+      const endpoints = Object.fromEntries([...byRoute].map(([route, samples]) => { samples.sort((a, b) => a - b); return [route, { requests: samples.length, p95: Math.round(samples[Math.ceil(samples.length * .95) - 1]) }]; }));
+      runs.push({ ...row, endpoints, samples }); console.log(JSON.stringify(row));
     }
+  }
+  if (process.env.BENCH_EXPLAIN === '1') {
+    const plans = [];
+    for (const { query, params } of capturedQueries.values()) {
+      const result = await pool.query('EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' + query, params);
+      plans.push({ query, parameters: params, plan: result.rows[0]['QUERY PLAN'] });
+    }
+    results.queryPlans = plans;
   }
   if (process.env.BENCH_HTTP_ONLY !== '1') {
-  console.log('HTTP benchmark complete; preparing document fixtures');
-  const docs = Number(process.env.BENCH_DOCUMENTS ?? 100);
-  const invoiceId = (await pool.query(`SELECT id FROM invoices LIMIT 1`)).rows[0].id;
-  for(let n=0;n<docs;n++) {
-    const objectKey = await objects.put(randomBytes(1024*1024));
-    await db.insert(schema.signedActs).values({ invoiceId, objectKey, fileName: `fixture-${n}.bin`, actType: 'company', uploadedBy: actorId });
-  }
-  const fingerprints = async () => {
-    const out: Record<string, unknown> = {};
-    for (const table of Object.values(backupTables)) {
-      const tableName = getTableName(table);
-      out[tableName] = (await pool!.query(`SELECT count(*)::int AS count, sum(('x'||substr(md5(to_jsonb(t)::text),1,16))::bit(64)::bigint::numeric)::text AS digest FROM "${tableName}" t`)).rows[0];
+    console.log('HTTP benchmark complete; preparing document fixtures');
+    const docs = Number(process.env.BENCH_DOCUMENTS ?? 100);
+    const invoiceId = (await pool.query(`SELECT id FROM invoices LIMIT 1`)).rows[0].id;
+    for (let n = 0; n < docs; n++) {
+      const objectKey = await objects.put(randomBytes(1024 * 1024));
+      await db.insert(schema.signedActs).values({ invoiceId, objectKey, fileName: `fixture-${n}.bin`, actType: 'company', uploadedBy: actorId });
     }
-    return out;
-  };
-  const before = await fingerprints();
-  let peakRss = process.memoryUsage().rss, peakHeap = process.memoryUsage().heapUsed;
-  const sampler = setInterval(() => { const m=process.memoryUsage();peakRss=Math.max(peakRss,m.rss);peakHeap=Math.max(peakHeap,m.heapUsed); },20);
-  try {
-    console.log('Starting streaming archive round trip');
-    const start = performance.now(); const info = await backup.createBackup(); const createMs = Math.round(performance.now()-start);
-    // Simulate complete object-volume loss while SQL document references survive.
-    await rm(path.join(directory, 'objects'), { recursive: true });
-    console.log(`Archive created in ${createMs} ms; starting authenticated restore`);
-    const restoreStart = performance.now(); const restored = await backup.restoreBackup(info.id);
-    if (!restored.success) throw new Error(restored.message);
-    if (JSON.stringify(before)!==JSON.stringify(await fingerprints())) throw new Error('Restored data fingerprints differ');
-    const { verifyRestoredArchive } = await import('../server/services/restoreVerification');
-    const restoreMs = Math.round(performance.now() - restoreStart);
-    const verificationStart = performance.now();
-    await verifyRestoredArchive(db, objects, path.join(directory, 'backups', info.id), directory);
-    const verificationMs = Math.round(performance.now() - verificationStart);
-    let verifiedObjects = 0;
-    for(const row of (await pool.query('SELECT object_key FROM signed_acts')).rows) { await objects.get(row.object_key); verifiedObjects++; }
-    results.backup = { invoices: previous, expenses: previous*3, documentMiB: docs, archiveBytes: (await stat(path.join(directory,'backups',info.id))).size,
-      createMs, verificationMs, restoreMs, peakRssMiB:Math.round(peakRss/1048576), peakHeapMiB:Math.round(peakHeap/1048576), verifiedObjects, recoveredEmptyObjectVolume: true, allTableFingerprintsMatch: true };
-    console.log(JSON.stringify(results.backup));
-  } finally { clearInterval(sampler); }
+    const fingerprints = async () => {
+      const out: Record<string, unknown> = {};
+      for (const table of Object.values(backupTables)) {
+        const tableName = getTableName(table);
+        out[tableName] = (await pool!.query(`SELECT count(*)::int AS count, sum(('x'||substr(md5(to_jsonb(t)::text),1,16))::bit(64)::bigint::numeric)::text AS digest FROM "${tableName}" t`)).rows[0];
+      }
+      return out;
+    };
+    const before = await fingerprints();
+    let peakRss = process.memoryUsage().rss, peakHeap = process.memoryUsage().heapUsed;
+    const sampler = setInterval(() => { const m = process.memoryUsage(); peakRss = Math.max(peakRss, m.rss); peakHeap = Math.max(peakHeap, m.heapUsed); }, 20);
+    try {
+      console.log('Starting streaming archive round trip');
+      const start = performance.now(); const info = await backup.createBackup(); const createMs = Math.round(performance.now() - start);
+      // Simulate complete object-volume loss while SQL document references survive.
+      await rm(path.join(directory, 'objects'), { recursive: true });
+      console.log(`Archive created in ${createMs} ms; starting authenticated restore`);
+      const restoreStart = performance.now(); const restored = await backup.restoreBackup(info.id);
+      if (!restored.success) throw new Error(restored.message);
+      if (JSON.stringify(before) !== JSON.stringify(await fingerprints())) throw new Error('Restored data fingerprints differ');
+      const { verifyRestoredArchive } = await import('../server/services/restoreVerification');
+      const restoreMs = Math.round(performance.now() - restoreStart);
+      const verificationStart = performance.now();
+      await verifyRestoredArchive(db, objects, path.join(directory, 'backups', info.id), directory);
+      const verificationMs = Math.round(performance.now() - verificationStart);
+      let verifiedObjects = 0;
+      for (const row of (await pool.query('SELECT object_key FROM signed_acts')).rows) { await objects.get(row.object_key); verifiedObjects++; }
+      results.backup = {
+        invoices: previous, expenses: previous * 3, documentMiB: docs, archiveBytes: (await stat(path.join(directory, 'backups', info.id))).size,
+        createMs, verificationMs, restoreMs, peakRssMiB: Math.round(peakRss / 1048576), peakHeapMiB: Math.round(peakHeap / 1048576), verifiedObjects, recoveredEmptyObjectVolume: true, allTableFingerprintsMatch: true
+      };
+      console.log(JSON.stringify(results.backup));
+    } finally { clearInterval(sampler); }
   }
   let exported = 0; const exportStart = performance.now();
   for await (const page of invoiceExportPages(db, { role: 'admin' }, {})) exported += page.length;
-  results.export = { invoices: exported, durationMs: Math.round(performance.now()-exportStart) };
+  results.export = { invoices: exported, durationMs: Math.round(performance.now() - exportStart) };
   results.databaseBytes = (await pool.query('SELECT pg_database_size(current_database())::text AS bytes')).rows[0].bytes;
-  await writeFile(process.env.BENCH_OUTPUT ?? '/tmp/finance-benchmark.json', JSON.stringify(results,null,2));
+  await writeFile(process.env.BENCH_OUTPUT ?? '/tmp/finance-benchmark.json', JSON.stringify(results, null, 2));
 } finally {
-  await new Promise<void>(resolve => server ? server.close(()=>resolve()) : resolve());
+  await new Promise<void>(resolve => server ? server.close(() => resolve()) : resolve());
   await pool?.end();
   await control.query(`DROP DATABASE IF EXISTS "${name}"`); await control.end();
-  await rm(directory,{recursive:true,force:true});
+  await rm(directory, { recursive: true, force: true });
 }

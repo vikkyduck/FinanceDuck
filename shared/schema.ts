@@ -254,7 +254,7 @@ export const scheduledJobs = pgTable("scheduled_jobs", {
 export const partnerPayments = pgTable("partner_payments", {
   id: uuid("id").defaultRandom().primaryKey(),
   partnerId: uuid("partner_id").references(() => partners.id).notNull(),
-  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'restrict' }),
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
   paymentDate: date("payment_date").notNull(),
   notes: text("notes"),

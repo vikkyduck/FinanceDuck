@@ -1,3 +1,6 @@
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { personalDataExport } from '../services/personalDataExport';
 import type { AuthMiddleware } from "../middleware";
 /**
  * «Безопасность и данные» для текущего пользователя.
@@ -16,7 +19,7 @@ import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
 import type { db as Database } from "../db";
 import { and, eq, ne, desc } from "drizzle-orm";
-import { accessTokens, userSessions, invoices, invoiceCalculations, invoiceExpenses, invoiceMessages, clients, partners } from "../../shared/schema";
+import { accessTokens, userSessions } from "../../shared/schema";
 import { AuthenticatedRequest, SESSION_COOKIE } from "../middleware";
 import type { MeStore } from "../routeStores";
 import { codeForDisplay } from "../lib/accessCode";
@@ -159,123 +162,18 @@ meRouter.post("/api/me/sessions/:id/revoke", authMiddleware, async (req: Authent
   }
 });
 
-// ─── GET /api/me/data-export ────────────────────────────────────────────
-// Полная выгрузка всех моих данных в JSON. Для клиента — счета, расчёты,
-// затраты (по agency 30/40), сообщения, peer-access. Для partner/staff
-// возвращается минимум (можно расширить отдельно).
+// Personal exports share the invoice projection and stream bounded, scoped queries.
 meRouter.get("/api/me/data-export", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const me = req.user!;
     const generatedAt = new Date().toISOString();
-    const payload: Record<string, unknown> = { generatedAt, role: me.role };
-
-    if (me.role === "client" && me.clientId) {
-      // Профиль клиента.
-      const [client] = await db.select().from(clients).where(eq(clients.id, me.clientId));
-      payload.client = client ? {
-        id: client.id, name: client.name, email: client.email, phone: client.phone, telegram: client.telegram,
-        createdAt: client.createdAt,
-      } : null;
-
-      // Счета + расчёты.
-      const invRows = await db.select({ inv: invoices, calc: invoiceCalculations })
-        .from(invoices)
-        .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-        .where(eq(invoices.clientId, me.clientId));
-      payload.invoices = invRows.map(r => ({
-        id: r.inv.id,
-        invoiceNumber: r.inv.invoiceNumber,
-        scheme: r.inv.scheme,
-        status: r.inv.status,
-        clientBill: r.inv.clientBill,
-        clientTitle: r.inv.clientTitle,
-        paymentDate: r.inv.paymentDate,
-        actualPaymentDate: r.inv.actualPaymentDate,
-        issueDate: r.inv.issueDate,
-        serviceType: r.inv.serviceType,
-        periodUnit: r.inv.periodUnit,
-        pricePerPeriod: r.inv.pricePerPeriod,
-        totalPeriods: r.inv.totalPeriods,
-        periodsUsed: r.inv.periodsUsed,
-        createdAt: r.inv.createdAt,
-        updatedAt: r.inv.updatedAt,
-        calculations: r.calc ? {
-          clientBill: r.calc.clientBill,
-          commissionRate: r.calc.commissionRate,
-          commissionAmount: r.calc.commissionAmount,
-          agencyMargin: r.calc.agencyMargin,
-          clientBaseAfterMargin: r.calc.clientBaseAfterMargin,
-          clientSpent: r.calc.clientSpent,
-          clientRemaining: r.calc.clientRemaining,
-          executorExpensesTotal: r.calc.executorExpensesTotal,
-        } : null,
-      }));
-
-      // Затраты по агентским счетам (та же проекция, что и в обзоре).
-      const agencyIds = invRows
-        .filter(r => r.inv.scheme === "agency_30" || r.inv.scheme === "agency_40" || r.inv.scheme === "agency")
-        .map(r => r.inv.id);
-      if (agencyIds.length > 0) {
-        const exp = await db.select().from(invoiceExpenses).where(
-          // inArray импортирован в storage; здесь используем простое OR через or-helper.
-          // Чтобы не тянуть зависимостей — фильтруем JS-ом, расходов обычно немного.
-          eq(invoiceExpenses.invoiceId, agencyIds[0])
-        );
-        // Простой path: грузим все и фильтруем — у клиентов обычно <500 расходов.
-        const all = await db.select().from(invoiceExpenses);
-        payload.expenses = all
-          .filter(e => agencyIds.includes(e.invoiceId))
-          .map(e => ({
-            id: e.id,
-            invoiceId: e.invoiceId,
-            description: e.description,
-            amount: e.amount,
-            date: e.date,
-          }));
-        void exp; // линт-успокоитель: первый запрос только проверяет схему
-      } else {
-        payload.expenses = [];
-      }
-
-      // Сообщения по моим счетам.
-      const allMsg = await db.select().from(invoiceMessages);
-      const myInvIds = new Set(invRows.map(r => r.inv.id));
-      payload.messages = allMsg
-        .filter(m => myInvIds.has(m.invoiceId))
-        .map(m => ({
-          id: m.id,
-          invoiceId: m.invoiceId,
-          expenseId: m.expenseId,
-          authorRole: m.authorRole,
-          body: m.body,
-          createdAt: m.createdAt,
-        }));
-    }
-
-    // Peer-доступ (общий блок для всех ролей).
-    const peers = me.role === "client" && me.clientId
-      ? await db.select().from(accessTokens).where(eq(accessTokens.clientId, me.clientId))
-      : me.role === "partner" && me.partnerId
-        ? await db.select().from(accessTokens).where(eq(accessTokens.partnerId, me.partnerId))
-        : [me.token];
-    payload.accessTokens = peers.map(p => ({
-      id: p.id,
-      role: p.role,
-      isActive: p.isActive,
-      createdAt: p.createdAt,
-      lastUsedAt: p.lastUsedAt,
-      expiresAt: p.expiresAt,
-    }));
-
-    // Имя файла с роли + датой для удобства архива.
-    const dateSuffix = generatedAt.split("T")[0];
-    const filename = `my-data-${me.role}-${dateSuffix}.json`;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.send(JSON.stringify(payload, null, 2));
+    res.setHeader("Content-Disposition", `attachment; filename="my-data-${req.user!.role}-${generatedAt.slice(0, 10)}.json"`);
+    res.setHeader('Cache-Control', 'no-store');
+    await pipeline(Readable.from(personalDataExport(db, { ...req.user!, tokenId: req.user!.token.id }, generatedAt)), res);
   } catch (error) {
+    if (res.destroyed) return;
     console.error("[me/data-export]", error);
-    res.status(500).json({ error: "Failed to export data" });
+    if (res.headersSent) res.destroy(); else res.status(500).json({ error: "Failed to export data" });
   }
 });
 

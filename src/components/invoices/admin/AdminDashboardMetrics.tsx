@@ -1,3 +1,4 @@
+import { financialKeys } from '@/lib/financialQueries';
 import { useState } from "react";
 import { formatMoney } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
@@ -298,7 +299,7 @@ export const AdminDashboardMetrics = () => {
   const refetchInterval = useVisibilityAwareInterval();
 
   const { data: stats, isLoading, isError } = useQuery<DashboardStats>({
-    queryKey: ["/api/admin/dashboard-stats", selectedYear, selectedMonth],
+    queryKey: financialKeys.adminStats(selectedYear, selectedMonth),
     queryFn: () => apiGet<DashboardStats>(`/admin/dashboard-stats?year=${selectedYear}&month=${selectedMonth}`),
     refetchInterval,
     staleTime: 10000,

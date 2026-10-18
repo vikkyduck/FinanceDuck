@@ -1,5 +1,7 @@
+import { useInvoiceExpenseActions } from './useInvoiceExpenseActions';
+import { useInvoicePeriodCommands } from './useInvoicePeriodCommands';
+import { invalidateFinancialQueries } from '@/lib/financialQueries';
 import { useInvoice } from "@/hooks/useInvoice";
-import type { ExpenseDto } from "@shared/contracts";
 import { parseNum } from "@shared/financialEngine";
 import { useState, useEffect } from "react";
 
@@ -11,7 +13,7 @@ import { format } from "date-fns";
 
 import { useToast } from "@/hooks/use-toast";
 import { getVisibleFields, UserRole } from "@/lib/invoicePermissions";
-import { apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { apiPatch } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function useInvoiceCommands({
@@ -31,28 +33,7 @@ export function useInvoiceCommands({
     invoiceId,
     open,
   );
-  const fetchInvoiceDetails = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] }),
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] }),
-      queryClient.invalidateQueries({ queryKey: ["/api/partner/stats"] }),
-      queryClient.invalidateQueries({
-        queryKey: ["/api/do-not-spend/partner-schemes"],
-      }),
-      queryClient.invalidateQueries({ queryKey: ["/api/do-not-spend/agency"] }),
-    ]);
-  const [addExpenseOpen, setAddExpenseOpen] = useState(false);
-  const [editExpenseOpen, setEditExpenseOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<
-    (ExpenseDto & { invoice_id?: string; amount: string }) | null
-  >(null);
-  const [deleteExpense, setDeleteExpense] = useState<{
-    id: string;
-    description: string;
-  } | null>(null);
-  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(
-    null,
-  );
+  const fetchInvoiceDetails = () => invalidateFinancialQueries(queryClient);
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     status: "draft" | "sent" | "paid" | "cancelled";
     label: string;
@@ -84,13 +65,6 @@ export function useInvoiceCommands({
     description: string;
     amount: number | null;
   } | null>(null);
-  const [convertOpen, setConvertOpen] = useState(false);
-  const [convertUnit, setConvertUnit] = useState<"month" | "day" | "hour">(
-    "month",
-  );
-  const [convertPrice, setConvertPrice] = useState<string>("");
-  const [convertTotal, setConvertTotal] = useState<string>("");
-  const [converting, setConverting] = useState(false);
   const [clientTitleEdit, setClientTitleEdit] = useState<string>("");
   const [updatingClientTitle, setUpdatingClientTitle] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -147,38 +121,6 @@ export function useInvoiceCommands({
       setClientTitleEdit(invoice.client_title ?? "");
     }
   }, [invoice]);
-  const handleDeleteExpense = async () => {
-    if (!deleteExpense) return;
-    setDeletingExpenseId(deleteExpense.id);
-
-    try {
-      await apiDelete(`/expenses/${deleteExpense.id}`);
-      toast({
-        title: "Успешно",
-        description: "Расход удалён",
-      });
-
-      // Invalidate all invoice-related caches to update partner debt everywhere
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/partner/stats"] });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/do-not-spend/partner-schemes"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/do-not-spend/agency"] });
-
-      fetchInvoiceDetails();
-    } catch (error: unknown) {
-      toast({
-        title: "Ошибка",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive",
-      });
-    }
-
-    setDeleteExpense(null);
-    setDeletingExpenseId(null);
-  };
   const handleStatusChangeRequest = (
     newStatus: "draft" | "sent" | "paid" | "cancelled",
   ) => {
@@ -226,7 +168,7 @@ export function useInvoiceCommands({
         title: "Успешно",
         description: "Статус обновлен",
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -251,7 +193,7 @@ export function useInvoiceCommands({
         title: "Успешно",
         description: "Статус обновлён",
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       setStatus(previousStatus);
       toast({
@@ -278,7 +220,7 @@ export function useInvoiceCommands({
           ? "Планируемая дата оплаты установлена"
           : "Планируемая дата оплаты удалена",
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -312,7 +254,7 @@ export function useInvoiceCommands({
           ? "Фактическая дата оплаты установлена, статус обновлён на 'Оплачен'"
           : "Фактическая дата оплаты удалена",
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -334,7 +276,7 @@ export function useInvoiceCommands({
         title: "Успешно",
         description: "Комментарий обновлён",
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -368,7 +310,7 @@ export function useInvoiceCommands({
         title: "Успешно",
         description: "Номер счета обновлён",
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -422,7 +364,7 @@ export function useInvoiceCommands({
         title: "Успешно",
         description: `Комиссия ${rate}% установлена, расчёты будут обновлены`,
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Системная ошибка",
@@ -462,7 +404,7 @@ export function useInvoiceCommands({
         title: "Успешно",
         description: `Сумма счёта обновлена: ${formatCurrency(newBill)}`,
       });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Системная ошибка",
@@ -502,10 +444,7 @@ export function useInvoiceCommands({
         description: `Планируемые расходы обновлены: ${formatCurrency(newAmount)}`,
       });
 
-      queryClient.invalidateQueries({
-        queryKey: ["/api/do-not-spend/partner-schemes"],
-      });
-      fetchInvoiceDetails();
+      await fetchInvoiceDetails();
     } catch (error: unknown) {
       toast({
         title: "Системная ошибка",
@@ -528,8 +467,6 @@ export function useInvoiceCommands({
       setHideFromAssistant(newValue);
 
       // Invalidate invoices cache so lists update immediately
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/assistant/stats"] });
 
       toast({
         title: "Успешно",
@@ -567,13 +504,6 @@ export function useInvoiceCommands({
     setMovingInvoice(true);
     try {
       await apiPatch(`/invoices/${invoiceId}`, { clientId: moveClientId });
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/client/budget"] });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/client/overview-buckets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       await fetchInvoiceDetails();
       setMoveOpen(false);
       setMoveClientId("");
@@ -601,11 +531,6 @@ export function useInvoiceCommands({
       await apiPatch(`/invoices/${invoiceId}`, {
         clientTitle: trimmed || null,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/client/budget"] });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/client/overview-buckets"],
-      });
       await fetchInvoiceDetails();
       toast({
         title: "Сохранено",
@@ -625,109 +550,8 @@ export function useInvoiceCommands({
       setUpdatingClientTitle(false);
     }
   };
-  const handleConvertToSubscription = async () => {
-    if (!invoiceId) return;
-    const price = parseNum(convertPrice);
-    const total = parseInt(convertTotal, 10);
-    if (!Number.isFinite(price) || price <= 0) {
-      toast({
-        title: "Ошибка",
-        description: "Цена за единицу должна быть > 0",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!Number.isInteger(total) || total < 1) {
-      toast({
-        title: "Ошибка",
-        description: "Количество должно быть ≥ 1",
-        variant: "destructive",
-      });
-      return;
-    }
-    setConverting(true);
-    try {
-      await apiPatch(`/invoices/${invoiceId}`, {
-        serviceType: "periodic",
-        periodUnit: convertUnit,
-        pricePerPeriod: price.toString(),
-        totalPeriods: total,
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/client/budget"] });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/client/overview-buckets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      await fetchInvoiceDetails();
-      setConvertOpen(false);
-      setConvertPrice("");
-      setConvertTotal("");
-      toast({ title: "Готово", description: "Счёт превращён в подписку." });
-    } catch (error: unknown) {
-      toast({
-        title: "Ошибка",
-        description:
-          (error instanceof Error ? error.message : String(error)) ||
-          "Не удалось превратить счёт",
-        variant: "destructive",
-      });
-    } finally {
-      setConverting(false);
-    }
-  };
-  const handleSetPeriod = async (closed: boolean) => {
-    if (!invoiceId || !invoice || converting) return;
-    const period = Number(invoice.periods_used ?? 0) + (closed ? 1 : 0);
-    setConverting(true);
-    try {
-      await apiPost(`/invoices/${invoiceId}/periods`, { period, closed });
-      await queryClient.invalidateQueries();
-      await fetchInvoiceDetails();
-      toast({ title: closed ? `Период ${period} закрыт` : `Закрытие периода ${period} отменено` });
-    } catch (error) {
-      toast({ title: "Ошибка", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
-      await fetchInvoiceDetails();
-    } finally { setConverting(false); }
-  };
-  const handleRevertToOneTime = async () => {
-    if (!invoiceId) return;
-    if (
-      !confirm(
-        "Превратить подписку обратно в разовый счёт? Цена за период и количество периодов будут очищены.",
-      )
-    )
-      return;
-    setConverting(true);
-    try {
-      await apiPatch(`/invoices/${invoiceId}`, {
-        serviceType: "one_time",
-        pricePerPeriod: null,
-        totalPeriods: null,
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/client/budget"] });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/client/overview-buckets"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      await fetchInvoiceDetails();
-      toast({
-        title: "Готово",
-        description: "Подписка превращена обратно в разовый счёт.",
-      });
-    } catch (error: unknown) {
-      toast({
-        title: "Ошибка",
-        description:
-          (error instanceof Error ? error.message : String(error)) ||
-          "Не удалось преобразовать",
-        variant: "destructive",
-      });
-    } finally {
-      setConverting(false);
-    }
-  };
+  const expenseActions = useInvoiceExpenseActions();
+  const periodActions = useInvoicePeriodCommands({ invoiceId, invoice, refresh: fetchInvoiceDetails });
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: "Черновик",
@@ -745,6 +569,7 @@ export function useInvoiceCommands({
     invoice?.scheme ?? "agency_30",
   );
   return {
+    ...expenseActions, ...periodActions,
     toast,
     queryClient,
     invoice,
@@ -753,16 +578,6 @@ export function useInvoiceCommands({
     loading,
     error,
     fetchInvoiceDetails,
-    addExpenseOpen,
-    setAddExpenseOpen,
-    editExpenseOpen,
-    setEditExpenseOpen,
-    editingExpense,
-    setEditingExpense,
-    deleteExpense,
-    setDeleteExpense,
-    deletingExpenseId,
-    setDeletingExpenseId,
     pendingStatusChange,
     setPendingStatusChange,
     updatingStatus,
@@ -797,16 +612,6 @@ export function useInvoiceCommands({
     setMessageInvoiceOpen,
     messageExpense,
     setMessageExpense,
-    convertOpen,
-    setConvertOpen,
-    convertUnit,
-    setConvertUnit,
-    convertPrice,
-    setConvertPrice,
-    convertTotal,
-    setConvertTotal,
-    converting,
-    setConverting,
     clientTitleEdit,
     setClientTitleEdit,
     updatingClientTitle,
@@ -821,7 +626,6 @@ export function useInvoiceCommands({
     setPlannedExpensesEdit,
     updatingPlannedExpenses,
     setUpdatingPlannedExpenses,
-    handleDeleteExpense,
     handleStatusChangeRequest,
     handleStatusChange,
     confirmStatusChange,
@@ -835,9 +639,6 @@ export function useInvoiceCommands({
     handleToggleHideFromAssistant,
     handleMoveInvoice,
     handleSaveClientTitle,
-    handleConvertToSubscription,
-    handleRevertToOneTime,
-    handleSetPeriod,
     getStatusLabel,
     calcRaw,
     calc,

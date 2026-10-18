@@ -75,6 +75,49 @@ try {
   assert.equal(logs.count, 1);
   console.log('PASS: concurrent retries commit one invoice and one audit event');
 
+  const { PaymentCommands } = await import('../server/services/paymentCommands');
+  const payments = new PaymentCommands(db);
+  const paymentInvoice = await repo.createInvoice(db, { ...input, invoiceNumber: 'PAYMENT-CONCURRENT' });
+  const paymentInput = { partnerId: partner.id, invoiceId: paymentInvoice.id, amount: '100.01', paymentDate: '2026-10-18' };
+  const paid = await Promise.all(Array.from({ length: 12 }, () => payments.record({ role: 'admin', tokenId: actor.id, requestKey: 'payment-once' }, paymentInput)));
+  assert.equal(new Set(paid.map(row => row.id)).size, 1);
+  const [paymentLogs] = await db.select({ count: sql<number>`COUNT(*)::int` }).from(schema.assistantActionLogs).where(eq(schema.assistantActionLogs.entityId, paid[0].id));
+  assert.equal(paymentLogs.count, 1);
+  console.log('PASS: 12 concurrent payment retries commit one payment and one audit event');
+
+  const [newPartner] = await db.insert(schema.partners).values({ name: 'Different payer' }).returning();
+  for (let round = 0; round < 3; round++) {
+    const inv = await repo.createInvoice(db, { ...input, invoiceNumber: `PAYMENT-OWNER-RACE-${round}` });
+    const results = await Promise.allSettled([
+      payments.record({ role: 'admin', tokenId: actor.id }, { ...paymentInput, invoiceId: inv.id }),
+      commands.update({ role: 'admin', tokenId: actor.id }, inv.id, { partnerId: newPartner.id }),
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    const [recorded] = await db.select().from(schema.partnerPayments).where(eq(schema.partnerPayments.invoiceId, inv.id));
+    const current = await repo.getInvoice(db, inv.id);
+    if (recorded) assert.equal(recorded.partnerId, current!.partnerId);
+  }
+  console.log('PASS: concurrent payment/reassignment cannot commit mismatched owners');
+
+  for (let round = 0; round < 3; round++) {
+    const inv = await repo.createInvoice(db, { ...input, invoiceNumber: `PAYMENT-DELETE-RACE-${round}` });
+    const results = await Promise.allSettled([
+      payments.record({ role: 'admin', tokenId: actor.id }, { ...paymentInput, invoiceId: inv.id }),
+      commands.delete({ role: 'admin', tokenId: actor.id }, inv.id),
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    const [recorded] = await db.select().from(schema.partnerPayments).where(eq(schema.partnerPayments.invoiceId, inv.id));
+    const current = await repo.getInvoice(db, inv.id);
+    assert.equal(Boolean(recorded), Boolean(current));
+  }
+  console.log('PASS: concurrent payment/deletion either preserves both records or rejects the payment');
+
+  await Promise.all(Array.from({ length: 12 }, () => payments.cancel({ role: 'admin', tokenId: actor.id, requestKey: 'payment-cancel-once' }, paid[0].id)));
+  const paymentAudit = await db.select().from(schema.assistantActionLogs).where(eq(schema.assistantActionLogs.entityId, paid[0].id));
+  assert.equal(paymentAudit.length, 2);
+  assert.equal(paymentAudit.map(row => JSON.parse(row.details!)).find(row => row.command === 'cancel').before.amount, '100.01');
+  console.log('PASS: concurrent payment cancellations retain one durable audit snapshot');
+
   const periodic = await commands.create({ role: 'admin', tokenId: actor.id }, { ...input, invoiceNumber: 'PERIOD-CONCURRENT', serviceType: 'periodic', totalPeriods: 3, pricePerPeriod: '100' });
   const closes = await Promise.allSettled(Array.from({ length: 12 }, (_, i) => commands.setPeriod({ role: 'admin', tokenId: actor.id, requestKey: `period-${i}` }, periodic.id, 1, true)));
   assert.equal(closes.filter(row => row.status === 'fulfilled').length, 1);

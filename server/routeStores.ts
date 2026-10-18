@@ -109,9 +109,7 @@ export type MyInvoicesStore = Pick<
 export type PartnersStore = Pick<
   StorageOperations,
   | "createPartner"
-  | "createPartnerPayment"
   | "deletePartner"
-  | "deletePartnerPayment"
   | "getClient"
   | "getClientPartners"
   | "getDoNotSpendData"
@@ -125,7 +123,6 @@ export type PartnersStore = Pick<
   | "getPartnerDebtSummaries"
   | "getPartnerDocumentRisk"
   | "getPartnerHeroMetrics"
-  | "getPartnerPayment"
   | "getPartnerPaymentHistory"
   | "getPartnerPayments"
   | "getPartnerSchemeDoNotSpendData"
@@ -133,7 +130,6 @@ export type PartnersStore = Pick<
   | "getPartners"
   | "logAssistantAction"
   | "updatePartner"
-  | "updatePartnerPayment"
 >;
 export type AuthStore = Pick<
   StorageOperations,

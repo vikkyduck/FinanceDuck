@@ -1,3 +1,4 @@
+import { invalidateFinancialQueries } from '@/lib/financialQueries';
 import { InvoicePagination } from './InvoicePagination';
 import { usePagedInvoices } from "@/hooks/usePagedInvoices";
 import { useEffect, useState, useRef } from "react";
@@ -68,7 +69,7 @@ export const UnifiedInvoicesList = ({
   const statusParam = searchParams.get('statusFilter') as InvoiceStatus | null;
   const queryClient = useQueryClient();
   const refreshInvoices = () =>
-    queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
+    invalidateFinancialQueries(queryClient);
 
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(openInvoiceParam);
   const [detailsOpen, setDetailsOpen] = useState(!!openInvoiceParam);

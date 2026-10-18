@@ -1,3 +1,4 @@
+import { getPartnerSchemeDoNotSpendData } from './financialReportsRepo';
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, seedPartnerAndClient, type TestDb } from "../test/testDb";
 import { createInvoice } from "./invoiceRepo";
@@ -5,7 +6,7 @@ import { partners, invoices } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import {
   getPartnerDebtSummaries,
-  getPartnerSchemeDoNotSpendData,
+
   getAdminDashboardStats,
   getClientBudget,
   getClientOverviewBuckets,
@@ -50,7 +51,7 @@ describe("dashboardRepo — вынесенные методы: пустая БД
     expect(r.every(s => s.totalToTransfer === 0)).toBe(true);
   });
   it("getPartnerSchemeDoNotSpendData → отрабатывает", async () => {
-    const r = await getPartnerSchemeDoNotSpendData(asDb(), partnerId, "partner");
+    const r = await getPartnerSchemeDoNotSpendData(asDb(), { role: 'partner', partnerId });
     expect(r).toBeDefined();
   });
   it("getAdminDashboardStats → yearlySummary с нулями", async () => {

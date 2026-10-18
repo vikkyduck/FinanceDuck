@@ -12,6 +12,8 @@ import { Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import { useQueryClient } from '@tanstack/react-query';
+import { invalidateFinancialQueries } from '@/lib/financialQueries';
 
 /**
  * Деньги переноса показываем ТОЧНО, с копейками, когда они есть.
@@ -28,6 +30,7 @@ interface TransferFundsDialogProps {
 }
 
 export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: TransferFundsDialogProps) => {
+  const queryClient = useQueryClient();
   const [submitting, setSubmitting] = useState(false);
   const [clientId, setClientId] = useState<string>("");
   const [fromInvoice, setFromInvoice] = useState<InvoiceDto | null>(null);
@@ -80,6 +83,7 @@ export const TransferFundsDialog = ({ open, onOpenChange, onTransferred }: Trans
         amount: amt,
         notes: notes.trim() || null,
       });
+      await invalidateFinancialQueries(queryClient);
       toast.success("Перенос выполнен");
       onTransferred?.();
       onOpenChange(false);

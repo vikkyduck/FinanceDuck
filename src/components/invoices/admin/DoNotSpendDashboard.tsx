@@ -1,3 +1,4 @@
+import { financialKeys } from '@/lib/financialQueries';
 import { useState, Fragment, useMemo } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InvoiceDetailsDialog } from "../InvoiceDetailsDialog";
@@ -108,7 +109,7 @@ export const DoNotSpendDashboard = ({
   };
 
   const { data: summaries = [], isLoading: loadingAgency } = useQuery<DoNotSpendSummary[]>({
-    queryKey: ['/api/do-not-spend'],
+    queryKey: financialKeys.agencyFunds(),
     queryFn: () => apiGet<DoNotSpendSummary[]>('/do-not-spend'),
     enabled: isAuthenticated,
     refetchInterval: 120000,
@@ -116,7 +117,7 @@ export const DoNotSpendDashboard = ({
   });
 
   const { data: partnerSchemeSummaries = [], isLoading: loadingPartner } = useQuery<PartnerSchemeSummary[]>({
-    queryKey: ['/api/do-not-spend/partner-schemes'],
+    queryKey: financialKeys.partnerFunds(),
     queryFn: () => apiGet<PartnerSchemeSummary[]>('/do-not-spend/partner-schemes'),
     enabled: isAuthenticated,
     refetchInterval: 120000,
@@ -686,8 +687,8 @@ export const DoNotSpendDashboard = ({
             setDetailsDialogOpen(open);
             if (!open) {
               setSelectedInvoiceId(null);
-              queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend'] });
-              queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] });
+              queryClient.invalidateQueries({ queryKey: financialKeys.agencyFunds() });
+              queryClient.invalidateQueries({ queryKey: financialKeys.partnerFunds() });
               queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
             }
           }}

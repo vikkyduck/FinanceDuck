@@ -1,3 +1,4 @@
+import { invalidateFinancialQueries } from '@/lib/financialQueries';
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiDelete } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -44,8 +45,7 @@ export function PartnerInvoicesDetail({ partnerId, onPaymentRecorded }: PartnerI
       showSuccess("Готово", "Приход удалён");
       setDeleteDialogOpen(false);
       setPaymentToDelete(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/partner-payments"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/partner-debt"] });
+      void invalidateFinancialQueries(queryClient);
       onPaymentRecorded?.();
     },
     onError: (error) => {

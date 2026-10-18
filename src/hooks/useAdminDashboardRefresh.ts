@@ -1,43 +1,20 @@
+import { invalidateFinancialQueries, isFinancialQuery } from '@/lib/financialQueries';
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useCallback, useState } from "react";
 
 const DEFAULT_REFETCH_INTERVAL = 120000;
-
-const ADMIN_PREFIXES = [
-  "/api/admin",
-  "/api/invoices",
-  "/api/partners",
-  "/api/clients",
-  "/api/partner",
-  "/api/do-not-spend",
-  "dashboard-stats",
-  "invoices",
-  "admin-stats",
-];
 
 export function useAdminDashboardRefresh(enabled = true) {
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(document.visibilityState === "visible");
 
   const invalidateAll = useCallback(() => {
-    queryClient.invalidateQueries({
-      predicate: (query) => {
-        const key = query.queryKey;
-        if (!key || key.length === 0) return false;
-        const firstKey = String(key[0]);
-        return ADMIN_PREFIXES.some(prefix => firstKey.startsWith(prefix));
-      },
-    });
+    invalidateFinancialQueries(queryClient);
   }, [queryClient]);
 
   const refetchAll = useCallback(() => {
     queryClient.refetchQueries({
-      predicate: (query) => {
-        const key = query.queryKey;
-        if (!key || key.length === 0) return false;
-        const firstKey = String(key[0]);
-        return ADMIN_PREFIXES.some(prefix => firstKey.startsWith(prefix));
-      },
+      predicate: query => isFinancialQuery(query.queryKey),
     });
   }, [queryClient]);
 
@@ -79,13 +56,6 @@ export function useInvalidateAllDashboards() {
   const queryClient = useQueryClient();
 
   return useCallback(() => {
-    queryClient.invalidateQueries({
-      predicate: (query) => {
-        const key = query.queryKey;
-        if (!key || key.length === 0) return false;
-        const firstKey = String(key[0]);
-        return ADMIN_PREFIXES.some(prefix => firstKey.startsWith(prefix));
-      },
-    });
+    invalidateFinancialQueries(queryClient);
   }, [queryClient]);
 }

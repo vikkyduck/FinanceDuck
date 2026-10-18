@@ -43,6 +43,13 @@
       "when": 1792261071032,
       "tag": "0005_certain_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792326990943,
+      "tag": "0006_preserve_payment_history",
+      "breakpoints": true
     }
   ]
 }

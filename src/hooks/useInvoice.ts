@@ -1,3 +1,4 @@
+import { financialKeys } from '@/lib/financialQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InvoiceDto, ExpenseDto } from '@shared/contracts';
 import { useEffect } from 'react';
@@ -18,7 +19,7 @@ export function useInvoice(invoiceId: string | null, open: boolean) {
     invoice: query.data ? invoiceDetailsView(query.data.invoice) : null, expenses: query.data?.expenses.map(row => ({ ...row, invoice_id: row.invoiceId })) ?? [], loading: query.isLoading, error: query.error,
     fetchInvoiceDetails: query.refetch,
     setStatus: (status: InvoiceDto['status']) => queryClient.setQueryData<{ invoice: InvoiceDto; expenses: ExpenseDto[] }>(
-      ['/api/invoices', 'detail', invoiceId], previous => previous ? { ...previous, invoice: { ...previous.invoice, status } } : previous),
+      financialKeys.invoice(invoiceId), previous => previous ? { ...previous, invoice: { ...previous.invoice, status } } : previous),
 
   };
 }

@@ -1,10 +1,12 @@
+import { commandActor } from '../services/commandActor';
+import type { PaymentCommandPort } from '../services/paymentCommands';
+import { CommandError } from '../lib/commandError';
+import { MoneyRangeError } from '../../shared/money';
 import type { AuthMiddleware } from "../middleware";
 import { Router, Response } from "express";
 import type { PartnersStore } from "../routeStores";
 import { AuthenticatedRequest, requireRole } from "../middleware";
-import { parseNum } from "../../shared/financialEngine";
-import { pick, PARTNER_WRITABLE_FIELDS, PARTNER_PAYMENT_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
-import { validateBody, partnerPaymentSchema } from "../lib/validate";
+import { pick, PARTNER_WRITABLE_FIELDS, LEVERAGE_ROLES } from "../lib/sanitize";
 import {
   projectClientForRole,
   projectClientsForRole,
@@ -13,7 +15,7 @@ import {
 } from "../permissions";
 import { canReadPartner, canReadPartnerClients } from "../tenantAccess";
 
-export function createPartnersRouter(storage: PartnersStore, authMiddleware: AuthMiddleware) {
+export function createPartnersRouter(storage: PartnersStore, authMiddleware: AuthMiddleware, paymentCommands: PaymentCommandPort) {
 const partnersRouter = Router();
 
 /**
@@ -160,44 +162,24 @@ partnersRouter.get("/api/partner-payments", authMiddleware, requireRole("admin",
 });
 
 partnersRouter.post("/api/partner-payments", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const vErr = validateBody(partnerPaymentSchema, req.body);
-    if (vErr) return res.status(400).json({ error: vErr });
-    const payment = await storage.createPartnerPayment({ ...pick(req.body, PARTNER_PAYMENT_WRITABLE_FIELDS), createdBy: req.user!.token.id });
-    res.status(201).json(payment);
-  } catch (error) {
-    console.error("Create payment error:", error);
-    res.status(500).json({ error: "Failed to create payment" });
+  try { res.status(201).json(await paymentCommands.record(commandActor(req), req.body)); }
+  catch (error) {
+    if (error instanceof CommandError || error instanceof MoneyRangeError) return res.status(error.status).json({ error: error.message });
+    console.error("Create payment error:", error); res.status(500).json({ error: "Failed to create payment" });
   }
 });
-
 partnersRouter.put("/api/partner-payments/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { amount, paymentDate, notes } = req.body;
-    const parsedAmount = parseNum(String(amount));
-    if (isNaN(parsedAmount) || parsedAmount <= 0) return res.status(400).json({ error: "Invalid amount: must be a positive number" });
-    if (!paymentDate || !/^\d{4}-\d{2}-\d{2}$/.test(paymentDate)) return res.status(400).json({ error: "Invalid paymentDate: must be in YYYY-MM-DD format" });
-    const sanitizedNotes = notes ? String(notes).trim() : null;
-    const existing = await storage.getPartnerPayment(id);
-    if (!existing) return res.status(404).json({ error: "Payment not found" });
-    res.json(await storage.updatePartnerPayment(id, { amount: parsedAmount.toString(), paymentDate, notes: sanitizedNotes }));
-  } catch (error) {
-    console.error("Update payment error:", error);
-    res.status(500).json({ error: "Failed to update payment" });
+  try { res.json(await paymentCommands.correct(commandActor(req), req.params.id, req.body)); }
+  catch (error) {
+    if (error instanceof CommandError || error instanceof MoneyRangeError) return res.status(error.status).json({ error: error.message });
+    console.error("Update payment error:", error); res.status(500).json({ error: "Failed to update payment" });
   }
 });
-
 partnersRouter.delete("/api/partner-payments/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const existing = await storage.getPartnerPayment(id);
-    if (!existing) return res.status(404).json({ error: "Payment not found" });
-    await storage.deletePartnerPayment(id);
-    res.status(204).send();
-  } catch (error) {
-    console.error("Delete payment error:", error);
-    res.status(500).json({ error: "Failed to delete payment" });
+  try { await paymentCommands.cancel(commandActor(req), req.params.id); res.status(204).send(); }
+  catch (error) {
+    if (error instanceof CommandError || error instanceof MoneyRangeError) return res.status(error.status).json({ error: error.message });
+    console.error("Delete payment error:", error); res.status(500).json({ error: "Failed to delete payment" });
   }
 });
 
@@ -320,7 +302,7 @@ partnersRouter.get("/api/partner/hero-metrics", authMiddleware, requireRole("par
 partnersRouter.get("/api/do-not-spend", authMiddleware, requireRole("admin", "assistant", "partner"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role;
-    res.json(await storage.getDoNotSpendData(role === "partner" ? req.user?.partnerId : undefined));
+    res.json(await storage.getDoNotSpendData(req.user!));
   } catch (error) {
     console.error("Get do-not-spend error:", error);
     res.status(500).json({ error: "Failed to get do-not-spend data" });
@@ -330,7 +312,7 @@ partnersRouter.get("/api/do-not-spend", authMiddleware, requireRole("admin", "as
 partnersRouter.get("/api/do-not-spend/partner-schemes", authMiddleware, requireRole("admin", "assistant", "partner"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role;
-    res.json(await storage.getPartnerSchemeDoNotSpendData(role === "partner" ? req.user?.partnerId : undefined, role));
+    res.json(await storage.getPartnerSchemeDoNotSpendData(req.user!));
   } catch (error) {
     console.error("Get partner scheme do-not-spend error:", error);
     res.status(500).json({ error: "Failed to get partner scheme do-not-spend data" });
@@ -340,7 +322,7 @@ partnersRouter.get("/api/do-not-spend/partner-schemes", authMiddleware, requireR
 partnersRouter.get("/api/expected-commission", authMiddleware, requireRole("admin", "partner"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const role = req.user?.role;
-    res.json(await storage.getExpectedCommission(role === "partner" ? req.user?.partnerId : undefined));
+    res.json(await storage.getExpectedCommission(req.user!));
   } catch (error) {
     console.error("Get expected commission error:", error);
     res.status(500).json({ error: "Failed to get expected commission data" });

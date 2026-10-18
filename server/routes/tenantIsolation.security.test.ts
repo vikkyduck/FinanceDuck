@@ -57,7 +57,7 @@ import { projectInvoiceForRole } from "../permissions";
 
 import { authMiddleware } from "../middleware";
 const clientsRouter = createClientsRouter(storageMock, authMiddleware);
-const partnersRouter = createPartnersRouter(storageMock, authMiddleware);
+const partnersRouter = createPartnersRouter(storageMock, authMiddleware, { record: vi.fn(), correct: vi.fn(), cancel: vi.fn() });
 const now = new Date("2026-01-01T00:00:00.000Z");
 
 const partnerA = {

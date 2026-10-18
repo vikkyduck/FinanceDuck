@@ -4,6 +4,18 @@ import { apiRequest } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
+it.each([
+  ['POST', '/api/partner-payments'], ['PUT', '/api/partner-payments/payment'], ['DELETE', '/api/partner-payments/payment'],
+])('retries the protected %s payment command with the same body and key', async (method, url) => {
+  vi.stubGlobal('localStorage', { getItem: () => `payment-${method}` });
+  const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('lost response')).mockResolvedValueOnce(new Response('{"ok":true}'));
+  vi.stubGlobal('fetch', fetcher);
+  await apiRequest(url, { method, body: method === 'DELETE' ? undefined : '{"amount":"100"}' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(fetcher.mock.calls[0][1].headers.get('Idempotency-Key')).toBe(fetcher.mock.calls[1][1].headers.get('Idempotency-Key'));
+  expect(fetcher.mock.calls[0][1].body).toBe(fetcher.mock.calls[1][1].body);
+});
+
 it('reuses the command key and caller Headers after an uncertain network result', async () => {
   vi.stubGlobal('localStorage', { getItem: () => 'session-a' });
   const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('connection lost')).mockResolvedValueOnce(new Response('{"id":"same-invoice"}'));

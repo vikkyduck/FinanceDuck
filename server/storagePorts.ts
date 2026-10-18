@@ -1,3 +1,4 @@
+import * as financialReportsRepo from './repositories/financialReportsRepo';
 import type * as exportRepo from "./repositories/exportRepo";
 import type { InvoiceActor } from './invoiceAccess';
 
@@ -195,13 +196,6 @@ export interface DirectoryStore {
       invoiceNumber: string | null;
     }>
   >;
-  getPartnerPayment(id: string): Promise<PartnerPayment | null>;
-  createPartnerPayment(payment: InsertPartnerPayment): Promise<PartnerPayment>;
-  updatePartnerPayment(
-    id: string,
-    updates: Partial<InsertPartnerPayment>,
-  ): Promise<PartnerPayment | null>;
-  deletePartnerPayment(id: string): Promise<void>;
   getPartnerPaymentHistory(partnerId: string): Promise<PaymentHistoryEntry[]>;
 }
 
@@ -270,16 +264,9 @@ export interface ReportingQueries {
   getPartnerDebtSummaries(): ReturnType<
     typeof dashboardRepo.getPartnerDebtSummaries
   >;
-  getDoNotSpendData(
-    partnerId?: string,
-  ): ReturnType<typeof reportsRepo.getDoNotSpendData>;
-  getPartnerSchemeDoNotSpendData(
-    partnerId?: string,
-    role?: string,
-  ): ReturnType<typeof dashboardRepo.getPartnerSchemeDoNotSpendData>;
-  getExpectedCommission(
-    partnerId?: string,
-  ): ReturnType<typeof reportsRepo.getExpectedCommission>;
+  getDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getDoNotSpendData>;
+  getPartnerSchemeDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getPartnerSchemeDoNotSpendData>;
+  getExpectedCommission(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getExpectedCommission>;
   getExpectedAdminProfit(): ReturnType<
     typeof reportsRepo.getExpectedAdminProfit
   >;

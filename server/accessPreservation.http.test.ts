@@ -1,3 +1,4 @@
+import { createApp } from './app';
 import { beforeAll, afterAll, expect, it } from 'vitest';
 import { once } from 'node:events';
 import type { Server } from 'node:http';
@@ -53,9 +54,7 @@ beforeAll(async () => {
     await db.insert(s.invoiceMessages).values({ invoiceId: inv.id, expenseId: expense.id, authorRole: 'admin', authorTokenId: actorId, body: 'AC message' });
     fixtures.push({ id: inv.id, owner, hidden, scheme, expenseId: expense.id, companyId: acts[0].id, executorId: acts[1].id });
   }
-  const storage = new DatabaseStorage(database()), auth = createAuthMiddleware(storage);
-  const app = express(); app.use(cookieParser(), express.json(), createDashboardRouter(storage, auth), createInvoicesRouter(storage, auth, database(), new InvoiceCommands(database())),
-    createActsRouter(storage, auth), createMessagesRouter(storage, auth, database()), createExportRouter(storage, auth));
+  const app = createApp({ database: database() });
   server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('Missing server');
   base = `http://127.0.0.1:${address.port}`;

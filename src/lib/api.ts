@@ -20,10 +20,10 @@ export async function apiRequest<T>(
   const headers = new Headers(options.headers);
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
-  // Only invoice commands have transactional receipts. Other mutations must not
+  // Invoice and partner-payment commands have transactional receipts. Other mutations must not
   // be automatically repeated after an ambiguous network failure.
-  const retrySafe = ['POST', 'PATCH', 'DELETE'].includes(method)
-    && /^\/api\/(?:invoices(?:\/transfer|\/[^/]+(?:\/(?:expenses|periods))?)?|expenses\/[^/]+|transfers\/[^/]+)$/.test(url)
+  const retrySafe = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)
+    && /^\/api\/(?:invoices(?:\/transfer|\/[^/]+(?:\/(?:expenses|periods))?)?|expenses\/[^/]+|transfers\/[^/]+|partner-payments(?:\/[^/]+)?)$/.test(url)
     && (options.body === undefined || typeof options.body === 'string');
   if (pendingSession !== csrfToken) { uncertainCommands.clear(); pendingSession = csrfToken; }
   const signature = retrySafe ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',

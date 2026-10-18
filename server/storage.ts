@@ -1,3 +1,5 @@
+import type { InvoiceActor } from './invoiceAccess';
+import * as financialReportsRepo from './repositories/financialReportsRepo';
 import * as exportRepo from "./repositories/exportRepo";
 import type { StorageOperations } from "./storagePorts";
 import type { RecurringInvoiceForMonth, AssistantActionLogFilters, AssistantActionLogWithDetails, WorkingCapitalData, ClientLTVData, PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData, PartnerHeroMetricsData, DashboardInvoiceDetail, MonthlyData, MonthInvoiceDetail, DraftsStats, ForecastData, OverdueInvoice, PaymentHistoryEntry, PlanFactData, MonthlyPlanInput, DashboardStats } from "./storageTypes";
@@ -86,10 +88,6 @@ export class DatabaseStorage implements StorageOperations {
   async getInvoiceTransfers(invoiceId: string) { return invoiceRepo.getInvoiceTransfers(this.database, invoiceId); }
   async deleteInvoice(id: string) { return invoiceRepo.deleteInvoice(this.database, id); }
 
-  async getPartnerPayment(id: string) { return partnerRepo.getPartnerPayment(this.database, id); }
-  async createPartnerPayment(payment: InsertPartnerPayment) { return partnerRepo.createPartnerPayment(this.database, payment); }
-  async updatePartnerPayment(id: string, updates: Partial<InsertPartnerPayment>) { return partnerRepo.updatePartnerPayment(this.database, id, updates); }
-  async deletePartnerPayment(id: string) { return partnerRepo.deletePartnerPayment(this.database, id); }
   async getPartnerPaymentHistory(partnerId: string) { return partnerRepo.getPartnerPaymentHistory(this.database, partnerId); }
 
   async getAccessTokens() { return userRepo.getAccessTokens(this.database); }
@@ -254,16 +252,16 @@ export class DatabaseStorage implements StorageOperations {
     return dashboardRepo.getPartnerDebtSummaries(this.database);
   }
 
-  async getDoNotSpendData(partnerId?: string) {
-    return reportsRepo.getDoNotSpendData(this.database, partnerId);
+  async getDoNotSpendData(actor: InvoiceActor) {
+    return financialReportsRepo.getDoNotSpendData(this.database, actor);
   }
 
-  async getPartnerSchemeDoNotSpendData(partnerId?: string, role?: string) {
-    return dashboardRepo.getPartnerSchemeDoNotSpendData(this.database, partnerId, role);
+  async getPartnerSchemeDoNotSpendData(actor: InvoiceActor) {
+    return financialReportsRepo.getPartnerSchemeDoNotSpendData(this.database, actor);
   }
 
-  async getExpectedCommission(partnerId?: string) {
-    return reportsRepo.getExpectedCommission(this.database, partnerId);
+  async getExpectedCommission(actor: InvoiceActor) {
+    return financialReportsRepo.getExpectedCommission(this.database, actor);
   }
 
   async getExpectedAdminProfit() {

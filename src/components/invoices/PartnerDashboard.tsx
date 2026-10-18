@@ -1,3 +1,4 @@
+import { financialKeys } from '@/lib/financialQueries';
 import { partnerInvoiceSummarySchema } from '@shared/invoiceContract';
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -142,7 +143,7 @@ export const PartnerDashboard = () => {
   });
 
   const { data: agency30Summaries = [] } = useQuery<DoNotSpendSummary[]>({
-    queryKey: ['/api/do-not-spend'],
+    queryKey: financialKeys.agencyFunds(),
     queryFn: () => apiGet<DoNotSpendSummary[]>('/do-not-spend'),
     enabled: !!partnerId,
     refetchInterval: 120000,
@@ -150,7 +151,7 @@ export const PartnerDashboard = () => {
   });
 
   const { data: partnerSchemeSummaries = [] } = useQuery<PartnerSchemeSummary[]>({
-    queryKey: ['/api/do-not-spend/partner-schemes'],
+    queryKey: financialKeys.partnerFunds(),
     queryFn: () => apiGet<PartnerSchemeSummary[]>('/do-not-spend/partner-schemes'),
     enabled: !!partnerId,
     refetchInterval: 120000,
@@ -205,8 +206,8 @@ export const PartnerDashboard = () => {
         queryClient.invalidateQueries({ queryKey: ['/api/my-debt'] }),
         queryClient.invalidateQueries({ queryKey: ['/api/invoices'] }),
         queryClient.invalidateQueries({ queryKey: ['/api/partner/document-risk'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend'] }),
-        queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] }),
+        queryClient.invalidateQueries({ queryKey: financialKeys.agencyFunds() }),
+        queryClient.invalidateQueries({ queryKey: financialKeys.partnerFunds() }),
       ]);
     } finally {
       setIsRefreshing(false);

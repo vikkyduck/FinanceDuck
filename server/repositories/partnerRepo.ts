@@ -81,33 +81,6 @@ export async function getPartnerClients(db: Db, partnerId: string) {
 // ─── Partner Payments ─────────────────────────────────────────────────────────
 
 
-export async function getPartnerPayment(
-  db: Db, id: string,
-): Promise<PartnerPayment | null> {
-  const [p] = await db.select().from(partnerPayments)
-    .where(eq(partnerPayments.id, id)).limit(1);
-  return p ?? null;
-}
-
-export async function createPartnerPayment(
-  db: Db, payment: InsertPartnerPayment,
-): Promise<PartnerPayment> {
-  const [created] = await db.insert(partnerPayments).values(payment).returning();
-  return created;
-}
-
-export async function updatePartnerPayment(
-  db: Db, id: string, updates: Partial<InsertPartnerPayment>,
-): Promise<PartnerPayment | null> {
-  const [updated] = await db.update(partnerPayments)
-    .set(updates).where(eq(partnerPayments.id, id)).returning();
-  return updated ?? null;
-}
-
-export async function deletePartnerPayment(db: Db, id: string): Promise<void> {
-  await db.delete(partnerPayments).where(eq(partnerPayments.id, id));
-}
-
 export async function getPartnerPaymentHistory(
   db: Db, partnerId: string,
 ): Promise<PaymentHistoryEntry[]> {
@@ -165,31 +138,10 @@ export async function getPartnerPayments(db: Db, partnerId: string): Promise<Arr
   for (const inv of partnerInvoices) {
     invoiceMap.set(inv.id, inv.invoiceNumber || '');
   }
-  const invoiceIds = Array.from(invoiceMap.keys());
 
-  // Get payments - always query by partnerId, optionally also by invoiceId
-  let paymentsData: typeof partnerPayments.$inferSelect[] = [];
-  
-  if (invoiceIds.length > 0) {
-    // Partner has invoices - get payments by invoice OR partner
-    paymentsData = await db
-      .select()
-      .from(partnerPayments)
-      .where(
-        or(
-          inArray(partnerPayments.invoiceId, invoiceIds),
-          eq(partnerPayments.partnerId, partnerId)
-        )
-      )
-      .orderBy(desc(partnerPayments.paymentDate));
-  } else {
-    // Partner has no invoices - only get payments by partnerId
-    paymentsData = await db
-      .select()
-      .from(partnerPayments)
-      .where(eq(partnerPayments.partnerId, partnerId))
-      .orderBy(desc(partnerPayments.paymentDate));
-  }
+  // A payment belongs to its recorded payer, regardless of later invoice ownership.
+  const paymentsData = await db.select().from(partnerPayments)
+    .where(eq(partnerPayments.partnerId, partnerId)).orderBy(desc(partnerPayments.paymentDate));
 
   // Deduplicate and merge
   const paymentsMap = new Map<string, {

@@ -1,3 +1,4 @@
+import { commandActor } from '../services/commandActor';
 import { getClientBalances, getPartnerInvoiceSummary } from '../repositories/invoiceSummaryRepo';
 import { MoneyRangeError } from '../../shared/money';
 import { browsePages } from '../../shared/pagination';
@@ -16,10 +17,6 @@ import { constrainInvoiceWrite, findAuthorizedInvoice } from "../invoiceAccess";
 
 export function createInvoicesRouter(storage: InvoicesStore, authMiddleware: AuthMiddleware, db: typeof Database, invoiceCommands: InvoiceCommands) {
 const invoicesRouter = Router();
-const commandActor = (req: AuthenticatedRequest): CommandActor => ({
-  role: req.user!.role, partnerId: req.user!.partnerId, clientId: req.user!.clientId,
-  tokenId: req.user!.token.id, requestKey: req.get('Idempotency-Key'), ip: req.ip, userAgent: req.get('user-agent'),
-});
 
 invoicesRouter.get("/api/invoices", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   try {

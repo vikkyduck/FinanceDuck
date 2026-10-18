@@ -1,3 +1,4 @@
+import { invalidateFinancialQueries } from '@/lib/financialQueries';
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,8 +64,7 @@ export const PartnerDebtDashboard = () => {
   }, []);
 
   const handlePaymentSuccess = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["/api/partner-debt"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/partner-payments"] });
+    void invalidateFinancialQueries(queryClient);
     refetch();
   }, [queryClient, refetch]);
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createTestDb, seedPartnerAndClient, type TestDb } from "../test/testDb";
 import { createInvoice, createInvoiceTransfer } from "./invoiceRepo";
-import { getDoNotSpendData } from "./reportsRepo";
+import { getDoNotSpendData } from "./financialReportsRepo";
 import { clients, invoices, invoiceCalculations, invoiceExpenses } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import { parseNum } from "../../shared/financialEngine";
@@ -69,7 +69,7 @@ describe("«Не тратить» — итог сходится с кабине�
     // Счёт-источник переехал к другому клиенту (как 004 → «Avito»)
     await db.update(invoices).set({ clientId: other.id }).where(eq(invoices.id, source.id));
 
-    const rows = await getDoNotSpendData(asDb());
+    const rows = await getDoNotSpendData(asDb(), { role: 'admin' });
     const mineRow = rows.find(r => r.clientId === clientId)!;
 
     // Деньги клиента = 70 000 + 5 100 перенесённых
@@ -89,7 +89,7 @@ describe("«Не тратить» — итог сходится с кабине�
     const b = await mkAgency("100000"); // доступно 70 000
     await addExpense(a.id, "80000");    // перерасход: остаток −10 000
 
-    const rows = await getDoNotSpendData(asDb());
+    const rows = await getDoNotSpendData(asDb(), { role: 'admin' });
     const row = rows.find(r => r.clientId === clientId)!;
 
     // 70 000 − 10 000 = 60 000, а не 70 000 (минус раньше клампился в ноль)

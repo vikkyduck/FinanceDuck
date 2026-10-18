@@ -1,3 +1,4 @@
+import { invalidateFinancialQueries } from '@/lib/financialQueries';
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -91,12 +92,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
         description: "Расход добавлен",
       });
 
-      // Invalidate all invoice-related caches to update partner debt everywhere
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/partner/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/partner-schemes'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/do-not-spend/agency'] });
+      await invalidateFinancialQueries(queryClient);
 
       setDescription("");
       setAmount("");

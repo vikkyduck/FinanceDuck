@@ -12,7 +12,7 @@ import { CommandError } from "../lib/commandError";
 import { db as _db } from "../db";
 import { decodeHtmlEntities } from "../lib/sanitize";
 import {
-  invoices, invoiceCalculations, invoiceExpenses, invoiceTransfers, partners, clients,
+  invoices, invoiceCalculations, invoiceExpenses, invoiceTransfers, partnerPayments, partners, clients,
   Invoice, InvoiceCalculation, InvoiceExpense, Partner, Client,
   InsertInvoice, InsertInvoiceExpense,
   UserRole, InvoiceScheme,
@@ -391,6 +391,11 @@ export async function updateInvoice(
     await lockInvoices(tx, [id]);
     const current = await _getInvoiceRaw(tx, id);
     if (!current) return null;
+    if ((changes.partnerId && changes.partnerId !== current.partnerId) || (changes.clientId && changes.clientId !== current.clientId)) {
+      const [payment] = await tx.select({ id: partnerPayments.id }).from(partnerPayments)
+        .where(eq(partnerPayments.invoiceId, id)).limit(1);
+      if (payment) throw new CommandError('Нельзя изменить владельца счёта с платежами. Сначала разберите связанные платежи', 409);
+    }
     if (changes.clientId && changes.clientId !== current.clientId) {
       const [transfer] = await tx.select({ id: invoiceTransfers.id }).from(invoiceTransfers)
         .where(or(eq(invoiceTransfers.fromInvoiceId, id), eq(invoiceTransfers.toInvoiceId, id))).limit(1);
@@ -572,6 +577,9 @@ export async function deleteInvoice(db: DBorTx, id: string): Promise<void> {
     const [transfer] = await tx.select({ id: invoiceTransfers.id }).from(invoiceTransfers)
       .where(or(eq(invoiceTransfers.fromInvoiceId, id), eq(invoiceTransfers.toInvoiceId, id))).limit(1);
     if (transfer) throw new CommandError("Сначала отмените переносы бюджета перед удалением счёта");
+    const [payment] = await tx.select({ id: partnerPayments.id }).from(partnerPayments)
+      .where(eq(partnerPayments.invoiceId, id)).limit(1);
+    if (payment) throw new CommandError('Нельзя удалить счёт с платежами: необходимо сохранить историю расчётов', 409);
     await tx.delete(invoices).where(eq(invoices.id, id));
   });
 }

@@ -1,9 +1,10 @@
 import { createDocumentStatusRouter } from './routes/documentStatus';
 import { createLoginAttemptLimiter } from './rateLimiter';
-import { storage } from "./storage";
+import { DatabaseStorage } from "./storage";
 import { db } from "./db";
-import { invoiceCommands } from "./services/invoiceCommands";
-import { backupService } from "./backupService";
+import { InvoiceCommands } from "./services/invoiceCommands";
+import { PaymentCommands } from "./services/paymentCommands";
+import { BackupService } from "./backupService";
 import { createAuthMiddleware } from "./middleware";
 import { Express, Request, Response, NextFunction } from "express";
 import { createAuthRouter } from "./routes/auth";
@@ -34,21 +35,24 @@ export function registerHealthCheck(app: Express) {
   });
 }
 
-export function registerRoutes(app: Express): void {
+export function registerRoutes(app: Express, database: typeof db = db, backups = new BackupService(database)): void {
+  const storage = new DatabaseStorage(database);
+  const invoiceCommands = new InvoiceCommands(database);
+  const paymentCommands = new PaymentCommands(database);
   const authMiddleware = createAuthMiddleware(storage);
-  app.use(createAuthRouter(storage, authMiddleware, createLoginAttemptLimiter(db)));
-  app.use(createDocumentStatusRouter(authMiddleware, db));
+  app.use(createAuthRouter(storage, authMiddleware, createLoginAttemptLimiter(database)));
+  app.use(createDocumentStatusRouter(authMiddleware, database));
   app.use(createClientsRouter(storage, authMiddleware));
-  app.use(createPartnersRouter(storage, authMiddleware));
+  app.use(createPartnersRouter(storage, authMiddleware, paymentCommands));
   app.use(createDashboardRouter(storage, authMiddleware));
-  app.use(createInvoicesRouter(storage, authMiddleware, db, invoiceCommands));
+  app.use(createInvoicesRouter(storage, authMiddleware, database, invoiceCommands));
   app.use(createActsRouter(storage, authMiddleware));
   app.use(createRecurringRouter(storage, authMiddleware));
   app.use(createExportRouter(storage, authMiddleware));
-  app.use(createBackupRouter(authMiddleware, backupService));
+  app.use(createBackupRouter(authMiddleware, backups));
   app.use(createActionLogRouter(storage, authMiddleware));
-  app.use(createAssistantRouter(authMiddleware, db));
+  app.use(createAssistantRouter(authMiddleware, database));
   app.use(createMyInvoicesRouter(storage, authMiddleware));
-  app.use(createMessagesRouter(storage, authMiddleware, db));
-  app.use(createMeRouter(storage, authMiddleware, db));
+  app.use(createMessagesRouter(storage, authMiddleware, database));
+  app.use(createMeRouter(storage, authMiddleware, database));
 }

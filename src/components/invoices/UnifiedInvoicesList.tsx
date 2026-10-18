@@ -299,13 +299,17 @@ export const UnifiedInvoicesList = ({
     return <CardSkeleton rows={3} />;
   }
 
-  if (statusCounts.all === 0 && !invoicesError) {
+  if (statusCounts.all === 0 && !invoicesError && !detailsOpen) {
     return (
       <>{archiveFilter}<EmptyState
         icon={FileText}
         title={archive === 'archived' ? "Архив пуст" : "Счета отсутствуют"}
         description={
-          role === 'assistant' 
+          role === 'admin' && archive === 'archived'
+            ? 'Здесь появятся счета, которые Вы отправите в архив.'
+            : role === 'admin' && archive === 'active'
+            ? 'Все счета могут находиться в архиве. Выберите «Все, включая архив», чтобы увидеть историю.'
+            : role === 'assistant'
             ? "Создайте первый счёт, чтобы начать работу" 
             : "У вас пока нет выставленных счетов"
         }

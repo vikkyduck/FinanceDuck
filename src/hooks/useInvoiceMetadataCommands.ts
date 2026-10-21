@@ -1,19 +1,24 @@
 import { apiPatch } from '@/lib/api';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { InvoiceEditorContext } from './invoiceEditorContext';
 import { useToast } from './use-toast';
 
 /** Invoice identity, labels, ownership and visibility. */
 export function useInvoiceMetadataCommands({ invoiceId, invoice, refresh: fetchInvoiceDetails }: InvoiceEditorContext) {
   const { toast } = useToast();
-  const [notes, setNotes] = useState("");
+  // Черновик поля: null — пользователь его не трогал, показываем значение с сервера.
+  const [notesDraft, setNotes] = useState<string | null>(null);
   const [updatingNotes, setUpdatingNotes] = useState(false);
-  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceNumberDraft, setInvoiceNumber] = useState<string | null>(null);
   const [updatingInvoiceNumber, setUpdatingInvoiceNumber] = useState(false);
-  const [hideFromAssistant, setHideFromAssistant] = useState(false);
+  const [hideDraft, setHideFromAssistant] = useState<boolean | null>(null);
   const [updatingHideFromAssistant, setUpdatingHideFromAssistant] =
     useState(false);
-  const [clientTitleEdit, setClientTitleEdit] = useState<string>("");
+  const [clientTitleDraft, setClientTitleEdit] = useState<string | null>(null);
+  const notes = notesDraft ?? (invoice?.notes || '');
+  const invoiceNumber = invoiceNumberDraft ?? (invoice?.invoice_number || '');
+  const hideFromAssistant = hideDraft ?? (invoice?.hidden_from_assistant || false);
+  const clientTitleEdit = clientTitleDraft ?? invoice?.client_title ?? '';
   const [updatingClientTitle, setUpdatingClientTitle] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveClientId, setMoveClientId] = useState<string>("");
@@ -30,6 +35,7 @@ export function useInvoiceMetadataCommands({ invoiceId, invoice, refresh: fetchI
         description: "Комментарий обновлён",
       });
       await fetchInvoiceDetails();
+      setNotes(null);
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -64,6 +70,7 @@ export function useInvoiceMetadataCommands({ invoiceId, invoice, refresh: fetchI
         description: "Номер счета обновлён",
       });
       await fetchInvoiceDetails();
+      setInvoiceNumber(null);
     } catch (error: unknown) {
       toast({
         title: "Ошибка",
@@ -84,6 +91,7 @@ export function useInvoiceMetadataCommands({ invoiceId, invoice, refresh: fetchI
       setHideFromAssistant(newValue);
 
       await fetchInvoiceDetails();
+      setHideFromAssistant(null);
 
       toast({
         title: "Успешно",
@@ -149,6 +157,7 @@ export function useInvoiceMetadataCommands({ invoiceId, invoice, refresh: fetchI
         clientTitle: trimmed || null,
       });
       await fetchInvoiceDetails();
+      setClientTitleEdit(null);
       toast({
         title: "Сохранено",
         description: trimmed
@@ -167,12 +176,6 @@ export function useInvoiceMetadataCommands({ invoiceId, invoice, refresh: fetchI
       setUpdatingClientTitle(false);
     }
   };
-  useEffect(() => {
-    setNotes(invoice?.notes || '');
-    setInvoiceNumber(invoice?.invoice_number || '');
-    setHideFromAssistant(invoice?.hidden_from_assistant || false);
-    setClientTitleEdit(invoice?.client_title ?? '');
-  }, [invoice]);
   return {
     notes, setNotes, updatingNotes, setUpdatingNotes,
     invoiceNumber, setInvoiceNumber, updatingInvoiceNumber, setUpdatingInvoiceNumber,

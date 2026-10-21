@@ -2,20 +2,23 @@ import { apiPatch } from '@/lib/api';
 import { formatCurrency } from '@/lib/invoiceCalculations';
 import { normalizeCalculations } from '@/lib/invoiceHelpers';
 import { parseNum } from '@shared/financialEngine';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { InvoiceEditorContext } from './invoiceEditorContext';
 import { useToast } from './use-toast';
 
 /** Editable financial terms; canonical calculations stay on the server. */
 export function useInvoiceFinancialTerms({ invoiceId, invoice, refresh: fetchInvoiceDetails }: InvoiceEditorContext) {
   const { toast } = useToast();
-  const [partnerRate, setPartnerRate] = useState<number | "">("");
+  // Черновик поля: null — пользователь его не трогал, показываем значение с сервера.
+  const [partnerRateDraft, setPartnerRate] = useState<number | "" | null>(null);
   const [updatingPartnerRate, setUpdatingPartnerRate] = useState(false);
-  const [clientBillEdit, setClientBillEdit] = useState<number | "">("");
+  const [clientBillDraft, setClientBillEdit] = useState<number | "" | null>(null);
   const [updatingClientBill, setUpdatingClientBill] = useState(false);
-  const [plannedExpensesEdit, setPlannedExpensesEdit] = useState<number | "">(
-    "",
-  );
+  const [plannedExpensesDraft, setPlannedExpensesEdit] = useState<number | "" | null>(null);
+  const serverCalc = normalizeCalculations(invoice?.invoice_calculations ?? null);
+  const partnerRate = partnerRateDraft ?? (invoice?.scheme === 'commission_based' ? serverCalc?.commission_rate ?? invoice.partner_commission_rate ?? 10 : '');
+  const clientBillEdit = clientBillDraft ?? (invoice ? serverCalc?.client_bill ?? invoice.client_bill ?? 0 : '');
+  const plannedExpensesEdit = plannedExpensesDraft ?? (invoice ? parseNum(invoice.planned_expenses) : '');
   const [updatingPlannedExpenses, setUpdatingPlannedExpenses] = useState(false);
   const handleUpdateCommission = async (rate: number) => {
     if (!invoiceId || !invoice) return;
@@ -61,6 +64,7 @@ export function useInvoiceFinancialTerms({ invoiceId, invoice, refresh: fetchInv
         description: `Комиссия ${rate}% установлена, расчёты будут обновлены`,
       });
       await fetchInvoiceDetails();
+      setPartnerRate(null);
     } catch (error: unknown) {
       toast({
         title: "Системная ошибка",
@@ -101,6 +105,7 @@ export function useInvoiceFinancialTerms({ invoiceId, invoice, refresh: fetchInv
         description: `Сумма счёта обновлена: ${formatCurrency(newBill)}`,
       });
       await fetchInvoiceDetails();
+      setClientBillEdit(null);
     } catch (error: unknown) {
       toast({
         title: "Системная ошибка",
@@ -141,6 +146,7 @@ export function useInvoiceFinancialTerms({ invoiceId, invoice, refresh: fetchInv
       });
 
       await fetchInvoiceDetails();
+      setPlannedExpensesEdit(null);
     } catch (error: unknown) {
       toast({
         title: "Системная ошибка",
@@ -153,11 +159,6 @@ export function useInvoiceFinancialTerms({ invoiceId, invoice, refresh: fetchInv
       setUpdatingPlannedExpenses(false);
     }
   };
-  useEffect(() => {
-    const calc = normalizeCalculations(invoice?.invoice_calculations ?? null);
-    setPartnerRate(invoice?.scheme === 'commission_based' ? calc?.commission_rate ?? invoice.partner_commission_rate ?? 10 : '');
-    if (invoice) { setClientBillEdit(calc?.client_bill ?? invoice.client_bill ?? 0); setPlannedExpensesEdit(parseNum(invoice.planned_expenses)); }
-  }, [invoice]);
   return {
     partnerRate, setPartnerRate, updatingPartnerRate, setUpdatingPartnerRate,
     clientBillEdit, setClientBillEdit, updatingClientBill, setUpdatingClientBill,

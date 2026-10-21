@@ -57,6 +57,7 @@ mv -Tf /opt/finance-duck-next /opt/finance-duck
 install -m 644 deploy/finance-duck-worker.service /etc/systemd/system/finance-duck-worker.service
 systemctl daemon-reload
 systemctl enable finance-duck-worker
+switched_at=$(sudo -u postgres psql -At -d finance_duck -c "SELECT now()")
 systemctl start finance-duck finance-duck-worker
 for attempt in $(seq 1 20); do
   if curl -fsS http://127.0.0.1:5000/api/health > "$archive/health.json"; then break; fi
@@ -65,12 +66,13 @@ done
 curl -fsS http://127.0.0.1:5000/api/health > "$archive/health.json"
 systemctl is-active --quiet finance-duck
 systemctl is-active --quiet finance-duck-worker
-# The worker must have claimed the immediate jobs, not merely started Node.
-for attempt in $(seq 1 20); do
-  jobs=$(sudo -u postgres psql -At -d finance_duck -c "SELECT count(*) FROM scheduled_jobs WHERE key IN ('recurring-invoices','login-limit-cleanup') AND last_finished_at IS NOT NULL AND state='idle'")
-  if [[ "$jobs" == 2 ]]; then break; fi
+# The worker of this release must reach the database: a heartbeat with this commit,
+# started after the switch. Business job failures are alerts, not a reason to roll back.
+for attempt in $(seq 1 30); do
+  worker_commit=$(sudo -u postgres psql -At -d finance_duck -c "SELECT result::json->>'commit' FROM scheduled_jobs WHERE key = 'worker-heartbeat' AND last_started_at >= '$switched_at'")
+  if [[ "$worker_commit" == "$commit" ]]; then break; fi
   sleep 1
 done
-[[ "$jobs" == 2 ]]
+[[ "$worker_commit" == "$commit" ]]
 trap - ERR
 printf 'Release active: %s; previous: %s\n' "$commit" "$previous"

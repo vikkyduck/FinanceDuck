@@ -3,8 +3,10 @@ import fs from "fs";
 import path from "path";
 import type { ViteDevServer } from "vite";
 import { app } from "./index";
+import { listenHost } from "./listenConfig";
 
 const isProduction = process.env.NODE_ENV === "production";
+const host = listenHost();
 
 async function setupVite(server: Express, vite: ViteDevServer) {
   server.use(vite.middlewares);
@@ -61,7 +63,7 @@ function serveStatic(server: Express) {
 
   const port = Number(process.env.PORT ?? 5000);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid PORT");
-  server.listen(port, process.env.HOST ?? "0.0.0.0", () => {
+  server.listen(port, host, () => {
     console.log(`Server running on port ${port}`);
   });
 })();

@@ -11,7 +11,8 @@ import type { BackupService } from "./backupService";
 export function createApp(options: { database?: typeof db; backups?: BackupService; origins?: string } = {}) {
   const app = express();
 
-  app.set("trust proxy", 1);
+  // X-Forwarded-For верим только nginx на этом же хосте; прямой клиент свой IP не подделает.
+  app.set("trust proxy", "loopback");
 
   // Базовые заголовки безопасности (HSTS, анти-кликджекинг, nosniff, скрытие
   // X-Powered-By). CSP отключаем намеренно — SPA грузит инлайновые стили/скрипты,

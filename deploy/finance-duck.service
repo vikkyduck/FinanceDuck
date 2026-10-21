@@ -8,6 +8,8 @@ Type=simple
 User=financeduck
 Group=financeduck
 WorkingDirectory=/opt/finance-duck
+# Наружу только через nginx; не-loopback HOST в production роняет старт.
+Environment=HOST=127.0.0.1
 EnvironmentFile=/opt/finance-duck/.env
 ExecStart=/usr/bin/node /opt/finance-duck/dist-server/index.js
 Restart=on-failure

@@ -20,7 +20,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await close(); });
 
-async function createAgency(clientBill: string, marginRate: string, partnerRate: string) {
+async function createAgency(clientBill: string, marginRate: string, partnerRate: string | null) {
   return createInvoice(asDb(), {
     invoiceNumber: `AG-${Math.round(performance.now() * 1000)}`,
     clientId, partnerId, scheme: "agency" as const,
@@ -68,5 +68,19 @@ describe("createInvoice — agency (гибкая)", () => {
     expect(num(c.clientRemaining)).toBeCloseTo(500000, 2); // 600к − 100к
     expect(num(c.netProfitAdmin)).toBeCloseTo(250000, 2);  // не изменилась
     expect(num(c.partnerShareFromMargin)).toBeCloseTo(150000, 2); // партнёр не изменился
+  });
+
+  it("без ставки партнёра вся маржа остаётся админу и после пересчёта (N2)", async () => {
+    // В calc.commissionRate у 'agency' лежит маржа: брать её ставкой партнёра нельзя.
+    const inv = await createAgency("1000000", "40", null);
+    await createInvoiceExpense(asDb(), {
+      invoiceId: inv.id, description: "работа", amount: "100000",
+      createdBy: "00000000-0000-0000-0000-000000000001", paidByAdmin: false,
+    });
+    const c = await getCalc(inv.id);
+    expect(num(c.agencyMargin)).toBeCloseTo(400000, 2);
+    expect(num(c.partnerShareFromMargin)).toBe(0);
+    expect(num(c.adminShareFromMargin)).toBeCloseTo(400000, 2);
+    expect(num(c.netProfitAdmin)).toBeCloseTo(400000, 2);
   });
 });

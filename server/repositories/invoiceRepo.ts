@@ -210,7 +210,8 @@ async function _recalculateInvoiceExpenses(db: DBorTx, invoiceId: string): Promi
   }).from(invoiceExpenses).where(eq(invoiceExpenses.invoiceId, invoiceId));
   const existing = invoice.calculations;
   const bill = derivePeriodicClientBill(invoice) ?? moneyString(invoice.clientBill ?? existing?.clientBill ?? 0);
-  const partnerRate = parseNum(invoice.partnerCommissionRate ?? existing?.commissionRate);
+  // У 'agency' в кэше лежит маржа, поэтому ставка партнёра берётся только из колонки (пусто = 0).
+  const partnerRate = parseNum(invoice.scheme === 'agency' ? invoice.partnerCommissionRate : invoice.partnerCommissionRate ?? existing?.commissionRate);
   const marginRate = invoice.scheme === 'agency' ? parseNum(existing?.commissionRate) : 0;
   let computed = calculateInvoiceServer({ scheme: invoice.scheme, clientBill: bill, partnerCommRate: partnerRate, executorExpenses: sums.total, expensesByPartner: sums.partner, expensesByAdmin: sums.admin, plannedExpenses: invoice.plannedExpenses ?? 0, agencyMarginRate: marginRate });
   computed = applyPeriodicOverrides(invoice, computed);

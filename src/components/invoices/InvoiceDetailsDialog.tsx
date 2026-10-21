@@ -43,7 +43,12 @@ interface InvoiceDetailsDialogProps {
   userRole?: UserRole;
 }
 
-export const InvoiceDetailsDialog = ({
+// Черновики полей живут в состоянии редактора: другой счёт получает новый редактор с чистыми черновиками.
+export const InvoiceDetailsDialog = (props: InvoiceDetailsDialogProps) => (
+  <InvoiceDetailsEditor key={props.invoiceId ?? ""} {...props} />
+);
+
+const InvoiceDetailsEditor = ({
   open,
   onOpenChange,
   invoiceId,

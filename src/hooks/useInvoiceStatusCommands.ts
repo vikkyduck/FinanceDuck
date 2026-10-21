@@ -1,7 +1,7 @@
 import { apiPatch } from '@/lib/api';
 import { parseNum } from '@shared/financialEngine';
 import { format } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { InvoiceEditorContext } from './invoiceEditorContext';
 import { useToast } from './use-toast';
 
@@ -15,12 +15,13 @@ export function useInvoiceStatusCommands({ invoiceId, invoice, expenses, setStat
     remainingReserve?: number;
   } | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [plannedPaymentDate, setPlannedPaymentDate] = useState<
-    Date | undefined
-  >(undefined);
-  const [actualPaymentDate, setActualPaymentDate] = useState<Date | undefined>(
-    undefined,
-  );
+  // Черновик даты: null — не трогали, показываем дату с сервера; undefined — дату сняли.
+  const [plannedDraft, setPlannedPaymentDate] = useState<Date | undefined | null>(null);
+  const [actualDraft, setActualPaymentDate] = useState<Date | undefined | null>(null);
+  const serverPlanned = useMemo(() => invoice?.payment_date ? new Date(invoice.payment_date) : undefined, [invoice?.payment_date]);
+  const serverActual = useMemo(() => invoice?.actual_payment_date ? new Date(invoice.actual_payment_date) : undefined, [invoice?.actual_payment_date]);
+  const plannedPaymentDate = plannedDraft === null ? serverPlanned : plannedDraft;
+  const actualPaymentDate = actualDraft === null ? serverActual : actualDraft;
   const [updatingPaymentDate, setUpdatingPaymentDate] = useState(false);
   const handleStatusChangeRequest = (
     newStatus: "draft" | "sent" | "paid" | "cancelled",
@@ -130,6 +131,7 @@ export function useInvoiceStatusCommands({ invoiceId, invoice, expenses, setStat
       });
     }
 
+    setPlannedPaymentDate(null);
     setUpdatingPaymentDate(false);
   };
   const handleUpdateActualPaymentDate = async (newDate: Date | undefined) => {
@@ -164,12 +166,9 @@ export function useInvoiceStatusCommands({ invoiceId, invoice, expenses, setStat
       });
     }
 
+    setActualPaymentDate(null);
     setUpdatingPaymentDate(false);
   };
-  useEffect(() => {
-    setPlannedPaymentDate(invoice?.payment_date ? new Date(invoice.payment_date) : undefined);
-    setActualPaymentDate(invoice?.actual_payment_date ? new Date(invoice.actual_payment_date) : undefined);
-  }, [invoice]);
   return {
     pendingStatusChange, setPendingStatusChange, updatingStatus, setUpdatingStatus,
     plannedPaymentDate, setPlannedPaymentDate, actualPaymentDate, setActualPaymentDate,

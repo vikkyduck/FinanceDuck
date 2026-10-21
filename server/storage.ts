@@ -1,4 +1,5 @@
 import type { InvoiceActor } from './invoiceAccess';
+import { invoiceScope } from './invoiceQuery';
 import * as financialReportsRepo from './repositories/financialReportsRepo';
 import * as exportRepo from "./repositories/exportRepo";
 import type { StorageOperations } from "./storagePorts";
@@ -102,15 +103,8 @@ export class DatabaseStorage implements StorageOperations {
       })
       .from(invoices)
       .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId));
-    
-    let results;
-    if (role === 'partner' && partnerId) {
-      results = await query.where(eq(invoices.partnerId, partnerId));
-    } else if (role === 'client' && clientId) {
-      results = await query.where(eq(invoices.clientId, clientId));
-    } else {
-      results = await query;
-    }
+    // Тот же fail-closed скоуп, что у списка счетов: без привязки клиент и партнёр не видят ничего.
+    const results = await query.where(invoiceScope({ role, partnerId, clientId }));
     
     const today = new Date();
     let totalInvoices = 0;

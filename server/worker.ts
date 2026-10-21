@@ -1,18 +1,15 @@
+import path from 'node:path';
 import { db, pool } from './db';
 import { backupService } from './backupService';
-import { processAllDueRecurringInvoices } from './repositories/recurringRepo';
 import { pruneExpiredLoginAttempts } from './rateLimiter';
-import { JobRunner, nextDailyBackup, type Job } from './services/jobRunner';
+import { JobRunner, hourly, nextDailyBackup, type Job } from './services/jobRunner';
 import { startOutboxWorker } from './services/outbox';
+import { recurringInvoicesJob } from './services/recurringJob';
+import { releaseCommit, writeHeartbeat } from './services/workerHeartbeat';
 
 const runner = new JobRunner(db);
-const hourly = (now: Date) => new Date(now.getTime() + 60 * 60_000);
 const jobs: Job[] = [
-  { key: 'recurring-invoices', nextRunAt: hourly, run: async () => {
-    const result = await processAllDueRecurringInvoices(db);
-    if (result.errors.length) throw new Error(result.errors.join('; '));
-    return result;
-  } },
+  recurringInvoicesJob(db),
   { key: 'manual-backup', initialRunAt: new Date('9999-01-01'), nextRunAt: () => new Date('9999-01-01'), run: () => backupService.createBackup('manual') },
   { key: 'daily-backup', initialRunAt: nextDailyBackup(new Date()), nextRunAt: nextDailyBackup,
     run: () => backupService.createBackup('auto') },
@@ -28,10 +25,16 @@ const tick = () => {
 };
 const timer = setInterval(tick, 10_000);
 const stopOutbox = startOutboxWorker();
+const commit = releaseCommit(path.resolve(import.meta.dirname, '..'));
+const startedAt = new Date();
+const beat = () => { void writeHeartbeat(db, commit, startedAt).catch(() => console.error('[jobs] Heartbeat failed')); };
+const heartbeat = setInterval(beat, 30_000);
+beat();
 tick();
 console.log('[jobs] Worker started');
 for (const signal of ['SIGTERM', 'SIGINT'] as const) process.once(signal, () => {
   stopping = true;
   clearInterval(timer);
+  clearInterval(heartbeat);
   void (async () => { await stopOutbox(); await active; await pool.end(); })();
 });

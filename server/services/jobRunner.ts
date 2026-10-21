@@ -4,6 +4,7 @@ import { db } from '../db';
 import { scheduledJobs } from '../../shared/schema';
 
 const LEASE_MS = 5 * 60_000;
+export const hourly = (now: Date) => new Date(now.getTime() + 60 * 60_000);
 export interface Job {
   key: string;
   initialRunAt?: Date;

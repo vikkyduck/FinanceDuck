@@ -146,6 +146,18 @@ it('alert counts include only the authenticated scope, including missing tenant 
   for (const id of ids) await db.update(s.invoices).set({ status: 'sent' }).where(eq(s.invoices.id, id));
 });
 
+it('dashboard stats and financial summary aggregate only the authenticated scope, including hidden invoices and missing tenant identities', async () => {
+  for (const role of [...roles, 'partner-unscoped', 'client-unscoped']) {
+    const visible = role.includes('unscoped') ? [] : fixtures.filter(row => allowed(role as s.UserRole, row));
+    const summary = await request(role, '/api/financial-summary').then(r => r.json());
+    for (const stats of [await request(role, '/api/dashboard/stats').then(r => r.json()), summary.stats]) {
+      expect(stats.totalInvoices, role).toBe(visible.length);
+      expect(stats.totalClientBill, role).toBe(visible.length * 1000);
+    }
+    expect(summary.invoices.map((r: { id: string }) => r.id).sort(), role).toEqual(visible.map(r => r.id).sort());
+  }
+});
+
 it.each(roles)('%s: report and document permissions match the invoice scope', async role => {
   for (const row of fixtures.filter(r => r.scheme === 'agency_30')) {
     const preview = await request(role, '/api/admin/export/client-report/preview', 'POST', { invoiceId: row.id });

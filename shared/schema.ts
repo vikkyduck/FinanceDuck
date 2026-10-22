@@ -22,6 +22,10 @@ export const partners = pgTable("partners", {
   // Раньше роль угадывалась по подстрокам имени — хрупко и зашивало
   // личные данные владельца в код.
   leverageRole: text("leverage_role").notNull().default("external"),
+  // Клиенты этого партнера платят напрямую на счет владельца (владелец сам
+  // исполнитель или ведет проект своей компании). Его "сумма к переводу" не
+  // долг: деньги уже у владельца, поэтому в расчетах с партнерами его нет.
+  directToOwner: boolean("direct_to_owner").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

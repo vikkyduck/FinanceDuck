@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssistantBonusPayment } from "@shared/schema";
+import { ASSISTANT_BONUS_PER_ACT } from "@shared/financialEngine";
 
 interface UnpaidBonusData {
   total: number;
@@ -113,8 +114,8 @@ export const AssistantBonusManager = () => {
   const executorActsCount = stats?.executorActsCount || 0;
   const companyActsCount = stats?.companyActsCount || 0;
   const totalPaidInvoices = stats?.totalPaidInvoices || 0;
-  const executorActsAmount = executorActsCount * 1000;
-  const companyActsAmount = companyActsCount * 2000;
+  const executorActsAmount = executorActsCount * ASSISTANT_BONUS_PER_ACT.executor;
+  const companyActsAmount = companyActsCount * ASSISTANT_BONUS_PER_ACT.company;
   // Stats provides historical totals (totalEarned, totalPaid)
   const totalEarnedAmount = stats?.totalEarned || (executorActsAmount + companyActsAmount);
   const totalPaidAmount = stats?.totalPaid || 0;

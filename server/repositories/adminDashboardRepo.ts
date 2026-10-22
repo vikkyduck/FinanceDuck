@@ -3,6 +3,7 @@ import { parseNum } from "../../shared/financialEngine";
 import { clients, invoiceCalculations, invoices, partners } from "../../shared/schema";
 import { db as _db } from "../db";
 import type { DashboardInvoiceDetail, MonthlyData } from "../storage";
+import { getAssistantBonusAccrued } from "./actsRepo";
 
 type DB = typeof _db;
 
@@ -58,6 +59,13 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     yearlyKot: number;
     monthlyKrya: number;
     monthlyKot: number;
+    yearlyKryaAfterAssistants: number;
+    monthlyKryaAfterAssistants: number;
+  };
+  // Бонусы ассистентам за акты периода: платятся из доли Кря, прибыль не меняют.
+  assistantBonus: {
+    yearly: number;
+    monthly: number;
   };
   monthlySales: {
     draftsCount: number;
@@ -218,6 +226,10 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
 
   // Get recurring expected for selected month
   const recurringStats = await getRecurringExpectedForMonth(selectedYear, selectedMonth);
+  const [yearlyAssistantBonus, monthlyAssistantBonus] = await Promise.all([
+    getAssistantBonusAccrued(db, yearStartStr, yearEndStr),
+    getAssistantBonusAccrued(db, monthStartStr, monthEndStr),
+  ]);
 
   return {
     yearlySummary: {
@@ -236,6 +248,12 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
       yearlyKot: yearlyOwnerShare,
       monthlyKrya: monthlyOwnerShare,
       monthlyKot: monthlyOwnerShare,
+      yearlyKryaAfterAssistants: yearlyOwnerShare - yearlyAssistantBonus,
+      monthlyKryaAfterAssistants: monthlyOwnerShare - monthlyAssistantBonus,
+    },
+    assistantBonus: {
+      yearly: yearlyAssistantBonus,
+      monthly: monthlyAssistantBonus,
     },
     monthlySales: {
       draftsCount,

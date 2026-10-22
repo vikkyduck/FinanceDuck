@@ -23,6 +23,10 @@ export function isAgencyScheme(scheme: unknown): boolean {
   return schemePolicy(scheme)?.kind === 'agency';
 }
 
+/** Бонус ассистента за подписанный акт по оплаченному счету, который виден ассистенту.
+ *  Платится из доли Кря и на чистую прибыль не влияет. */
+export const ASSISTANT_BONUS_PER_ACT = { executor: 1000, company: 2000 } as const;
+
 /** Запасная база клиента для старых агентских строк без сохраненной
  *  clientBaseAfterMargin: жесткие схемы берут ставку маржи из реестра схем,
  *  гибкая 'agency' считает сумму минус сохраненную маржу. */

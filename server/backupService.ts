@@ -48,7 +48,7 @@ export function validateBackup(backup: unknown): BackupData {
       const revived = { ...row };
       if (legacy && key === "signedActs" && !("objectKey" in revived)) revived.objectKey = null;
       if (legacy && key === "invoices" && !("recurringOccurrenceKey" in revived)) revived.recurringOccurrenceKey = null;
-      return validateRow(key as TableKey, upgradeLegacyRow(key as TableKey, revived));
+      return validateRow(key as TableKey, upgradeLegacyRow(key as TableKey, revived, 5));
     });
   }
   // Old complete snapshots predate immutable occurrence keys. Preserve duplicate financial

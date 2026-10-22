@@ -71,8 +71,9 @@ export function pickExpense(body: unknown) {
 
 // Поля партнёра. leverageRole дополнительно ограничен: значение из
 // LEVERAGE_ROLES и менять может только админ (см. routes/partners.ts).
+// directToOwner тоже меняет только админ: он убирает партнера из долгов.
 export const PARTNER_WRITABLE_FIELDS = [
-  "name", "email", "phone", "telegram", "commissionRate", "leverageRole",
+  "name", "email", "phone", "telegram", "commissionRate", "leverageRole", "directToOwner",
 ] as const;
 
 // Роли партнёра для коэффициента эффективности (см. shared/schema.ts).

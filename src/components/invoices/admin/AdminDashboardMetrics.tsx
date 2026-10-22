@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { apiGet } from "@/lib/api";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
-import { 
+import { ReceivablesCard } from "./ReceivablesCard";
+import {
   TrendingUp, 
   Scale,
   Banknote,
@@ -41,6 +42,13 @@ interface DashboardStats {
     yearlyKot: number;
     monthlyKrya: number;
     monthlyKot: number;
+    yearlyKryaAfterAssistants?: number;
+    monthlyKryaAfterAssistants?: number;
+  };
+  // Бонусы ассистентам за акты периода, платятся из доли Кря.
+  assistantBonus?: {
+    yearly: number;
+    monthly: number;
   };
   monthlySales: {
     draftsCount: number;
@@ -220,6 +228,14 @@ const MONTH_NAMES = [
 ];
 
 const formatCurrency = (amount: number) => formatMoney(amount);
+
+const KryaAfterAssistants = ({ bonus, after, testId }: { bonus?: number; after?: number; testId: string }) => (
+  bonus === undefined || after === undefined ? null : (
+    <p className="text-xs text-muted-foreground" data-testid={testId} title="Бонусы ассистентам за акты этого периода">
+      после ассистентов{bonus > 0 ? ` (-${formatCurrency(bonus)})` : ""}: {formatCurrency(after)}
+    </p>
+  )
+);
 
 const wordScheta = (n: number) => n === 1 ? 'счёт' : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'счёта' : 'счетов';
 
@@ -632,6 +648,8 @@ export const AdminDashboardMetrics = () => {
         />
       </div>
 
+      <ReceivablesCard />
+
       {/* Owner Shares Card - Full Width */}
       <Card className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/20" data-testid="card-owner-shares">
         <CardHeader className="pb-2">
@@ -650,9 +668,12 @@ export const AdminDashboardMetrics = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
                   <p className="text-xs sm:text-sm text-muted-foreground">Доля Кря</p>
-                  <p className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-yearly-krya">
-                    {formatCurrency(stats.ownerShares.yearlyKrya)}
-                  </p>
+                  <div className="text-right sm:text-center">
+                    <p className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-yearly-krya">
+                      {formatCurrency(stats.ownerShares.yearlyKrya)}
+                    </p>
+                    <KryaAfterAssistants bonus={stats.assistantBonus?.yearly} after={stats.ownerShares.yearlyKryaAfterAssistants} testId="text-yearly-krya-after-assistants" />
+                  </div>
                 </div>
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
                   <p className="text-xs sm:text-sm text-muted-foreground">Доля Кота</p>
@@ -671,9 +692,12 @@ export const AdminDashboardMetrics = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
                   <p className="text-xs sm:text-sm text-muted-foreground">Доля Кря</p>
-                  <p className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-monthly-krya">
-                    {formatCurrency(stats.ownerShares.monthlyKrya)}
-                  </p>
+                  <div className="text-right sm:text-center">
+                    <p className="text-base sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-monthly-krya">
+                      {formatCurrency(stats.ownerShares.monthlyKrya)}
+                    </p>
+                    <KryaAfterAssistants bonus={stats.assistantBonus?.monthly} after={stats.ownerShares.monthlyKryaAfterAssistants} testId="text-monthly-krya-after-assistants" />
+                  </div>
                 </div>
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
                   <p className="text-xs sm:text-sm text-muted-foreground">Доля Кота</p>

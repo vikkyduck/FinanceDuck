@@ -49,6 +49,7 @@ export type DashboardStore = Pick<
   | "getPartnerDebtSummaries"
   | "getPartnerInvoicesDetail"
   | "getPriorityActions"
+  | "getReceivables"
   | "getRecurringInvoicesForMonth"
   | "globalSearch"
   | "recalculateAllInvoices"

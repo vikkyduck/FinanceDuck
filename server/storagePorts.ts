@@ -257,6 +257,7 @@ export interface ReportingQueries {
   getPartnerDebtSummaries(): ReturnType<
     typeof dashboardRepo.getPartnerDebtSummaries
   >;
+  getReceivables(): ReturnType<typeof dashboardRepo.getReceivables>;
   getDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getDoNotSpendData>;
   getPartnerSchemeDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getPartnerSchemeDoNotSpendData>;
   getExpectedCommission(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getExpectedCommission>;

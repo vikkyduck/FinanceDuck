@@ -12,9 +12,9 @@ import {
   ActType,
 } from "../../shared/schema";
 import {
-  eq, and, desc, isNull, or, inArray, sql, getTableColumns,
+  eq, and, desc, isNull, or, sql, getTableColumns,
 } from "drizzle-orm";
-import { parseNum } from "../../shared/financialEngine";
+import { parseNum, ASSISTANT_BONUS_PER_ACT } from "../../shared/financialEngine";
 
 type DB = typeof _db;
 
@@ -64,30 +64,35 @@ export async function getActsStatistics(
   const paidInvoicesCount = await db.select({ count: sql<number>`count(*)` })
     .from(invoices)
     .where(visibleCondition);
-
-  const visibleInvoices = await db.select({ id: invoices.id }).from(invoices).where(visibleCondition);
-  const visibleInvoiceIds = visibleInvoices.map(inv => inv.id.toString());
-
-  let executorActsCount = 0;
-  let companyActsCount  = 0;
-
-  if (visibleInvoiceIds.length > 0) {
-    const [executorResult] = await db.select({ count: sql<number>`count(*)` })
-      .from(signedActs)
-      .where(and(eq(signedActs.actType, 'executor'), inArray(signedActs.invoiceId, visibleInvoiceIds)));
-    executorActsCount = Number(executorResult?.count || 0);
-
-    const [companyResult] = await db.select({ count: sql<number>`count(*)` })
-      .from(signedActs)
-      .where(and(eq(signedActs.actType, 'company'), inArray(signedActs.invoiceId, visibleInvoiceIds)));
-    companyActsCount = Number(companyResult?.count || 0);
-  }
+  const acts = await countActsOfPaidInvoices(db, excludeHidden);
 
   return {
-    executorActs:      executorActsCount,
-    companyActs:       companyActsCount,
+    executorActs:      acts.executor,
+    companyActs:       acts.company,
     totalPaidInvoices: Number(paidInvoicesCount[0]?.count || 0),
   };
+}
+
+/** Акты по оплаченным счетам по типам: единое место правила бонуса ассистента.
+ *  excludeHidden убирает счета, скрытые от ассистента, period ограничивает дату загрузки акта. */
+async function countActsOfPaidInvoices(db: DB, excludeHidden: boolean, period?: { from: string; to: string }) {
+  const rows = await db.select({ actType: signedActs.actType, count: sql<number>`COUNT(*)::int` })
+    .from(signedActs)
+    .innerJoin(invoices, eq(signedActs.invoiceId, invoices.id))
+    .where(and(
+      eq(invoices.status, 'paid'),
+      excludeHidden ? or(isNull(invoices.hideFromAssistant), eq(invoices.hideFromAssistant, false)) : undefined,
+      period ? sql`DATE(${signedActs.createdAt}) BETWEEN ${period.from}::date AND ${period.to}::date` : undefined,
+    ))
+    .groupBy(signedActs.actType);
+  const count = (type: ActType) => Number(rows.find(row => row.actType === type)?.count ?? 0);
+  return { executor: count('executor'), company: count('company') };
+}
+
+/** Бонус ассистентам за акты, загруженные с from по to включительно (даты YYYY-MM-DD). */
+export async function getAssistantBonusAccrued(db: DB, from: string, to: string): Promise<number> {
+  const acts = await countActsOfPaidInvoices(db, true, { from, to });
+  return acts.executor * ASSISTANT_BONUS_PER_ACT.executor + acts.company * ASSISTANT_BONUS_PER_ACT.company;
 }
 
 export async function getAssistantStats(db: DB): Promise<{
@@ -100,7 +105,7 @@ export async function getAssistantStats(db: DB): Promise<{
   totalPaid:         number;
 }> {
   const stats      = await getActsStatistics(db, true);
-  const totalEarned = (stats.executorActs * 1000) + (stats.companyActs * 2000);
+  const totalEarned = (stats.executorActs * ASSISTANT_BONUS_PER_ACT.executor) + (stats.companyActs * ASSISTANT_BONUS_PER_ACT.company);
 
   const [paymentsResult] = await db.select({
     totalPaid: sql<string>`COALESCE(SUM(amount::numeric), 0)`,
@@ -145,7 +150,7 @@ export async function getUnpaidBonusTotal(db: DB): Promise<{
   totalPaid:    number;
 }> {
   const stats        = await getActsStatistics(db, true);
-  const totalEarned  = (stats.executorActs * 1000) + (stats.companyActs * 2000);
+  const totalEarned  = (stats.executorActs * ASSISTANT_BONUS_PER_ACT.executor) + (stats.companyActs * ASSISTANT_BONUS_PER_ACT.company);
 
   const [paymentsResult] = await db.select({
     totalPaid: sql<string>`COALESCE(SUM(amount::numeric), 0)`,

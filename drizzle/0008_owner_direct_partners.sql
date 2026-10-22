@@ -1,0 +1,1 @@
+ALTER TABLE "partners" ADD COLUMN "direct_to_owner" boolean DEFAULT false NOT NULL;

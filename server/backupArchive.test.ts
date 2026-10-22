@@ -54,7 +54,7 @@ it('queues a durable manual backup, completes in the worker, and exposes truthfu
   expect(await service.manualBackupStatus()).toMatchObject({ state:'idle', pending:false, filename:expect.stringMatching(/\.fdb$/) });
 });
 
-it('restores schema 5 archives and legacy JSON, while schema 6 preserves archive dates and rejects missing fields', async () => {
+it('restores schema 5 archives and legacy JSON, while schema 7 preserves archive dates and rejects missing fields', async () => {
   delete process.env.ACCESS_CODE_SECRET;
   const [partner] = await db.select().from(s.partners);
   const [client] = await db.select().from(s.clients);
@@ -65,7 +65,7 @@ it('restores schema 5 archives and legacy JSON, while schema 6 preserves archive
   const file = path.join(directory, info.id);
   const bytes = await readFile(file), offset = bytes.indexOf(10) + 1;
   const header = JSON.parse(bytes.subarray(0, offset).toString());
-  expect(header.schema).toBe(6);
+  expect(header.schema).toBe(7);
   await db.update(s.invoices).set({ archivedAt: null }).where(eq(s.invoices.id, invoice.id));
   expect((await service.restoreBackup(info.id)).success).toBe(true);
   expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual(invoice);
@@ -85,7 +85,29 @@ it('restores schema 5 archives and legacy JSON, while schema 6 preserves archive
   await expect(validateArchive(path.join(directory, legacyFile))).resolves.toBeUndefined();
   expect((await service.restoreBackup(legacyFile)).success).toBe(true);
   expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual({ ...invoice, archivedAt: null });
-  const malformed = path.join(directory, 'backup-manual-schema6-missing-field.fdb');
+  const malformed = path.join(directory, 'backup-manual-schema7-missing-field.fdb');
   await writeFile(malformed, Buffer.concat([bytes.subarray(0, offset), gzipSync(payload)]));
   await expect(validateArchive(malformed)).rejects.toThrow();
+});
+it('fills directToOwner=false for partners from schema 6 archives and rejects it missing in schema 7', async () => {
+  delete process.env.ACCESS_CODE_SECRET;
+  const [partner] = await db.select().from(s.partners);
+  await db.update(s.partners).set({ directToOwner: true }).where(eq(s.partners.id, partner.id));
+  const info = await service.createBackup();
+  const bytes = await readFile(path.join(directory, info.id)), offset = bytes.indexOf(10) + 1;
+  const header = JSON.parse(bytes.subarray(0, offset).toString());
+  const payload = gunzipSync(bytes.subarray(offset)).toString().trimEnd().split('\n').map(line => {
+    const item = JSON.parse(line);
+    if (item.kind === 'row' && item.table === 'partners') delete item.row.directToOwner;
+    return JSON.stringify(item);
+  }).join('\n') + '\n';
+  const schema6 = 'backup-manual-schema6-partners.fdb';
+  await writeFile(path.join(directory, schema6), Buffer.concat([
+    Buffer.from(JSON.stringify({ ...header, schema: 6 }) + '\n'), gzipSync(payload),
+  ]));
+  expect((await service.restoreBackup(schema6)).success).toBe(true);
+  expect((await db.select().from(s.partners).where(eq(s.partners.id, partner.id)))[0].directToOwner).toBe(false);
+  const schema7 = path.join(directory, 'backup-manual-schema7-missing-flag.fdb');
+  await writeFile(schema7, Buffer.concat([bytes.subarray(0, offset), gzipSync(payload)]));
+  await expect(validateArchive(schema7)).rejects.toThrow();
 });

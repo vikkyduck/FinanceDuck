@@ -252,6 +252,10 @@ export class DatabaseStorage implements StorageOperations {
     return dashboardRepo.getPartnerDebtSummaries(this.database);
   }
 
+  async getReceivables() {
+    return dashboardRepo.getReceivables(this.database);
+  }
+
   async getDoNotSpendData(actor: InvoiceActor) {
     return financialReportsRepo.getDoNotSpendData(this.database, actor);
   }

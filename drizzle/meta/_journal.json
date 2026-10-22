@@ -57,6 +57,13 @@
       "when": 1792329055704,
       "tag": "0007_invoice_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792699170762,
+      "tag": "0008_owner_direct_partners",
+      "breakpoints": true
     }
   ]
 }

@@ -117,6 +117,15 @@ dashboardRouter.get("/api/admin/partner-invoices/:partnerId", authMiddleware, re
   }
 });
 
+dashboardRouter.get("/api/admin/receivables", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.json(await storage.getReceivables());
+  } catch (error) {
+    console.error("Get receivables error:", error);
+    res.status(500).json({ error: "Failed to get receivables" });
+  }
+});
+
 dashboardRouter.get("/api/admin/client-ltv", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     res.json(await storage.getClientLTV(req.query.year ? parseInt(req.query.year as string) : undefined));

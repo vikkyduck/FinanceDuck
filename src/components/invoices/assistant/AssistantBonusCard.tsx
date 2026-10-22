@@ -12,6 +12,7 @@ import { apiGet } from "@/lib/api";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { AssistantBonusPayment } from "@shared/schema";
+import { ASSISTANT_BONUS_PER_ACT } from "@shared/financialEngine";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
 interface AssistantStats {
@@ -87,8 +88,8 @@ export const AssistantBonusCard = () => {
     );
   }
 
-  const companyActsAmount = stats.companyActsCount * 2000;
-  const executorActsAmount = stats.executorActsCount * 1000;
+  const companyActsAmount = stats.companyActsCount * ASSISTANT_BONUS_PER_ACT.company;
+  const executorActsAmount = stats.executorActsCount * ASSISTANT_BONUS_PER_ACT.executor;
   const progressPercent = Math.min((stats.assistantBonus / 50000) * 100, 100);
 
   const executorProgress = stats.totalPaidInvoices > 0 

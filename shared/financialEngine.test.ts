@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateInvoiceFinancials, parseNum } from "./financialEngine";
+import { calculateInvoiceFinancials, parseNum, agencyClientBaseFallback } from "./financialEngine";
 
 // Характеризующие тесты: фиксируют ТЕКУЩЕЕ поведение денежного движка,
 // чтобы будущий рефакторинг (или патч 2.4) не изменил расчёты незаметно.
@@ -148,5 +148,15 @@ describe("parseNum", () => {
     expect(parseNum(null)).toBe(0);
     expect(parseNum(undefined)).toBe(0);
     expect(parseNum("abc")).toBe(0);
+  });
+});
+
+describe("agencyClientBaseFallback", () => {
+  it("жесткие схемы дают ровно прежние 70% и 60% от суммы", () => {
+    expect(agencyClientBaseFallback("agency_30", 1234.56, 0)).toBe(1234.56 * 0.7);
+    expect(agencyClientBaseFallback("agency_40", 1234.56, 0)).toBe(1234.56 * 0.6);
+  });
+  it("гибкая agency считает сумму минус сохраненную маржу", () => {
+    expect(agencyClientBaseFallback("agency", 1000, 250)).toBe(750);
   });
 });

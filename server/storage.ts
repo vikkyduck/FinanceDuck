@@ -2,7 +2,7 @@ import type { InvoiceActor } from './invoiceAccess';
 import * as financialReportsRepo from './repositories/financialReportsRepo';
 import * as exportRepo from "./repositories/exportRepo";
 import type { StorageOperations } from "./storagePorts";
-import type { RecurringInvoiceForMonth, AssistantActionLogFilters, AssistantActionLogWithDetails, WorkingCapitalData, ClientLTVData, PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData, PartnerHeroMetricsData, DashboardInvoiceDetail, MonthlyData, MonthInvoiceDetail, DraftsStats, ForecastData, OverdueInvoice, PaymentHistoryEntry, PlanFactData, MonthlyPlanInput, DashboardStats } from "./storageTypes";
+import type { RecurringInvoiceForMonth, AssistantActionLogFilters, AssistantActionLogWithDetails, ClientLTVData, PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData, PartnerHeroMetricsData, DashboardInvoiceDetail, MonthlyData, MonthInvoiceDetail, DraftsStats, ForecastData, OverdueInvoice, PaymentHistoryEntry, PlanFactData, MonthlyPlanInput, DashboardStats } from "./storageTypes";
 export type * from "./storageTypes";
 import { db } from "./db";
 import { 
@@ -410,28 +410,6 @@ export class DatabaseStorage implements StorageOperations {
   }
 
   async getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData> { return dashboardRepo.getPartnerHeroMetrics(this.database, partnerId); }
-
-  async getWorkingCapital(): Promise<WorkingCapitalData | null> {
-    // Return mock data since working_capital_balance table doesn't exist in Neon yet
-    // TODO: Create working_capital_balance table in schema.ts and migrate
-    return {
-      id: 'wc-1',
-      amount: 0,
-      notes: 'Данные временно недоступны - требуется миграция таблицы',
-      updated_at: new Date().toISOString(),
-    };
-  }
-
-  async updateWorkingCapital(amount: number, notes: string | null, updatedBy: string): Promise<WorkingCapitalData> {
-    // Return updated mock data since table doesn't exist yet
-    // TODO: Implement actual update when table is created
-    return {
-      id: 'wc-1',
-      amount,
-      notes,
-      updated_at: new Date().toISOString(),
-    };
-  }
 
   async getClientLTV(year?: number) {
     return reportsRepo.getClientLTV(this.database, year);

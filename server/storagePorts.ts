@@ -46,7 +46,6 @@ import type {
   RecurringInvoiceForMonth,
   AssistantActionLogFilters,
   AssistantActionLogWithDetails,
-  WorkingCapitalData,
   ClientLTVData,
   PartnerClientStatsData,
   PartnerDocumentRiskData,
@@ -247,12 +246,6 @@ export interface ReportingQueries {
     partnerId: string,
   ): Promise<PartnerAgency30FundsData[]>;
   getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData>;
-  getWorkingCapital(): Promise<WorkingCapitalData | null>;
-  updateWorkingCapital(
-    amount: number,
-    notes: string | null,
-    updatedBy: string,
-  ): Promise<WorkingCapitalData>;
   getClientLTV(
     year?: number,
   ): Promise<{ data: ClientLTVData[]; availableYears: number[] }>;

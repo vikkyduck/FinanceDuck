@@ -23,6 +23,15 @@ export function isAgencyScheme(scheme: unknown): boolean {
   return schemePolicy(scheme)?.kind === 'agency';
 }
 
+/** Запасная база клиента для старых агентских строк без сохраненной
+ *  clientBaseAfterMargin: жесткие схемы берут ставку маржи из реестра схем,
+ *  гибкая 'agency' считает сумму минус сохраненную маржу. */
+export function agencyClientBaseFallback(scheme: unknown, clientBill: number, agencyMargin: number): number {
+  const policy = schemePolicy(scheme);
+  const marginRate = policy?.kind === 'agency' ? policy.marginRate : null;
+  return marginRate === null ? clientBill - agencyMargin : clientBill * ((100 - marginRate) / 100);
+}
+
 export interface FinancialResult {
   clientBill: number;
   commissionRate?: number;

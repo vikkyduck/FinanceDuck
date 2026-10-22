@@ -10,7 +10,7 @@ export const financialKeys = {
 };
 const prefixes = ['/api/invoices', '/api/admin/', '/api/client/', '/api/partner', '/api/clients',
   '/api/do-not-spend', '/api/expected-', '/api/dashboard/', '/api/assistant', '/api/accountant',
-  '/api/alert-counts', '/api/priority-actions', '/api/overdue', '/api/document-status', '/api/working-capital', '/api/financial-'];
+  '/api/alert-counts', '/api/priority-actions', '/api/overdue', '/api/document-status', '/api/financial-'];
 const legacyKeys = new Set(['dashboard-stats', 'invoices', 'admin-stats', 'admin-monthly-data',
   'invoices-by-month', 'invoices-overdue', 'partner-debt', 'client-ltv', 'admin-forecast', 'admin-drafts-stats', 'assistant-monthly-chart']);
 export const isFinancialQuery = (key: QueryKey) => {

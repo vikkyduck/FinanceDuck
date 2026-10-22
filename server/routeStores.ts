@@ -50,10 +50,8 @@ export type DashboardStore = Pick<
   | "getPartnerInvoicesDetail"
   | "getPriorityActions"
   | "getRecurringInvoicesForMonth"
-  | "getWorkingCapital"
   | "globalSearch"
   | "recalculateAllInvoices"
-  | "updateWorkingCapital"
   | "upsertMonthlyPlan"
 >;
 export type ExportStore = Pick<

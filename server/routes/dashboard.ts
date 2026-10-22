@@ -117,25 +117,6 @@ dashboardRouter.get("/api/admin/partner-invoices/:partnerId", authMiddleware, re
   }
 });
 
-dashboardRouter.get("/api/admin/working-capital", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
-  try {
-    res.json(await storage.getWorkingCapital());
-  } catch (error) {
-    console.error("Get working capital error:", error);
-    res.status(500).json({ error: "Failed to get working capital" });
-  }
-});
-
-dashboardRouter.patch("/api/admin/working-capital", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { amount, notes } = req.body;
-    res.json(await storage.updateWorkingCapital(amount, notes, req.user!.token.id));
-  } catch (error) {
-    console.error("Update working capital error:", error);
-    res.status(500).json({ error: "Failed to update working capital" });
-  }
-});
-
 dashboardRouter.get("/api/admin/client-ltv", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     res.json(await storage.getClientLTV(req.query.year ? parseInt(req.query.year as string) : undefined));

@@ -3,7 +3,7 @@ import { invoiceScope } from './invoiceQuery';
 import * as financialReportsRepo from './repositories/financialReportsRepo';
 import * as exportRepo from "./repositories/exportRepo";
 import type { StorageOperations } from "./storagePorts";
-import type { RecurringInvoiceForMonth, AssistantActionLogFilters, AssistantActionLogWithDetails, WorkingCapitalData, ClientLTVData, PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData, PartnerHeroMetricsData, DashboardInvoiceDetail, MonthlyData, MonthInvoiceDetail, DraftsStats, ForecastData, OverdueInvoice, PaymentHistoryEntry, PlanFactData, MonthlyPlanInput, DashboardStats } from "./storageTypes";
+import type { RecurringInvoiceForMonth, AssistantActionLogFilters, AssistantActionLogWithDetails, ClientLTVData, PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData, PartnerHeroMetricsData, DashboardInvoiceDetail, MonthlyData, MonthInvoiceDetail, DraftsStats, ForecastData, OverdueInvoice, PaymentHistoryEntry, PlanFactData, MonthlyPlanInput, DashboardStats } from "./storageTypes";
 export type * from "./storageTypes";
 import { db } from "./db";
 import { 
@@ -24,6 +24,8 @@ import * as recurringRepo   from "./repositories/recurringRepo";
 import * as actsRepo        from "./repositories/actsRepo";
 import * as actionLogRepo   from "./repositories/actionLogRepo";
 import * as dashboardRepo    from "./repositories/dashboardRepo";
+import * as ownerLedgerRepo  from "./repositories/ownerLedgerRepo";
+import * as documentPackagesRepo from "./repositories/documentPackagesRepo";
 import * as alertsRepo from "./repositories/alertsRepo";
 import * as planningRepo from "./repositories/planningRepo";
 import * as reportsRepo from "./repositories/reportsRepo";
@@ -246,6 +248,16 @@ export class DatabaseStorage implements StorageOperations {
     return dashboardRepo.getPartnerDebtSummaries(this.database);
   }
 
+  async getReceivables() {
+    return dashboardRepo.getReceivables(this.database);
+  }
+
+  async getPayables() { return ownerLedgerRepo.getPayables(this.database); }
+  async getOwnerLedger() { return ownerLedgerRepo.getOwnerLedger(this.database); }
+  async createOwnerPayout(payout: Parameters<typeof ownerLedgerRepo.createOwnerPayout>[1]) { return ownerLedgerRepo.createOwnerPayout(this.database, payout); }
+  async deleteOwnerPayout(id: string) { return ownerLedgerRepo.deleteOwnerPayout(this.database, id); }
+  async setOwnerLedgerStart(start: Parameters<typeof ownerLedgerRepo.setOwnerLedgerStart>[1]) { return ownerLedgerRepo.setOwnerLedgerStart(this.database, start); }
+
   async getDoNotSpendData(actor: InvoiceActor) {
     return financialReportsRepo.getDoNotSpendData(this.database, actor);
   }
@@ -362,12 +374,15 @@ export class DatabaseStorage implements StorageOperations {
   async recalculateAllInvoices() { return invoiceRepo.recalculateAllInvoices(this.database); }
 
   // Signed Acts methods
-  async createSignedAct(act: InsertSignedAct)                        { return actsRepo.createSignedAct(this.database, act); }
+  async createSignedAct(act: InsertSignedAct, pkg?: { executorName: string | null }) { return actsRepo.createSignedAct(this.database, act, undefined, pkg); }
+  async getInvoicePackages(invoiceId: string) { return documentPackagesRepo.getInvoicePackages(this.database, invoiceId); }
+  async getPackagesByStatus(status: string, excludeHidden: boolean) { return documentPackagesRepo.getPackagesByStatus(this.database, status, excludeHidden); }
+  async reviewPackage(id: string, action: documentPackagesRepo.PackageReview, comment: string | null, reviewerId: string) { return documentPackagesRepo.reviewPackage(this.database, id, action, comment, reviewerId); }
   async getSignedActsByInvoice(invoiceId: string, actType?: ActType)  { return actsRepo.getSignedActsByInvoice(this.database, invoiceId, actType); }
   async openSignedActFile(id: string) { return actsRepo.openSignedActFile(this.database, id); }
   async readSignedActData(id: string) { return actsRepo.readSignedActData(this.database, id); }
   async getSignedAct(id: string)                                      { return actsRepo.getSignedAct(this.database, id); }
-  async deleteSignedAct(id: string)                                   { return actsRepo.deleteSignedAct(this.database, id); }
+  async deleteSignedAct(id: string, ownerEdit?: boolean)              { return actsRepo.deleteSignedAct(this.database, id, ownerEdit); }
   async getActsStatistics(excludeHidden = false)                      { return actsRepo.getActsStatistics(this.database, excludeHidden); }
   async getAssistantStats()                                           { return actsRepo.getAssistantStats(this.database); }
   async getAssistantBonusPayments()                                   { return actsRepo.getAssistantBonusPayments(this.database); }
@@ -404,28 +419,6 @@ export class DatabaseStorage implements StorageOperations {
   }
 
   async getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData> { return dashboardRepo.getPartnerHeroMetrics(this.database, partnerId); }
-
-  async getWorkingCapital(): Promise<WorkingCapitalData | null> {
-    // Return mock data since working_capital_balance table doesn't exist in Neon yet
-    // TODO: Create working_capital_balance table in schema.ts and migrate
-    return {
-      id: 'wc-1',
-      amount: 0,
-      notes: 'Данные временно недоступны - требуется миграция таблицы',
-      updated_at: new Date().toISOString(),
-    };
-  }
-
-  async updateWorkingCapital(amount: number, notes: string | null, updatedBy: string): Promise<WorkingCapitalData> {
-    // Return updated mock data since table doesn't exist yet
-    // TODO: Implement actual update when table is created
-    return {
-      id: 'wc-1',
-      amount,
-      notes,
-      updated_at: new Date().toISOString(),
-    };
-  }
 
   async getClientLTV(year?: number) {
     return reportsRepo.getClientLTV(this.database, year);

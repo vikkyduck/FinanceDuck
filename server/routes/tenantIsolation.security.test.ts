@@ -25,6 +25,7 @@ const storageMock = vi.hoisted(() => ({
   getPartnerClients: vi.fn(),
   getPartnerPayments: vi.fn(),
   updateClient: vi.fn(),
+  updatePartner: vi.fn(),
   setClientPartners: vi.fn(),
   logAssistantAction: vi.fn(),
 }));
@@ -343,4 +344,20 @@ it("partner payments require a role and an explicit partner scope", async () => 
   expect((await fetch(`${baseUrl}/api/partner-payments`, { headers: actorHeaders('admin') })).status).toBe(400);
   expect((await fetch(`${baseUrl}/api/partner-payments?partnerId=${partnerB.id}`, { headers: actorHeaders('partner', { partnerId: partnerA.id }) })).status).toBe(200);
   expect(storageMock.getPartnerPayments).toHaveBeenCalledWith(partnerA.id);
+});
+
+it("only admin can mark a partner as paid directly to the owner", async () => {
+  storageMock.updatePartner.mockImplementation(async (id: string, data: object) => ({ ...partnerA, ...data, id }));
+  const patch = (role: string, body: unknown) => fetch(`${baseUrl}/api/partners/${partnerA.id}`, {
+    method: "PATCH",
+    headers: { ...actorHeaders(role), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  expect((await patch("assistant", { name: "Partner A", directToOwner: true })).status).toBe(200);
+  expect(storageMock.updatePartner).toHaveBeenLastCalledWith(partnerA.id, { name: "Partner A" });
+  expect((await patch("admin", { directToOwner: "yes" })).status).toBe(400);
+  const response = await patch("admin", { directToOwner: true });
+  expect(response.status).toBe(200);
+  expect(storageMock.updatePartner).toHaveBeenLastCalledWith(partnerA.id, { directToOwner: true });
+  expect((await response.json()).directToOwner).toBe(true);
 });

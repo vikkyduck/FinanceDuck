@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeText, sanitizeNumber, sanitizeDate } from "@/lib/sanitize";
+import { formatDate, todayIsoDate } from "@/lib/format";
 import { invoiceService } from "@/lib/services/invoices";
 import { Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,6 +23,7 @@ interface EditExpenseDialogProps {
     amount?: number | string;
     date?: string;
     paidByAdmin?: boolean;
+    paidAt?: string | null;
   } | null;
   onSuccess?: () => void;
 }
@@ -32,6 +35,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [isAdminExpense, setIsAdminExpense] = useState(false);
+  const [isPaid, setIsPaid] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -40,6 +44,7 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
       setAmount((expense.amount ?? 0).toString());
       setDate(expense.date ?? "");
       setIsAdminExpense(expense.paidByAdmin || false);
+      setIsPaid(expense.paidAt !== null);
     }
   }, [expense]);
 
@@ -86,6 +91,8 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
         amount: sanitizedAmount.toString(),
         date: sanitizedDate,
         paidByAdmin: isAdminExpense,
+        // Уже оплаченный расход сохраняет свою дату оплаты.
+        paidAt: isPaid ? expense.paidAt ?? todayIsoDate() : null,
       });
 
       toast({
@@ -186,6 +193,11 @@ export const EditExpenseDialog = ({ open, onOpenChange, expense, onSuccess }: Ed
               </label>
             </RadioGroup>
           </div>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox checked={isPaid} onCheckedChange={(v) => setIsPaid(v === true)} data-testid="checkbox-edit-expense-paid" />
+            Исполнителю оплачено{isPaid && expense?.paidAt ? ` ${formatDate(expense.paidAt)}` : ""}
+          </label>
 
           <div className="flex justify-end gap-2">
             <Button 

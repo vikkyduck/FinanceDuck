@@ -26,8 +26,6 @@ export interface InvoiceCalculations {
   net_profit_admin: number;
   admin_share_50: number;
   cat_share_50: number;
-  tax_amount?: number;
-  amount_after_tax?: number;
 }
 
 /**
@@ -53,60 +51,6 @@ export function calculateInvoice(input: FinancialInputs): InvoiceCalculations {
     client_base_after_margin:  f.clientBaseAfterMargin,
     client_spent:              f.clientSpent,
     client_remaining:          f.clientRemaining,
-  };
-}
-
-/**
- * Calculates partner debt to admin based on scheme.
- * When possible, use the stored `partnerTransferDue` from invoice_calculations as source of truth.
- */
-export function calculatePartnerDebt(
-  scheme: import("@shared/financialEngine").InvoiceScheme,
-  clientBill: number,
-  partnerCommission: number,
-  expensesPaidByPartner: number = 0,
-  expensesPaidByAdmin: number = 0,
-  storedPartnerTransferDue?: number,
-): { debtToAdmin: number; doNotSpendAmount: number; adminNetAfterOwnExpenses: number } {
-  const totalExpenses = expensesPaidByPartner + expensesPaidByAdmin;
-
-  if (scheme === 'agency_30') {
-    const adminShare    = clientBill * 0.15;
-    const clientBase    = clientBill * 0.70;
-    const doNotSpendAmount = Math.max(0, clientBase - totalExpenses);
-    const debtToAdmin   = storedPartnerTransferDue !== undefined
-      ? Math.max(0, storedPartnerTransferDue)
-      : adminShare;
-    return { debtToAdmin, doNotSpendAmount, adminNetAfterOwnExpenses: debtToAdmin - expensesPaidByAdmin };
-  }
-
-  if (scheme === 'agency_40') {
-    const adminShare    = clientBill * 0.24;
-    const clientBase    = clientBill * 0.60;
-    const doNotSpendAmount = Math.max(0, clientBase - totalExpenses);
-    const debtToAdmin   = storedPartnerTransferDue !== undefined
-      ? Math.max(0, storedPartnerTransferDue)
-      : adminShare;
-    return { debtToAdmin, doNotSpendAmount, adminNetAfterOwnExpenses: debtToAdmin - expensesPaidByAdmin };
-  }
-
-  let calculatedDebt: number;
-  if (storedPartnerTransferDue !== undefined) {
-    calculatedDebt = storedPartnerTransferDue;
-  } else {
-    let commissionRate: number;
-    if (scheme === 'partner_10')      commissionRate = 10;
-    else if (scheme === 'partner_15') commissionRate = 15;
-    else commissionRate = clientBill > 0 ? (partnerCommission / clientBill) * 100 : 0;
-    const commissionAmount = clientBill * (commissionRate / 100);
-    calculatedDebt = clientBill - commissionAmount - expensesPaidByPartner;
-  }
-
-  const debtToAdmin = Math.max(0, calculatedDebt);
-  return {
-    debtToAdmin,
-    doNotSpendAmount: 0,
-    adminNetAfterOwnExpenses: debtToAdmin - expensesPaidByAdmin,
   };
 }
 

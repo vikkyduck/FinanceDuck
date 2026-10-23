@@ -161,7 +161,7 @@ const PARTNER_BASE_FIELDS = [
 ] as const;
 
 const PARTNER_INTERNAL_FIELDS = [
-  'email', 'phone', 'telegram', 'commissionRate', 'leverageRole',
+  'email', 'phone', 'telegram', 'commissionRate', 'leverageRole', 'directToOwner',
 ] as const;
 
 const CLIENT_SETTINGS_ROLES: ReadonlySet<UserRole> = new Set([

@@ -3,6 +3,8 @@ import { parseNum } from "../../shared/financialEngine";
 import { clients, invoiceCalculations, invoices, partners } from "../../shared/schema";
 import { db as _db } from "../db";
 import type { DashboardInvoiceDetail, MonthlyData } from "../storage";
+import { getAssistantBonusAccrued } from "./actsRepo";
+import { arrivedProfit, profitArrivals, splitShares } from "./ownerLedgerRepo";
 
 type DB = typeof _db;
 
@@ -53,11 +55,22 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     recurring: number;
   };
   monthlyProfit: number;
+  // Доли по прибыли, которая пришла на счет ИП за период: по внешним партнерам
+  // после их перевода, по партнерам-владельцам в день оплаты клиентом.
   ownerShares: {
+    yearlyArrived: number;
+    monthlyArrived: number;
     yearlyKrya: number;
     yearlyKot: number;
     monthlyKrya: number;
     monthlyKot: number;
+    yearlyKryaAfterAssistants: number;
+    monthlyKryaAfterAssistants: number;
+  };
+  // Бонусы ассистенту за период: Кря платит их с личного счета, прибыль не меняют.
+  assistantBonus: {
+    yearly: number;
+    monthly: number;
   };
   monthlySales: {
     draftsCount: number;
@@ -212,12 +225,19 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
   if (!yearsSet.has(now.getFullYear())) yearsSet.add(now.getFullYear());
   const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
 
-  // Owner shares: split profit 50/50
-  const yearlyOwnerShare = yearlyProfit / 2;
-  const monthlyOwnerShare = monthlyProfit / 2;
-
   // Get recurring expected for selected month
   const recurringStats = await getRecurringExpectedForMonth(selectedYear, selectedMonth);
+  const [yearlyAssistantBonus, monthlyAssistantBonus, { arrivals }] = await Promise.all([
+    getAssistantBonusAccrued(db, yearStartStr, yearEndStr),
+    getAssistantBonusAccrued(db, monthStartStr, monthEndStr),
+    profitArrivals(db),
+  ]);
+
+  // Доли 50/50 по пришедшей прибыли, по тому же правилу, что "Переводы Коту и себе".
+  const yearlyArrived = arrivedProfit(arrivals, yearStartStr, yearEndStr);
+  const monthlyArrived = arrivedProfit(arrivals, monthStartStr, monthEndStr);
+  const yearlyShares = splitShares(yearlyArrived);
+  const monthlyShares = splitShares(monthlyArrived);
 
   return {
     yearlySummary: {
@@ -232,10 +252,18 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     },
     monthlyProfit,
     ownerShares: {
-      yearlyKrya: yearlyOwnerShare,
-      yearlyKot: yearlyOwnerShare,
-      monthlyKrya: monthlyOwnerShare,
-      monthlyKot: monthlyOwnerShare,
+      yearlyArrived: yearlyArrived.toNumber(),
+      monthlyArrived: monthlyArrived.toNumber(),
+      yearlyKrya: yearlyShares.krya.toNumber(),
+      yearlyKot: yearlyShares.kot.toNumber(),
+      monthlyKrya: monthlyShares.krya.toNumber(),
+      monthlyKot: monthlyShares.kot.toNumber(),
+      yearlyKryaAfterAssistants: yearlyShares.krya.minus(yearlyAssistantBonus).toNumber(),
+      monthlyKryaAfterAssistants: monthlyShares.krya.minus(monthlyAssistantBonus).toNumber(),
+    },
+    assistantBonus: {
+      yearly: yearlyAssistantBonus,
+      monthly: monthlyAssistantBonus,
     },
     monthlySales: {
       draftsCount,

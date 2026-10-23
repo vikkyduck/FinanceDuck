@@ -125,7 +125,9 @@ export class InvoiceCommands {
   }
 
   createExpense(actor: CommandActor, input: RecordExpense) {
-    const fields = parseCommand(expenseInput, input);
+    const parsed = parseCommand(expenseInput, input);
+    // Без paidAt расход оплачен в свою дату, как до учета оплат исполнителям.
+    const fields = { ...parsed, paidAt: parsed.paidAt === undefined ? parsed.date ?? new Date().toISOString().slice(0, 10) : parsed.paidAt };
     return this.run(actor, [input.invoiceId], 'create_expense', input, async tx => {
       const expense = await repo.createInvoiceExpense(tx, { ...fields, invoiceId: input.invoiceId, createdBy: actor.tokenId });
       const invoice = (await repo.getInvoice(tx, input.invoiceId))!;

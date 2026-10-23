@@ -76,6 +76,9 @@ export function InvoiceExpensesSection({ model }: { model: Props }) {
                   <TableCell>{formatDate(expense.date)}</TableCell>
                   <TableCell className="[overflow-wrap:anywhere]">
                     {expense.description}
+                    {expense.paidAt === null && (
+                      <span className="ml-2 text-xs text-amber-600 dark:text-amber-400 whitespace-nowrap">не оплачено</span>
+                    )}
                   </TableCell>
                   {!(
                     userRole === "client" &&

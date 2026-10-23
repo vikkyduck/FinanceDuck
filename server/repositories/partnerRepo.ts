@@ -8,7 +8,7 @@ import {
   Partner, PartnerPayment,
   InsertPartner, InsertPartnerPayment, signedActs,
 } from "../../shared/schema";
-import { parseNum, isAgencyScheme, AGENCY_SCHEMES } from "../../shared/financialEngine";
+import { parseNum, isAgencyScheme, AGENCY_SCHEMES, agencyClientBaseFallback } from "../../shared/financialEngine";
 import type { PartnerClientStatsData, PartnerDocumentRiskData, PartnerAgency30FundsData } from "../storage";
 import type { db as _db } from "../db";
 
@@ -245,7 +245,7 @@ export async function getPartnerClientStats(db: Db, partnerId: string, year: num
       // База клиента — из расчётов (гибкая 'agency' жёсткой ставки не имеет);
       // запасной путь для старых строк без сохранённой базы.
       const storedBase = parseNum(row.calculations.clientBaseAfterMargin);
-      const clientBase = storedBase || clientBill * (scheme === 'agency_40' ? 0.60 : 0.70);
+      const clientBase = storedBase || agencyClientBaseFallback(scheme, clientBill, parseNum(row.calculations.agencyMargin));
       const expenses = parseNum(row.calculations.executorExpensesTotal);
       clientRemaining = Math.max(0, clientBase - expenses);
     } else {
@@ -359,10 +359,7 @@ export async function getPartnerAgency30Funds(db: Db, partnerId: string): Promis
     // Client money that partner must not spend: из сохранённой базы расчётов;
     // запасной путь только для старых жёстких схем (у гибкой 'agency' база
     // всегда персистится — ставка не фиксированная).
-    const scheme = row.invoice.scheme;
-    const fallbackBase = scheme === 'agency'
-      ? clientBill - parseNum(row.calculations.agencyMargin)
-      : clientBill * (scheme === 'agency_40' ? 0.6 : 0.7);
+    const fallbackBase = agencyClientBaseFallback(row.invoice.scheme, clientBill, parseNum(row.calculations.agencyMargin));
     const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || fallbackBase;
     // Бюджет с поправкой на переносы + остаток из сохранённого расчёта:
     // один источник истины с кабинетом клиента и аудитом денег.

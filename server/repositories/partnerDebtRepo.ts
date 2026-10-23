@@ -1,10 +1,13 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import Decimal from "decimal.js";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { parseNum } from "../../shared/financialEngine";
 import { clients, invoiceCalculations, invoiceExpenses, invoices, partnerPayments, partners } from "../../shared/schema";
 import { db as _db } from "../db";
 
 type DB = typeof _db;
 
+/** Partners marked directToOwner are skipped: their clients pay the owner directly,
+ *  so the stored transfer due is not a debt. */
 export async function getPartnerDebtSummaries(db: DB): Promise<{
   partnerId: string;
   partnerName: string;
@@ -18,17 +21,19 @@ export async function getPartnerDebtSummaries(db: DB): Promise<{
   phone: string | null;
 }[]> {
   // Get all invoices for total counts
-  const allInvoicesList = await db
+  const allInvoicesList = (await db
     .select({
       invoice: invoices,
       calculations: invoiceCalculations,
       partnerName: partners.name,
       partnerEmail: partners.email,
       partnerPhone: partners.phone,
+      partnerDirectToOwner: partners.directToOwner,
     })
     .from(invoices)
     .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
-    .leftJoin(partners, eq(invoices.partnerId, partners.id));
+    .leftJoin(partners, eq(invoices.partnerId, partners.id)))
+    .filter(r => !r.partnerDirectToOwner);
 
   // Get all paid invoices with their stored partnerTransferDue values
   const paidInvoices = allInvoicesList.filter(r => r.invoice.status === 'paid');
@@ -118,7 +123,7 @@ export async function getPartnerDebtSummaries(db: DB): Promise<{
   const allPartnersDb = await db.select().from(partners);
 
   for (const partner of allPartnersDb) {
-    if (!partnerMap.has(partner.id)) {
+    if (!partner.directToOwner && !partnerMap.has(partner.id)) {
       partnerMap.set(partner.id, {
         partnerId: partner.id,
         partnerName: partner.name,
@@ -131,14 +136,6 @@ export async function getPartnerDebtSummaries(db: DB): Promise<{
         email: partner.email,
         phone: partner.phone,
       });
-    }
-  }
-
-  // Add payments even for partners without invoices
-  for (const payment of allPayments) {
-    if (partnerMap.has(payment.partnerId)) {
-      const summary = partnerMap.get(payment.partnerId)!;
-      // Already added above, but ensure we capture all payments
     }
   }
 
@@ -334,6 +331,42 @@ export async function getPartnerDebtDetails(db: DB, partnerId: string): Promise<
     },
     invoices: invoiceDetails,
     payments: paymentDetails,
+  };
+}
+
+/** "Нам должны" for the owner. Clients of directToOwner partners pay the owner, so their
+ *  sent and unpaid invoices are owed in full. Other partners owe what they received from
+ *  clients and have not transferred yet. */
+export async function getReceivables(db: DB): Promise<{
+  clients: { total: number; count: number; overdueTotal: number; overdueCount: number };
+  partners: { total: number; count: number };
+}> {
+  const bill = sql`COALESCE(${invoiceCalculations.clientBill}, ${invoices.clientBill}, 0)`;
+  const overdue = sql`${invoices.paymentDate} IS NOT NULL AND ${invoices.paymentDate} < CURRENT_DATE`;
+  const [clientRow] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${bill}), 0)`,
+      count: sql<number>`COUNT(*)::int`,
+      overdueTotal: sql<string>`COALESCE(SUM(CASE WHEN ${overdue} THEN ${bill} END), 0)`,
+      overdueCount: sql<number>`(COUNT(*) FILTER (WHERE ${overdue}))::int`,
+    })
+    .from(invoices)
+    .innerJoin(partners, eq(invoices.partnerId, partners.id))
+    .leftJoin(invoiceCalculations, eq(invoices.id, invoiceCalculations.invoiceId))
+    .where(and(eq(invoices.status, 'sent'), isNull(invoices.actualPaymentDate), eq(partners.directToOwner, true)));
+
+  const debts = (await getPartnerDebtSummaries(db)).filter(s => s.remaining > 0);
+  return {
+    clients: {
+      total: parseNum(clientRow?.total),
+      count: Number(clientRow?.count ?? 0),
+      overdueTotal: parseNum(clientRow?.overdueTotal),
+      overdueCount: Number(clientRow?.overdueCount ?? 0),
+    },
+    partners: {
+      total: debts.reduce((sum, s) => sum.plus(s.remaining), new Decimal(0)).toNumber(),
+      count: debts.length,
+    },
   };
 }
 

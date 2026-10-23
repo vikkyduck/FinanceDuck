@@ -1,5 +1,6 @@
 import { USER_ROLES, INVOICE_SCHEMES, INVOICE_STATUSES } from "./domainTypes";
-import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, uniqueIndex, integer, bigint } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, uniqueIndex, integer, bigint, check } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLES);
 export const invoiceSchemeEnum = pgEnum('invoice_scheme', INVOICE_SCHEMES);
@@ -22,6 +23,10 @@ export const partners = pgTable("partners", {
   // Раньше роль угадывалась по подстрокам имени — хрупко и зашивало
   // личные данные владельца в код.
   leverageRole: text("leverage_role").notNull().default("external"),
+  // Клиенты этого партнера платят напрямую на счет владельца (владелец сам
+  // исполнитель или ведет проект своей компании). Его "сумма к переводу" не
+  // долг: деньги уже у владельца, поэтому в расчетах с партнерами его нет.
+  directToOwner: boolean("direct_to_owner").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -192,6 +197,10 @@ export const invoiceExpenses = pgTable("invoice_expenses", {
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
   paidByAdmin: boolean("paid_by_admin").default(false).notNull(),
   date: date("date").defaultNow().notNull(),
+  // Когда расход оплачен исполнителю. NULL - еще не оплачен, и если его платит
+  // владелец, он попадает в "Мы должны". Миграция считает старые расходы
+  // оплаченными в их дату.
+  paidAt: date("paid_at"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -268,6 +277,48 @@ export const partnerPayments = pgTable("partner_payments", {
   index("idx_partner_payments_invoice").on(table.invoiceId),
 ]);
 
+// Деньги владельцев со счета ИП. kind 'payout' - перевод Коту или себе,
+// 'opening' - остаток на дату начала учета (одна строка на владельца).
+// Балансы считает ownerLedgerRepo.
+export const ownerTransfers = pgTable("owner_transfers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  owner: text("owner").notNull(),
+  kind: text("kind").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  transferDate: date("transfer_date").notNull(),
+  notes: text("notes"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_owner_transfers_owner_date").on(table.owner, table.transferDate),
+  uniqueIndex("uq_owner_transfers_opening").on(table.owner).where(sql`${table.kind} = 'opening'`),
+  check("owner_transfers_owner_check", sql`${table.owner} IN ('krya', 'kot')`),
+  check("owner_transfers_kind_check", sql`${table.kind} IN ('opening', 'payout')`),
+  check("owner_transfers_payout_positive", sql`${table.kind} <> 'payout' OR ${table.amount} > 0`),
+]);
+
+// Пакет документов ассистента для бонуса: документы с клиентом по счету или с одним
+// исполнителем. Владелец принимает или возвращает пакет целиком, бонус начисляется
+// в момент принятия (accepted_at). Документы до 22.10.2026 пакетов не имеют.
+export const documentPackages = pgTable("document_packages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  side: text("side").notNull(),
+  executorName: text("executor_name"),
+  status: text("status").notNull().default('pending'),
+  reviewComment: text("review_comment"),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_document_packages_identity").on(table.invoiceId, table.side, sql`lower(coalesce(${table.executorName}, ''))`),
+  index("idx_document_packages_status").on(table.status),
+  check("document_packages_side_check", sql`${table.side} IN ('client', 'executor')`),
+  check("document_packages_status_check", sql`${table.status} IN ('pending', 'accepted', 'returned')`),
+  check("document_packages_executor_check", sql`${table.side} = 'executor' OR ${table.executorName} IS NULL`),
+]);
+
 export const signedActs = pgTable("signed_acts", {
   id: uuid("id").defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
@@ -280,9 +331,12 @@ export const signedActs = pgTable("signed_acts", {
   url: text("url"),
   uploadedBy: uuid("uploaded_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  // Пакет ассистента, NULL у документов до 22.10.2026 и загруженных не ассистентом.
+  packageId: uuid("package_id").references(() => documentPackages.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_signed_acts_invoice").on(table.invoiceId),
   index("idx_signed_acts_type").on(table.actType),
+  index("idx_signed_acts_package").on(table.packageId),
 ]);
 
 export const monthlyFinancialPlans = pgTable("monthly_financial_plans", {
@@ -414,7 +468,9 @@ export type InsertPartnerPayment = typeof partnerPayments.$inferInsert;
 export type MonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferSelect;
 export type InsertMonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferInsert;
 export type SignedAct = typeof signedActs.$inferSelect;
+export type DocumentPackage = typeof documentPackages.$inferSelect;
 export type InsertSignedAct = typeof signedActs.$inferInsert;
+export type OwnerTransfer = typeof ownerTransfers.$inferSelect;
 export type AssistantBonusPayment = typeof assistantBonusPayments.$inferSelect;
 export type InsertAssistantBonusPayment = typeof assistantBonusPayments.$inferInsert;
 export type AccessToken = typeof accessTokens.$inferSelect;

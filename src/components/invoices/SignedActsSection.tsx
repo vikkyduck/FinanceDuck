@@ -10,6 +10,8 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { Upload, FileText, Download, Trash2, Loader2, Building2, User, Link as LinkIcon, ExternalLink, Plus } from "lucide-react";
 import { formatDate } from "@/lib/invoiceCalculations";
+import { invoicePackagesKey, refreshDocumentQueries, type PackageView } from "@/lib/documentPackages";
+import { DocumentPackagesPanel } from "./DocumentPackagesPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +25,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -41,6 +44,7 @@ interface SignedAct {
   url: string | null;
   uploadedBy: string;
   createdAt: string;
+  packageId: string | null;
 }
 
 interface SignedActsSectionProps {
@@ -59,6 +63,9 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
   const [linkDialog, setLinkDialog] = useState<{ open: boolean; actType: ActType | null }>({ open: false, actType: null });
   const [linkUrl, setLinkUrl] = useState("");
   const [linkName, setLinkName] = useState("");
+  // Ассистент указывает исполнителя: его документы собираются в отдельный пакет.
+  const [executorPrompt, setExecutorPrompt] = useState(false);
+  const [executorName, setExecutorName] = useState("");
 
   const { data: acts = [], isLoading } = useQuery<SignedAct[]>({
     queryKey: ['/api/invoices', invoiceId, 'acts'],
@@ -68,8 +75,20 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     staleTime: 10000,
   });
 
+  const seesPackages = userRole === 'admin' || userRole === 'assistant';
+  const { data: packages = [] } = useQuery<PackageView[]>({
+    queryKey: invoicePackagesKey(invoiceId),
+    queryFn: () => apiGet(`/invoices/${invoiceId}/document-packages`),
+    enabled: !!invoiceId && seesPackages,
+    refetchInterval,
+    staleTime: 10000,
+  });
+  const packageById = new Map(packages.map(pkg => [pkg.id, pkg]));
+  const needsExecutorName = userRole === 'assistant';
+  const executorNames = Array.from(new Set(packages.flatMap(pkg => pkg.side === 'executor' && pkg.executorName ? [pkg.executorName] : [])));
+
   const uploadMutation = useMutation({
-    mutationFn: async ({ actType, file }: { actType: ActType; file: File }) => {
+    mutationFn: async ({ actType, file, executorName }: { actType: ActType; file: File; executorName?: string }) => {
       const reader = new FileReader();
       const fileData = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(reader.result as string);
@@ -83,14 +102,12 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
         fileData,
         mimeType: file.type,
         isLink: false,
+        ...(executorName ? { executorName } : {}),
       });
     },
     onSuccess: () => {
       toast({ title: "Акт загружен" });
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'acts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+      refreshDocumentQueries(queryClient, invoiceId);
       setUploadingType(null);
     },
     onError: (error: Error) => {
@@ -99,25 +116,24 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
         description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
+      refreshDocumentQueries(queryClient, invoiceId);
       setUploadingType(null);
     },
   });
 
   const linkMutation = useMutation({
-    mutationFn: async ({ actType, fileName, url }: { actType: ActType; fileName: string; url: string }) => {
+    mutationFn: async ({ actType, fileName, url, executorName }: { actType: ActType; fileName: string; url: string; executorName?: string }) => {
       return apiPost(`/invoices/${invoiceId}/acts`, {
         actType,
         fileName,
         isLink: true,
         url,
+        ...(executorName ? { executorName } : {}),
       });
     },
     onSuccess: () => {
       toast({ title: "Ссылка добавлена" });
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'acts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+      refreshDocumentQueries(queryClient, invoiceId);
       setLinkDialog({ open: false, actType: null });
       setLinkUrl("");
       setLinkName("");
@@ -128,6 +144,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
         description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
+      refreshDocumentQueries(queryClient, invoiceId);
     },
   });
 
@@ -135,10 +152,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     mutationFn: (actId: string) => apiDelete(`/acts/${actId}`),
     onSuccess: () => {
       toast({ title: "Акт удален" });
-      queryClient.invalidateQueries({ queryKey: ['/api/invoices', invoiceId, 'acts'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/acts-statistics'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/unpaid-bonus'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+      refreshDocumentQueries(queryClient, invoiceId);
     },
     onError: (error: Error) => {
       toast({
@@ -146,10 +160,19 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
         description: (error instanceof Error ? error.message : String(error)),
         variant: "destructive",
       });
+      refreshDocumentQueries(queryClient, invoiceId);
     },
   });
 
-  const handleFileSelect = async (actType: ActType) => {
+  const handleFileSelect = (actType: ActType) => {
+    if (actType === 'executor' && needsExecutorName) {
+      setExecutorPrompt(true);
+      return;
+    }
+    pickFile(actType);
+  };
+
+  const pickFile = (actType: ActType, executorName?: string) => {
     setUploadingType(actType);
     
     const input = document.createElement('input');
@@ -167,7 +190,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
           setUploadingType(null);
           return;
         }
-        uploadMutation.mutate({ actType, file });
+        uploadMutation.mutate({ actType, file, executorName });
       } else {
         setUploadingType(null);
       }
@@ -202,11 +225,13 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
     }
   };
 
+  const linkNeedsExecutor = needsExecutorName && linkDialog.actType === 'executor';
+
   const handleAddLink = () => {
-    if (!linkDialog.actType || !linkUrl.trim() || !linkName.trim()) {
+    if (!linkDialog.actType || !linkUrl.trim() || !linkName.trim() || (linkNeedsExecutor && !executorName.trim())) {
       toast({
         title: "Заполните все поля",
-        description: "Укажите название и ссылку на документ",
+        description: linkNeedsExecutor ? "Укажите исполнителя, название и ссылку на документ" : "Укажите название и ссылку на документ",
         variant: "destructive",
       });
       return;
@@ -221,6 +246,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
       actType: linkDialog.actType,
       fileName: linkName.trim(),
       url,
+      ...(linkNeedsExecutor ? { executorName: executorName.trim() } : {}),
     });
   };
 
@@ -230,7 +256,11 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
   const canUpload = userRole === 'admin' || userRole === 'assistant';
   const canSeeExecutorActs = userRole === 'admin' || userRole === 'assistant';
 
-  const renderActItem = (act: SignedAct, colorClass: string) => (
+  const renderActItem = (act: SignedAct, colorClass: string) => {
+    const pkg = act.packageId ? packageById.get(act.packageId) : undefined;
+    // Принятый пакет меняет только владелец.
+    const canDelete = canUpload && !(userRole !== 'admin' && pkg?.status === 'accepted');
+    return (
     <div
       key={act.id}
       className="flex items-center justify-between gap-2 p-2 rounded-md border bg-card"
@@ -249,7 +279,9 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
               <ExternalLink className="h-3 w-3 text-muted-foreground" />
             )}
           </p>
-          <p className="text-xs text-muted-foreground">{formatDate(act.createdAt)}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatDate(act.createdAt)}{pkg?.side === 'executor' && pkg.executorName ? `, ${pkg.executorName}` : ""}
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -266,7 +298,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
             <Download className="h-4 w-4" />
           )}
         </Button>
-        {canUpload && (
+        {canDelete && (
           <Button
             size="icon"
             variant="ghost"
@@ -278,7 +310,8 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
         )}
       </div>
     </div>
-  );
+    );
+  };
 
   if (isLoading) {
     return (
@@ -369,6 +402,10 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
             </div>
           )}
 
+          {seesPackages && packages.length > 0 && (
+            <DocumentPackagesPanel invoiceId={invoiceId} packages={packages} isOwner={userRole === 'admin'} />
+          )}
+
           {companyActs.length > 0 && (
             <div className="space-y-2">
               <Label className="text-sm text-muted-foreground flex items-center gap-1">
@@ -415,6 +452,20 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {linkNeedsExecutor && (
+              <div className="space-y-2">
+                <Label htmlFor="link-executor">Исполнитель</Label>
+                <Input
+                  id="link-executor"
+                  list={`executor-names-${invoiceId}`}
+                  placeholder="Имя исполнителя"
+                  value={executorName}
+                  maxLength={200}
+                  onChange={(e) => setExecutorName(e.target.value)}
+                  data-testid="input-link-executor-name"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="link-name">Название документа</Label>
               <Input
@@ -452,7 +503,7 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
             </Button>
             <Button
               onClick={handleAddLink}
-              disabled={linkMutation.isPending || !linkUrl.trim() || !linkName.trim()}
+              disabled={linkMutation.isPending || !linkUrl.trim() || !linkName.trim() || (linkNeedsExecutor && !executorName.trim())}
               data-testid="button-save-link"
             >
               {linkMutation.isPending ? (
@@ -461,6 +512,49 @@ export const SignedActsSection = ({ invoiceId, userRole, canEdit = false }: Sign
                 <Plus className="h-4 w-4 mr-2" />
               )}
               Добавить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <datalist id={`executor-names-${invoiceId}`}>
+        {executorNames.map(name => <option key={name} value={name} />)}
+      </datalist>
+
+      <Dialog open={executorPrompt} onOpenChange={setExecutorPrompt}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Чей это документ?</DialogTitle>
+            <DialogDescription>
+              Документы одного исполнителя собираются в один пакет. Владелец проверяет пакет целиком.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="upload-executor">Исполнитель</Label>
+            <Input
+              id="upload-executor"
+              list={`executor-names-${invoiceId}`}
+              placeholder="Имя исполнителя"
+              value={executorName}
+              maxLength={200}
+              onChange={(e) => setExecutorName(e.target.value)}
+              data-testid="input-upload-executor-name"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExecutorPrompt(false)}>
+              Отмена
+            </Button>
+            <Button
+              disabled={!executorName.trim()}
+              onClick={() => {
+                setExecutorPrompt(false);
+                pickFile('executor', executorName.trim());
+              }}
+              data-testid="button-pick-executor-file"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Выбрать файл
             </Button>
           </DialogFooter>
         </DialogContent>

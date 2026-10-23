@@ -23,6 +23,25 @@ export function isAgencyScheme(scheme: unknown): boolean {
   return schemePolicy(scheme)?.kind === 'agency';
 }
 
+/** Старое правило бонуса ассистента, до 22.10.2026: за каждый подписанный акт
+ *  оплаченного счета, который виден ассистенту. */
+export const ASSISTANT_BONUS_PER_ACT = { executor: 1000, company: 2000 } as const;
+
+/** Правило с 22.10.2026: бонус за пакет документов, принятый владельцем. Пакет
+ *  клиента 2000 ₽, пакет каждого исполнителя 1000 ₽. Ассистенту платит Кря
+ *  с личного счета, на чистую прибыль бонус не влияет. */
+export const ASSISTANT_BONUS_PER_PACKAGE = { client: 2000, executor: 1000 } as const;
+export const ASSISTANT_PACKAGE_RULE_SINCE = '2026-10-22';
+
+/** Запасная база клиента для старых агентских строк без сохраненной
+ *  clientBaseAfterMargin: жесткие схемы берут ставку маржи из реестра схем,
+ *  гибкая 'agency' считает сумму минус сохраненную маржу. */
+export function agencyClientBaseFallback(scheme: unknown, clientBill: number, agencyMargin: number): number {
+  const policy = schemePolicy(scheme);
+  const marginRate = policy?.kind === 'agency' ? policy.marginRate : null;
+  return marginRate === null ? clientBill - agencyMargin : clientBill * ((100 - marginRate) / 100);
+}
+
 export interface FinancialResult {
   clientBill: number;
   commissionRate?: number;

@@ -101,6 +101,7 @@ describe('Recurring schedule and authorization', () => {
     const result = await invoices.getInvoice(database(), generated.id);
     expect(Number(result?.calculations?.commissionAmount)).toBe(200);
     expect(Number(result?.calculations?.executorExpensesTotal)).toBe(50);
+    expect((await invoices.getInvoiceExpenses(database(), generated.id)).map(expense => expense.paidAt)).toEqual([null]);
     expect((await recurring.getRecurringInvoice(database(), template.id))?.nextInvoiceDate).toBe('2026-02-28');
   });
 });
@@ -117,7 +118,8 @@ describe('Complete backup and safe restore', () => {
       .toEqual(Object.values(backupTables).map(getTableName).sort());
     const created = await invoice();
     await db.insert(s.clientPartners).values({ clientId, partnerId });
-    await db.insert(s.signedActs).values({ invoiceId: created.id, actType: 'company', fileName: 'proof.txt', fileData: 'YQ==', uploadedBy: actorId });
+    const [pkg] = await db.insert(s.documentPackages).values({ invoiceId: created.id, side: 'client', status: 'accepted', reviewComment: '2026-10-17', reviewedBy: actorId, reviewedAt: new Date(), acceptedAt: new Date() }).returning();
+    await db.insert(s.signedActs).values({ invoiceId: created.id, actType: 'company', fileName: 'proof.txt', fileData: 'YQ==', uploadedBy: actorId, packageId: pkg.id });
     await db.insert(s.invoiceMessages).values({ invoiceId: created.id, authorRole: 'admin', authorTokenId: actorId, body: '2026-10-17T00:00:00.000Z' });
     await db.insert(s.assistantBonusPayments).values({ amount: '12', paymentDate: '2026-10-17', paidBy: actorId });
     await db.insert(s.monthlyFinancialPlans).values({ year: '2026', month: '10', salesTarget: '1000' });
@@ -128,6 +130,7 @@ describe('Complete backup and safe restore', () => {
     await db.insert(s.commandReceipts).values({ key: 'round-trip', fingerprint: 'fixture', result: '{}' });
     await db.insert(s.scheduledJobs).values({ key: 'round-trip', state: 'idle' });
     await db.insert(s.serviceUsage).values({ invoiceId: created.id, period: 1, closed: false });
+    await db.insert(s.ownerTransfers).values({ owner: 'kot', kind: 'payout', amount: '100', transferDate: '2026-10-17', notes: '2026-10-17', createdBy: actorId });
     const service = new BackupService(database(), directory);
     const info = await service.createBackup();
     const before = await service.downloadBackup(info.id);

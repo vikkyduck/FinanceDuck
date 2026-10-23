@@ -36,6 +36,8 @@ import type * as recurringRepo from "./repositories/recurringRepo";
 import type * as actsRepo from "./repositories/actsRepo";
 
 import type * as dashboardRepo from "./repositories/dashboardRepo";
+import type * as ownerLedgerRepo from "./repositories/ownerLedgerRepo";
+import type * as documentPackagesRepo from "./repositories/documentPackagesRepo";
 import type * as alertsRepo from "./repositories/alertsRepo";
 
 import type * as reportsRepo from "./repositories/reportsRepo";
@@ -46,7 +48,6 @@ import type {
   RecurringInvoiceForMonth,
   AssistantActionLogFilters,
   AssistantActionLogWithDetails,
-  WorkingCapitalData,
   ClientLTVData,
   PartnerClientStatsData,
   PartnerDocumentRiskData,
@@ -247,12 +248,6 @@ export interface ReportingQueries {
     partnerId: string,
   ): Promise<PartnerAgency30FundsData[]>;
   getPartnerHeroMetrics(partnerId: string): Promise<PartnerHeroMetricsData>;
-  getWorkingCapital(): Promise<WorkingCapitalData | null>;
-  updateWorkingCapital(
-    amount: number,
-    notes: string | null,
-    updatedBy: string,
-  ): Promise<WorkingCapitalData>;
   getClientLTV(
     year?: number,
   ): Promise<{ data: ClientLTVData[]; availableYears: number[] }>;
@@ -264,6 +259,12 @@ export interface ReportingQueries {
   getPartnerDebtSummaries(): ReturnType<
     typeof dashboardRepo.getPartnerDebtSummaries
   >;
+  getReceivables(): ReturnType<typeof dashboardRepo.getReceivables>;
+  getPayables(): ReturnType<typeof ownerLedgerRepo.getPayables>;
+  getOwnerLedger(): ReturnType<typeof ownerLedgerRepo.getOwnerLedger>;
+  createOwnerPayout(payout: Parameters<typeof ownerLedgerRepo.createOwnerPayout>[1]): ReturnType<typeof ownerLedgerRepo.createOwnerPayout>;
+  deleteOwnerPayout(id: string): Promise<boolean>;
+  setOwnerLedgerStart(start: Parameters<typeof ownerLedgerRepo.setOwnerLedgerStart>[1]): Promise<void>;
   getDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getDoNotSpendData>;
   getPartnerSchemeDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getPartnerSchemeDoNotSpendData>;
   getExpectedCommission(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getExpectedCommission>;
@@ -316,23 +317,18 @@ export interface DocumentsRepository {
   createAssistantBonusPayment(
     payment: InsertAssistantBonusPayment,
   ): Promise<AssistantBonusPayment>;
-  getUnpaidBonusTotal(): Promise<{
-    total: number;
-    invoiceCount: number;
-    invoiceIds: string[];
-    executorActs: number;
-    companyActs: number;
-    totalEarned: number;
-    totalPaid: number;
-  }>;
+  getUnpaidBonusTotal(): ReturnType<typeof actsRepo.getUnpaidBonusTotal>;
   markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
-  createSignedAct(act: InsertSignedAct): Promise<SignedAct>;
+  createSignedAct(act: InsertSignedAct, pkg?: { executorName: string | null }): Promise<SignedAct>;
+  getInvoicePackages(invoiceId: string): ReturnType<typeof documentPackagesRepo.getInvoicePackages>;
+  getPackagesByStatus(status: string, excludeHidden: boolean): ReturnType<typeof documentPackagesRepo.getPackagesByStatus>;
+  reviewPackage(id: string, action: documentPackagesRepo.PackageReview, comment: string | null, reviewerId: string): ReturnType<typeof documentPackagesRepo.reviewPackage>;
   getSignedActsByInvoice(
     invoiceId: string,
     actType?: ActType,
   ): Promise<Omit<SignedAct, "fileData" | "objectKey">[]>;
   getSignedAct(id: string): Promise<SignedAct | null>;
-  deleteSignedAct(id: string): Promise<void>;
+  deleteSignedAct(id: string, ownerEdit?: boolean): Promise<void>;
   getActsStatistics(excludeHidden?: boolean): Promise<{
     executorActs: number;
     companyActs: number;

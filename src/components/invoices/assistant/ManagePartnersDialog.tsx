@@ -4,6 +4,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,9 +29,12 @@ interface PartnerFormData {
   phone: string;
   email: string;
   leverageRole: PartnerLeverageRole;
+  directToOwner: boolean;
 }
 
-const emptyForm: PartnerFormData = { name: "", telegram: "", phone: "", email: "", leverageRole: "external" };
+const emptyForm: PartnerFormData = { name: "", telegram: "", phone: "", email: "", leverageRole: "external", directToOwner: false };
+
+const DIRECT_TO_OWNER_LABEL = "Клиенты платят напрямую владельцу";
 
 // Подписи ролей коэффициента эффективности (кто есть кто в метрике плеча).
 const LEVERAGE_ROLE_LABELS: Record<PartnerLeverageRole, string> = {
@@ -122,8 +126,8 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
         telegram: form.telegram.trim() || undefined,
         phone: form.phone.trim() || undefined,
         email: form.email.trim() || undefined,
-        // Роль метрики может задавать только админ (сервер иначе вырежет).
-        ...(isAdmin ? { leverageRole: form.leverageRole } : {}),
+        // Роль метрики и отметку "напрямую владельцу" задает только админ (сервер иначе вырежет).
+        ...(isAdmin ? { leverageRole: form.leverageRole, directToOwner: form.directToOwner } : {}),
       });
       showSuccess("Успешно", "Партнер добавлен");
       setForm(emptyForm);
@@ -143,6 +147,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
       phone: partner.phone || "",
       email: partner.email || "",
       leverageRole: partner.leverageRole || "external",
+      directToOwner: partner.directToOwner,
     });
   };
 
@@ -166,7 +171,7 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
         telegram: editForm.telegram.trim() || undefined,
         phone: editForm.phone.trim() || undefined,
         email: editForm.email.trim() || undefined,
-        ...(isAdmin ? { leverageRole: editForm.leverageRole } : {}),
+        ...(isAdmin ? { leverageRole: editForm.leverageRole, directToOwner: editForm.directToOwner } : {}),
       });
       showSuccess("Успешно", "Партнер обновлён");
       setEditingId(null);
@@ -304,6 +309,17 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
                       <p className="text-xs text-muted-foreground">
                         «Актив под управлением» и «Владелец лично» — для виртуальных партнёров владельца; метрика делит прибыль на эти котлы.
                       </p>
+                      <label className="flex items-center gap-2 text-sm pt-1">
+                        <Checkbox
+                          checked={form.directToOwner}
+                          onCheckedChange={(checked) => setForm({ ...form, directToOwner: checked === true })}
+                          data-testid="checkbox-partner-direct-to-owner"
+                        />
+                        {DIRECT_TO_OWNER_LABEL}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        Деньги по счетам такого партнера приходят сразу на счет владельца, поэтому в расчетах с партнерами долга у него нет.
+                      </p>
                     </div>
                   )}
                   <Button onClick={handleAdd} disabled={loading} className="w-full" data-testid="button-add-partner">
@@ -357,19 +373,29 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
                                       data-testid="input-edit-partner-name"
                                     />
                                     {isAdmin && (
-                                      <Select
-                                        value={editForm.leverageRole}
-                                        onValueChange={(v) => setEditForm({ ...editForm, leverageRole: v as PartnerLeverageRole })}
-                                      >
-                                        <SelectTrigger className="h-7 text-xs" data-testid="select-edit-partner-leverage-role">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {(Object.keys(LEVERAGE_ROLE_LABELS) as PartnerLeverageRole[]).map((r) => (
-                                            <SelectItem key={r} value={r}>{LEVERAGE_ROLE_LABELS[r]}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
+                                      <>
+                                        <Select
+                                          value={editForm.leverageRole}
+                                          onValueChange={(v) => setEditForm({ ...editForm, leverageRole: v as PartnerLeverageRole })}
+                                        >
+                                          <SelectTrigger className="h-7 text-xs" data-testid="select-edit-partner-leverage-role">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {(Object.keys(LEVERAGE_ROLE_LABELS) as PartnerLeverageRole[]).map((r) => (
+                                              <SelectItem key={r} value={r}>{LEVERAGE_ROLE_LABELS[r]}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <label className="flex items-center gap-1.5 text-xs">
+                                          <Checkbox
+                                            checked={editForm.directToOwner}
+                                            onCheckedChange={(checked) => setEditForm({ ...editForm, directToOwner: checked === true })}
+                                            data-testid="checkbox-edit-partner-direct-to-owner"
+                                          />
+                                          {DIRECT_TO_OWNER_LABEL}
+                                        </label>
+                                      </>
                                     )}
                                   </div>
                                 ) : (
@@ -378,6 +404,11 @@ export const ManagePartnersDialog = ({ open, onOpenChange }: ManagePartnersDialo
                                     {isAdmin && LEVERAGE_ROLE_BADGES[partner.leverageRole] && (
                                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0" title={LEVERAGE_ROLE_LABELS[partner.leverageRole]}>
                                         {LEVERAGE_ROLE_BADGES[partner.leverageRole]}
+                                      </Badge>
+                                    )}
+                                    {isAdmin && partner.directToOwner && (
+                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0" title={DIRECT_TO_OWNER_LABEL}>
+                                        напрямую
                                       </Badge>
                                     )}
                                   </span>

@@ -30,8 +30,9 @@ export const invoiceTerms = z.object({
   totalPeriods: z.number().int().min(1).max(1_000_000).nullish(),
 });
 export const calculationInput = z.object({ clientBill: z.preprocess(value => value ?? undefined, money.optional()), commissionRate: rate.nullish() });
+// paidAt: дата оплаты исполнителю, null - еще не оплачен.
 export const expenseInput = z.object({ description: z.string().min(1).max(10000), amount: money.refine(value => Number(value) > 0, 'Расход должен быть больше 0'),
-  paidByAdmin: z.boolean().optional(), date: isoDate.optional() });
+  paidByAdmin: z.boolean().optional(), date: isoDate.optional(), paidAt: isoDate.nullable().optional() });
 
 export function parseCommand<S extends z.ZodTypeAny>(schema: S, value: unknown): z.output<S> {
   const result = schema.safeParse(value);

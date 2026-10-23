@@ -5,7 +5,7 @@ import type { db as database } from '../db';
 import type { InvoiceActor } from '../invoiceAccess';
 import { invoiceScope } from '../invoiceQuery';
 import { invoices, invoiceCalculations, invoiceExpenses, invoiceTransfers, partners, clients } from '../../shared/schema';
-import { parseNum, isAgencyScheme, AGENCY_SCHEMES } from '../../shared/financialEngine';
+import { parseNum, isAgencyScheme, AGENCY_SCHEMES, agencyClientBaseFallback } from '../../shared/financialEngine';
 import { INVOICE_SCHEMES } from '../../shared/domainTypes';
 type DB = typeof database;
 const PARTNER_SCHEMES = INVOICE_SCHEMES.filter(scheme => !isAgencyScheme(scheme));
@@ -192,11 +192,7 @@ export async function getDoNotSpendData(db: DB, actor: InvoiceActor): Promise<{
     const executorExpenses = parseNum(row.calculations.executorExpensesTotal);
     
     // Use stored clientBaseAfterMargin if available, else calculate based on scheme.
-    // Гибкая 'agency' в запасном пути: база = сумма − маржа (ставки не жёсткие).
-    const scheme = row.invoice.scheme;
-    const fallbackBase = scheme === 'agency'
-      ? clientBill - parseNum(row.calculations.agencyMargin)
-      : clientBill * (scheme === 'agency_40' ? 0.6 : 0.7); // agency_40: 60%, agency_30: 70%
+    const fallbackBase = agencyClientBaseFallback(row.invoice.scheme, clientBill, parseNum(row.calculations.agencyMargin));
     const clientBase = parseNum(row.calculations.clientBaseAfterMargin) || fallbackBase;
     // «Доступно» с поправкой на переносы бюджета — та же формула, что в аудите
     // денег (остаток = база − расходы + переносы) и в кабинете клиента.

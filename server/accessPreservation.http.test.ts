@@ -106,6 +106,31 @@ it.each(roles)('%s: write operations retain role and parent-invoice restrictions
   }
 });
 
+it.each(roles)('%s: expense payment status is staff-only, owner money is admin-only', async role => {
+  const row = fixtures.find(r => allowed(role, r) && r.scheme === 'agency_30')!;
+  const [expense] = await request(role, `/api/invoices/${row.id}/expenses`).then(r => r.json());
+  if (role === 'partner' || role === 'client') expect(expense).not.toHaveProperty('paidAt');
+  else expect(expense).toHaveProperty('paidAt');
+  const admin = role === 'admin';
+  expect((await request(role, '/api/admin/payables')).status).toBe(admin ? 200 : 403);
+  expect((await request(role, '/api/admin/owner-ledger')).status).toBe(admin ? 200 : 403);
+  expect((await request(role, '/api/admin/owner-ledger/start', 'PUT', { since: '2026-10-01', kot: '-100.5', krya: '0' })).status).toBe(admin ? 200 : 403);
+  const created = await request(role, '/api/admin/owner-transfers', 'POST', { owner: 'kot', amount: '1500,5', transferDate: '2026-10-02' });
+  expect(created.status).toBe(admin ? 201 : 403);
+  if (!admin) return;
+  const transfer = await created.json();
+  expect(transfer).toMatchObject({ owner: 'kot', kind: 'payout', amount: '1500.50', notes: null });
+  for (const body of [{ owner: 'kot', amount: '0.001', transferDate: '2026-10-02' }, { owner: 'boss', amount: '1', transferDate: '2026-10-02' },
+    { owner: 'kot', amount: '1', transferDate: '2026-02-30' }, { owner: 'kot', amount: '1', transferDate: '2026-10-02', kind: 'opening' }]) {
+    expect((await request(role, '/api/admin/owner-transfers', 'POST', body)).status).toBe(400);
+  }
+  const ledger = await request(role, '/api/admin/owner-ledger').then(r => r.json());
+  expect(ledger.kot).toMatchObject({ since: '2026-10-01', opening: -100.5, paidOut: 1500.5 });
+  expect((await request(role, '/api/admin/owner-transfers/not-a-uuid', 'DELETE')).status).toBe(404);
+  expect((await request(role, `/api/admin/owner-transfers/${transfer.id}`, 'DELETE')).status).toBe(200);
+  expect((await request(role, `/api/admin/owner-transfers/${transfer.id}`, 'DELETE')).status).toBe(404);
+});
+
 it('unscoped partner/client sessions and forged role headers cannot gain access', async () => {
   for (const role of ['partner-unscoped', 'client-unscoped']) {
     const result = await request(role, '/api/invoices').then(r => r.json());
@@ -193,4 +218,45 @@ it('closing-document updates return the same safe fields as the accountant invoi
   expect(response.status).toBe(200); const invoice = await response.json();
   expect(invoice.closingDocumentUrl).toBe('https://example.test/closing.pdf');
   for (const field of ['partnerId', 'partnerCommissionRate', 'hideFromAssistant']) expect(invoice[field]).toBeUndefined();
+});
+
+it('document packages: the assistant names executors, only the owner reviews and changes an accepted package', async () => {
+  const row = fixtures.find(r => !r.hidden && r.scheme === 'partner_15')!;
+  const hidden = fixtures.find(r => r.hidden && r.scheme === 'partner_15')!;
+  const link = { fileName: 'act.pdf', isLink: true, url: 'https://example.test/act' };
+  const upload = (role: string, body: object) => request(role, `/api/invoices/${row.id}/acts`, 'POST', { actType: 'executor', ...link, ...body });
+  const review = (role: string, id: string, body: object) => request(role, `/api/document-packages/${id}/review`, 'POST', body);
+  expect((await upload('assistant', {})).status).toBe(400);
+  const uploaded = await upload('assistant', { executorName: '  Иван   Петров ' });
+  expect(uploaded.status).toBe(201);
+  const act = await uploaded.json();
+  const ownerUpload = await upload('admin', {});
+  expect(ownerUpload.status).toBe(201);
+  expect((await ownerUpload.json()).packageId).toBeNull();
+  const packages = await request('assistant', `/api/invoices/${row.id}/document-packages`).then(r => r.json());
+  expect(packages).toMatchObject([{ side: 'executor', executorName: 'Иван Петров', status: 'pending', documents: 1 }]);
+  for (const role of ['accountant', 'partner', 'client']) {
+    expect((await request(role, `/api/invoices/${row.id}/document-packages`)).status).toBe(403);
+    expect((await request(role, '/api/document-packages?status=pending')).status).toBe(403);
+  }
+  expect((await request('assistant', `/api/invoices/${hidden.id}/document-packages`)).status).toBe(404);
+  expect((await request('admin', '/api/document-packages?status=unknown')).status).toBe(400);
+  const id: string = packages[0].id;
+  expect((await request('admin', '/api/document-packages?status=pending').then(r => r.json())).map((p: { id: string }) => p.id)).toEqual([id]);
+
+  expect((await review('assistant', id, { action: 'accept' })).status).toBe(403);
+  expect((await review('admin', id, { action: 'return' })).status).toBe(400);
+  expect((await review('admin', 'not-a-package', { action: 'accept' })).status).toBe(404);
+  const accepted = await review('admin', id, { action: 'accept' });
+  expect(accepted.status).toBe(200);
+  expect((await accepted.json()).status).toBe('accepted');
+  expect((await review('admin', id, { action: 'accept' })).status).toBe(409);
+
+  expect((await upload('assistant', { executorName: 'иван петров' })).status).toBe(409);
+  expect((await request('assistant', `/api/acts/${act.id}`, 'DELETE')).status).toBe(409);
+  expect(await request('assistant', '/api/assistant/stats').then(r => r.json())).toMatchObject({ accepted: { client: 0, executor: 1 }, earned: 1000, unpaid: 1000 });
+  expect((await request('admin', '/api/admin/payables').then(r => r.json())).assistant).toEqual({ since: '2026-10-22', unpaid: 1000 });
+  expect((await request('admin', `/api/acts/${act.id}`, 'DELETE')).status).toBe(200);
+  await db.delete(s.signedActs).where(eq(s.signedActs.invoiceId, row.id));
+  await db.delete(s.documentPackages).where(eq(s.documentPackages.id, id));
 });

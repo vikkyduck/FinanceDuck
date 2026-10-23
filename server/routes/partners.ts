@@ -33,6 +33,13 @@ function sanitizePartnerBody(req: AuthenticatedRequest): { ok: true; data: Parti
       return { ok: false, error: `leverageRole must be one of: ${LEVERAGE_ROLES.join(", ")}` };
     }
   }
+  if ("directToOwner" in data) {
+    if (req.user?.role !== "admin") {
+      delete data.directToOwner;
+    } else if (typeof data.directToOwner !== "boolean") {
+      return { ok: false, error: "directToOwner must be a boolean" };
+    }
+  }
   return { ok: true, data };
 }
 

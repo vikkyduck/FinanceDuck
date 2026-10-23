@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useRateLimit } from "@/hooks/useRateLimit";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeText, sanitizeNumber, sanitizeDate, isValidUuid } from "@/lib/sanitize";
@@ -28,6 +29,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [isAdminExpense, setIsAdminExpense] = useState(false);
+  const [isPaid, setIsPaid] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,6 +87,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
         amount: sanitizedAmount.toString(),
         date: sanitizedDate,
         paidByAdmin: isAdminExpense,
+        paidAt: isPaid ? sanitizedDate : null,
       });
 
       toast({
@@ -98,6 +101,7 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
       setAmount("");
       setDate(new Date().toISOString().split("T")[0]);
       setIsAdminExpense(false);
+      setIsPaid(true);
       onOpenChange(false);
       onSuccess?.();
     } catch (error: unknown) {
@@ -197,6 +201,14 @@ export const AddExpenseDialog = ({ open, onOpenChange, invoiceId, onSuccess }: A
                 </div>
               </label>
             </RadioGroup>
+          </div>
+
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={isPaid} onCheckedChange={(v) => setIsPaid(v === true)} data-testid="checkbox-expense-paid" />
+              Исполнителю уже оплачено
+            </label>
+            <p className="text-xs text-muted-foreground">Если еще не заплатили, снимите галочку: расход будет числиться долгом исполнителю.</p>
           </div>
 
           <div className="flex justify-end gap-2">

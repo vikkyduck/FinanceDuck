@@ -7,6 +7,8 @@ import { Router, Response } from "express";
 import type { ActsStore } from "../routeStores";
 import { AuthenticatedRequest, requireRole } from "../middleware";
 import { findAuthorizedInvoice } from "../invoiceAccess";
+import { normalizeExecutorName } from "../repositories/documentPackagesRepo";
+import { CommandError } from "../lib/commandError";
 
 export function createActsRouter(storage: ActsStore, authMiddleware: AuthMiddleware) {
 const actsRouter = Router();
@@ -101,14 +103,18 @@ actsRouter.get("/api/invoices/:id/acts", authMiddleware, async (req: Authenticat
 actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "assistant", "accountant"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = String(req.params.id);
-    const parsed = z.object({ actType: z.enum(['company', 'executor']), fileName: z.string().min(1).max(255), fileData: z.string().optional(), mimeType: z.string().max(120).optional(), isLink: z.boolean().default(false), url: z.string().url().refine(url => /^https?:\/\//i.test(url)).optional() }).strict().safeParse(req.body);
+    const parsed = z.object({ actType: z.enum(['company', 'executor']), fileName: z.string().min(1).max(255), fileData: z.string().optional(), mimeType: z.string().max(120).optional(), isLink: z.boolean().default(false), url: z.string().url().refine(url => /^https?:\/\//i.test(url)).optional(), executorName: z.string().max(200).optional() }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Invalid act fields' });
     const { actType, fileName, fileData, mimeType, isLink, url } = parsed.data;
     const invoice = await findAuthorizedInvoice(storage, req.user!, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
     if (isLink) { if (!url) return res.status(400).json({ error: "URL is required for link-type acts" }); }
     else { if (!fileData || !mimeType) return res.status(400).json({ error: "File data and mime type are required for file uploads" }); }
-    const act = await storage.createSignedAct({ invoiceId: id, actType, fileName, fileData: isLink ? null : fileData, mimeType: isLink ? null : mimeType, isLink: isLink || false, url: isLink ? url : null, uploadedBy: req.user!.token.id });
+    // Загрузки ассистента идут в пакеты на проверку владельцу: пакет клиента или пакет исполнителя по имени.
+    const executorName = actType === "executor" ? normalizeExecutorName(parsed.data.executorName ?? "") : "";
+    if (req.user!.role === "assistant" && actType === "executor" && !executorName) return res.status(400).json({ error: "Укажите исполнителя" });
+    const pkg = req.user!.role === "assistant" ? { executorName: executorName || null } : undefined;
+    const act = await storage.createSignedAct({ invoiceId: id, actType, fileName, fileData: isLink ? null : fileData, mimeType: isLink ? null : mimeType, isLink: isLink || false, url: isLink ? url : null, uploadedBy: req.user!.token.id }, pkg);
     const client = invoice.clientId ? await storage.getClient(invoice.clientId) : null;
     const partner = invoice.partnerId ? await storage.getPartner(invoice.partnerId) : null;
     const invoiceNumber = invoice.invoiceNumber;
@@ -119,7 +125,42 @@ actsRouter.post("/api/invoices/:id/acts", authMiddleware, requireRole("admin", "
     } catch (logError) { console.error("[Upload Act] Failed to log action:", logError); }
     const { fileData: _, objectKey: _key, ...actWithoutData } = act;
     res.status(201).json(actWithoutData);
-  } catch (error) { if (error instanceof DocumentInputError) return res.status(400).json({ error: error.message }); console.error("Create act error:", error); res.status(500).json({ error: "Failed to upload act" }); }
+  } catch (error) {
+    if (error instanceof DocumentInputError) return res.status(400).json({ error: error.message });
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    console.error("Create act error:", error); res.status(500).json({ error: "Failed to upload act" });
+  }
+});
+
+actsRouter.get("/api/invoices/:id/document-packages", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    if (!await findAuthorizedInvoice(storage, req.user!, id)) return res.status(404).json({ error: "Invoice not found" });
+    res.json(await storage.getInvoicePackages(id));
+  } catch (error) { console.error("Get document packages error:", error); res.status(500).json({ error: "Failed to get document packages" }); }
+});
+
+actsRouter.get("/api/document-packages", authMiddleware, requireRole("admin", "assistant"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const status = z.enum(["pending", "accepted", "returned"]).safeParse(req.query.status);
+    if (!status.success) return res.status(400).json({ error: "Invalid status" });
+    res.json(await storage.getPackagesByStatus(status.data, req.user!.role === "assistant"));
+  } catch (error) { console.error("List document packages error:", error); res.status(500).json({ error: "Failed to list document packages" }); }
+});
+
+actsRouter.post("/api/document-packages/:id/review", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const id = z.string().uuid().safeParse(req.params.id);
+    const body = z.object({ action: z.enum(["accept", "return", "reopen"]), comment: z.string().trim().max(2000).nullish() }).strict().safeParse(req.body);
+    if (!id.success) return res.status(404).json({ error: "Package not found" });
+    if (!body.success) return res.status(400).json({ error: "Invalid review" });
+    const updated = await storage.reviewPackage(id.data, body.data.action, body.data.comment || null, req.user!.token.id);
+    if (!updated) return res.status(404).json({ error: "Package not found" });
+    res.json(updated);
+  } catch (error) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    console.error("Review document package error:", error); res.status(500).json({ error: "Failed to review document package" });
+  }
 });
 
 actsRouter.get("/api/acts/:id/download", authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
@@ -163,10 +204,16 @@ actsRouter.delete("/api/acts/:id", authMiddleware, requireRole("admin", "assista
     const invoiceNumber = invoice?.invoiceNumber;
     const displayName = invoiceNumber || client?.name || partner?.name || invoice?.description || act.invoiceId;
     const actTypeLabel = act.actType === "company" ? "компании" : "исполнителя";
-    await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "delete_act", entityType: "act", entityId: id, description: `Удалён акт ${actTypeLabel}: ${displayName}`, details: JSON.stringify({ invoiceId: act.invoiceId, invoiceNumber, clientName: client?.name, partnerName: partner?.name, actType: act.actType, fileName: act.fileName }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
-    await storage.deleteSignedAct(id);
+    // Принятый пакет меняет только владелец, поэтому запись в журнал после удаления, как при загрузке.
+    await storage.deleteSignedAct(id, req.user!.role === "admin");
+    try {
+      await storage.logAssistantAction({ accessTokenId: req.user!.token.id, actionType: "delete_act", entityType: "act", entityId: id, description: `Удалён акт ${actTypeLabel}: ${displayName}`, details: JSON.stringify({ invoiceId: act.invoiceId, invoiceNumber, clientName: client?.name, partnerName: partner?.name, actType: act.actType, fileName: act.fileName }), ipAddress: req.ip || req.headers["x-forwarded-for"] as string || null, userAgent: req.headers["user-agent"] || null });
+    } catch (logError) { console.error("[Delete Act] Failed to log action:", logError); }
     res.json({ success: true });
-  } catch (error) { console.error("Delete act error:", error); res.status(500).json({ error: "Failed to delete act" }); }
+  } catch (error) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
+    console.error("Delete act error:", error); res.status(500).json({ error: "Failed to delete act" });
+  }
 });
 
 return actsRouter;

@@ -7,7 +7,7 @@ import { decryptBackup, isEncryptedEnvelope } from "./lib/backupCrypto";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 
-import { backupTables, type TableKey, type Rows } from './services/backupTables';
+import { backupTables, tableAddedInSchema, type TableKey, type Rows } from './services/backupTables';
 export { backupTables } from './services/backupTables';
 import { writeArchive, readArchive, validateArchive, validateRow, restoreRow, upgradeLegacyRow } from './services/backupArchive';
 const BACKUP_DIR = process.env.BACKUP_DIR || "/var/finance-duck/backups";
@@ -42,13 +42,14 @@ export function validateBackup(backup: unknown): BackupData {
   const data = {} as BackupData["data"];
   for (const key of Object.keys(backupTables)) {
     const legacy = ["2.0", "3.0"].includes(String(value.version));
-    const rows = key === "serviceUsage" && String(value.version) !== "5.0" ? [] : legacy && key === "scheduledJobs" ? [] : value.data[key as TableKey];
+    const rows = key === "serviceUsage" && String(value.version) !== "5.0" ? [] : legacy && key === "scheduledJobs" ? [] :
+      key in tableAddedInSchema ? value.data[key as TableKey] ?? [] : value.data[key as TableKey];
     if (!Array.isArray(rows)) throw new Error(`Отсутствует таблица ${key}`);
     data[key as TableKey] = rows.map(row => {
       const revived = { ...row };
       if (legacy && key === "signedActs" && !("objectKey" in revived)) revived.objectKey = null;
       if (legacy && key === "invoices" && !("recurringOccurrenceKey" in revived)) revived.recurringOccurrenceKey = null;
-      return validateRow(key as TableKey, upgradeLegacyRow(key as TableKey, revived));
+      return validateRow(key as TableKey, upgradeLegacyRow(key as TableKey, revived, 5));
     });
   }
   // Old complete snapshots predate immutable occurrence keys. Preserve duplicate financial

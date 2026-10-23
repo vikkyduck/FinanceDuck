@@ -24,13 +24,6 @@ export interface AssistantActionLogWithDetails extends AssistantActionLog {
   tokenRole?: string;
 }
 
-export interface WorkingCapitalData {
-  id: string;
-  amount: number;
-  notes: string | null;
-  updated_at: string | null;
-}
-
 export interface ClientLTVData {
   client_id: string;
   client_name: string;

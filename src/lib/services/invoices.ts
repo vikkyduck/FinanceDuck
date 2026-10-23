@@ -34,6 +34,8 @@ export interface PartnerListItem {
   phone: string | null;
   email: string | null;
   leverageRole: PartnerLeverageRole;
+  // Клиенты этого партнера платят напрямую владельцу, долга партнера нет.
+  directToOwner: boolean;
   createdAt?: string;
 }
 
@@ -59,6 +61,7 @@ export const invoiceService = {
     amount: string;
     date?: string;
     paidByAdmin?: boolean;
+    paidAt?: string | null;
   }): Promise<void> {
     await apiPost(`/invoices/${invoiceId}/expenses`, expense);
   },
@@ -137,6 +140,7 @@ export const invoiceService = {
       phone: partner.phone || null,
       email: partner.email || null,
       leverageRole: partner.leverageRole || 'external',
+      directToOwner: partner.directToOwner ?? false,
       createdAt: partner.createdAt,
     }));
   },
@@ -175,6 +179,7 @@ export const invoiceService = {
         phone: data.partner.phone || null,
         email: data.partner.email || null,
         leverageRole: data.partner.leverageRole || 'external',
+        directToOwner: data.partner.directToOwner ?? false,
         createdAt: data.partner.createdAt,
       } : undefined,
     };
@@ -246,6 +251,7 @@ export const invoiceService = {
       phone: partner.phone || null,
       email: partner.email || null,
       leverageRole: partner.leverageRole || 'external',
+      directToOwner: partner.directToOwner ?? false,
       createdAt: partner.createdAt,
     }));
   },
@@ -259,6 +265,7 @@ export const invoiceService = {
       phone: partner.phone || null,
       email: partner.email || null,
       leverageRole: partner.leverageRole || 'external',
+      directToOwner: partner.directToOwner ?? false,
       createdAt: partner.createdAt,
     }));
   },
@@ -282,6 +289,7 @@ export const invoiceService = {
         phone: p.phone || null,
         email: p.email || null,
         leverageRole: p.leverageRole || 'external',
+        directToOwner: p.directToOwner ?? false,
         createdAt: p.createdAt,
       })),
     }));
@@ -293,6 +301,7 @@ export const invoiceService = {
     phone?: string;
     email?: string;
     leverageRole?: PartnerLeverageRole;
+    directToOwner?: boolean;
   }): Promise<PartnerListItem> {
     const data = await apiPost<PartnerListItem>("/partners", partner);
     return {
@@ -302,6 +311,7 @@ export const invoiceService = {
       phone: data.phone || null,
       email: data.email || null,
       leverageRole: data.leverageRole || 'external',
+      directToOwner: data.directToOwner ?? false,
       createdAt: data.createdAt,
     };
   },
@@ -312,6 +322,7 @@ export const invoiceService = {
     phone?: string;
     email?: string;
     leverageRole?: PartnerLeverageRole;
+    directToOwner?: boolean;
   }): Promise<PartnerListItem> {
     const data = await apiPatch<PartnerListItem>(`/partners/${id}`, updates);
     return {
@@ -321,6 +332,7 @@ export const invoiceService = {
       phone: data.phone || null,
       email: data.email || null,
       leverageRole: data.leverageRole || 'external',
+      directToOwner: data.directToOwner ?? false,
       createdAt: data.createdAt,
     };
   },

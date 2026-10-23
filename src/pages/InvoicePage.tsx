@@ -236,6 +236,9 @@ export default function InvoicePage() {
                     <span className="text-xs text-muted-foreground ml-2">
                       {expense.paidByAdmin == null ? '' : expense.paidByAdmin ? '(Админ)' : '(Партнер)'}
                     </span>
+                    {expense.paidAt === null && (
+                      <span className="text-xs text-amber-600 dark:text-amber-400 ml-2">не оплачено</span>
+                    )}
                   </div>
                   <span className="text-sm">{displayMoney(expense.amount)}</span>
                 </div>

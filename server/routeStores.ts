@@ -49,11 +49,15 @@ export type DashboardStore = Pick<
   | "getPartnerDebtSummaries"
   | "getPartnerInvoicesDetail"
   | "getPriorityActions"
+  | "getReceivables"
+  | "getPayables"
+  | "getOwnerLedger"
+  | "createOwnerPayout"
+  | "deleteOwnerPayout"
+  | "setOwnerLedgerStart"
   | "getRecurringInvoicesForMonth"
-  | "getWorkingCapital"
   | "globalSearch"
   | "recalculateAllInvoices"
-  | "updateWorkingCapital"
   | "upsertMonthlyPlan"
 >;
 export type ExportStore = Pick<
@@ -99,6 +103,9 @@ export type ActsStore = Pick<
   | "getSignedAct"
   | "getSignedActsByInvoice"
   | "getUnpaidBonusTotal"
+  | "getInvoicePackages"
+  | "getPackagesByStatus"
+  | "reviewPackage"
   | "logAssistantAction"
   | "markBonusesAsPaid"
 >;

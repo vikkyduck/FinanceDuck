@@ -118,7 +118,8 @@ describe('Complete backup and safe restore', () => {
       .toEqual(Object.values(backupTables).map(getTableName).sort());
     const created = await invoice();
     await db.insert(s.clientPartners).values({ clientId, partnerId });
-    await db.insert(s.signedActs).values({ invoiceId: created.id, actType: 'company', fileName: 'proof.txt', fileData: 'YQ==', uploadedBy: actorId });
+    const [pkg] = await db.insert(s.documentPackages).values({ invoiceId: created.id, side: 'client', status: 'accepted', reviewComment: '2026-10-17', reviewedBy: actorId, reviewedAt: new Date(), acceptedAt: new Date() }).returning();
+    await db.insert(s.signedActs).values({ invoiceId: created.id, actType: 'company', fileName: 'proof.txt', fileData: 'YQ==', uploadedBy: actorId, packageId: pkg.id });
     await db.insert(s.invoiceMessages).values({ invoiceId: created.id, authorRole: 'admin', authorTokenId: actorId, body: '2026-10-17T00:00:00.000Z' });
     await db.insert(s.assistantBonusPayments).values({ amount: '12', paymentDate: '2026-10-17', paidBy: actorId });
     await db.insert(s.monthlyFinancialPlans).values({ year: '2026', month: '10', salesTarget: '1000' });

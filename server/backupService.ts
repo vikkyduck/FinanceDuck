@@ -7,7 +7,7 @@ import { decryptBackup, isEncryptedEnvelope } from "./lib/backupCrypto";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 
-import { backupTables, type TableKey, type Rows } from './services/backupTables';
+import { backupTables, tableAddedInSchema, type TableKey, type Rows } from './services/backupTables';
 export { backupTables } from './services/backupTables';
 import { writeArchive, readArchive, validateArchive, validateRow, restoreRow, upgradeLegacyRow } from './services/backupArchive';
 const BACKUP_DIR = process.env.BACKUP_DIR || "/var/finance-duck/backups";
@@ -43,7 +43,7 @@ export function validateBackup(backup: unknown): BackupData {
   for (const key of Object.keys(backupTables)) {
     const legacy = ["2.0", "3.0"].includes(String(value.version));
     const rows = key === "serviceUsage" && String(value.version) !== "5.0" ? [] : legacy && key === "scheduledJobs" ? [] :
-      key === "ownerTransfers" ? value.data[key] ?? [] : value.data[key as TableKey];
+      key in tableAddedInSchema ? value.data[key as TableKey] ?? [] : value.data[key as TableKey];
     if (!Array.isArray(rows)) throw new Error(`Отсутствует таблица ${key}`);
     data[key as TableKey] = rows.map(row => {
       const revived = { ...row };

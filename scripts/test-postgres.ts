@@ -167,7 +167,7 @@ try {
     restoreNames.push(shadow, retained, failed);
     await control.query(`CREATE DATABASE "${shadow}"`);
     const proof = await restoreShadowDatabase(path.join(backupDirectory, info.id), shadow, path.join(backupDirectory, 'shadow-proof'));
-    assert.equal(proof.tables, 23);
+    assert.equal(proof.tables, 24);
     const shadowAddress = new URL(address); shadowAddress.pathname = `/${shadow}`;
     const shadowPool = new Pool({ connectionString: shadowAddress.toString() });
     tolerateTermination(shadowPool);
@@ -177,7 +177,7 @@ try {
       await assert.rejects(verifyRestoredArchive(shadowDb, objectStore, path.join(backupDirectory, info.id), backupDirectory), /verification failed: invoiceCalculations/);
       await shadowPool.query("UPDATE invoice_calculations SET client_bill = client_bill - 0.01 WHERE invoice_id = $1", [from.id]);
     } finally { await shadowPool.end(); }
-    console.log('PASS: shadow restore verifies all 23 tables and rejects a one-kopeck difference');
+    console.log('PASS: shadow restore verifies all 24 tables and rejects a one-kopeck difference');
     await pool.query("INSERT INTO clients (name) VALUES ('LIVE-AFTER-SNAPSHOT')");
     await pool.end(); pool = undefined;
     const switchSource = await readFile('deploy/swap-databases.sql', 'utf8');

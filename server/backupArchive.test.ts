@@ -54,7 +54,7 @@ it('queues a durable manual backup, completes in the worker, and exposes truthfu
   expect(await service.manualBackupStatus()).toMatchObject({ state:'idle', pending:false, filename:expect.stringMatching(/\.fdb$/) });
 });
 
-it('restores schema 5 archives and legacy JSON, while schema 8 preserves archive dates and rejects missing fields', async () => {
+it('restores schema 5 archives and legacy JSON, while schema 9 preserves archive dates and rejects missing fields', async () => {
   delete process.env.ACCESS_CODE_SECRET;
   const [partner] = await db.select().from(s.partners);
   const [client] = await db.select().from(s.clients);
@@ -65,7 +65,7 @@ it('restores schema 5 archives and legacy JSON, while schema 8 preserves archive
   const file = path.join(directory, info.id);
   const bytes = await readFile(file), offset = bytes.indexOf(10) + 1;
   const header = JSON.parse(bytes.subarray(0, offset).toString());
-  expect(header.schema).toBe(8);
+  expect(header.schema).toBe(9);
   await db.update(s.invoices).set({ archivedAt: null }).where(eq(s.invoices.id, invoice.id));
   expect((await service.restoreBackup(info.id)).success).toBe(true);
   expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual(invoice);
@@ -85,7 +85,7 @@ it('restores schema 5 archives and legacy JSON, while schema 8 preserves archive
   await expect(validateArchive(path.join(directory, legacyFile))).resolves.toBeUndefined();
   expect((await service.restoreBackup(legacyFile)).success).toBe(true);
   expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual({ ...invoice, archivedAt: null });
-  const malformed = path.join(directory, 'backup-manual-schema8-missing-field.fdb');
+  const malformed = path.join(directory, 'backup-manual-schema9-missing-field.fdb');
   await writeFile(malformed, Buffer.concat([bytes.subarray(0, offset), gzipSync(payload)]));
   await expect(validateArchive(malformed)).rejects.toThrow();
 });
@@ -149,4 +149,41 @@ it('settles schema 7 expenses on their own date, restores an empty owner ledger,
   const schema8 = path.join(directory, 'backup-manual-schema8-missing-paid.fdb');
   await writeFile(schema8, Buffer.concat([bytes.subarray(0, offset), encode(withoutPaidAt)]));
   await expect(validateArchive(schema8)).rejects.toThrow();
+});
+it('restores schema 8 archives without document packages and rejects a missing package link in schema 9', async () => {
+  delete process.env.ACCESS_CODE_SECRET;
+  const [partner] = await db.select().from(s.partners);
+  const [client] = await db.select().from(s.clients);
+  const [invoice] = await db.insert(s.invoices).values({ invoiceNumber: 'ARCHIVE-PACKAGE', scheme: 'partner_10',
+    partnerId: partner.id, clientId: client.id, createdBy: randomUUID(), clientBill: '1000' }).returning();
+  const [pkg] = await db.insert(s.documentPackages).values({ invoiceId: invoice.id, side: 'executor', executorName: 'Иван Петров' }).returning();
+  const [act] = await db.insert(s.signedActs).values({ invoiceId: invoice.id, actType: 'executor', fileName: 'Акт.pdf',
+    isLink: true, url: 'https://example.com/act', uploadedBy: randomUUID(), packageId: pkg.id }).returning();
+  const info = await service.createBackup();
+  await db.delete(s.documentPackages).where(eq(s.documentPackages.id, pkg.id));
+  expect((await service.restoreBackup(info.id)).success).toBe(true);
+  expect(await db.select().from(s.documentPackages).where(eq(s.documentPackages.id, pkg.id))).toEqual([pkg]);
+  expect((await db.select().from(s.signedActs).where(eq(s.signedActs.id, act.id)))[0].packageId).toBe(pkg.id);
+
+  const bytes = await readFile(path.join(directory, info.id)), offset = bytes.indexOf(10) + 1;
+  const header = JSON.parse(bytes.subarray(0, offset).toString());
+  const withoutLink = gunzipSync(bytes.subarray(offset)).toString().trimEnd().split('\n').map(line => {
+    const item = JSON.parse(line);
+    if (item.kind === 'row' && item.table === 'signedActs') delete item.row.packageId;
+    return item;
+  });
+  const encode = (items: unknown[]) => gzipSync(items.map(item => JSON.stringify(item)).join('\n') + '\n');
+  const schema8 = 'backup-manual-schema8-packages.fdb';
+  await writeFile(path.join(directory, schema8), Buffer.concat([
+    Buffer.from(JSON.stringify({ ...header, schema: 8 }) + '\n'),
+    encode(withoutLink.filter(item => item.table !== 'documentPackages')),
+  ]));
+  await expect(validateArchive(path.join(directory, schema8))).resolves.toBeUndefined();
+  expect((await service.restoreBackup(schema8)).success).toBe(true);
+  expect((await db.select().from(s.signedActs).where(eq(s.signedActs.id, act.id)))[0].packageId).toBe(null);
+  expect(await db.select().from(s.documentPackages)).toEqual([]);
+
+  const schema9 = path.join(directory, 'backup-manual-schema9-missing-link.fdb');
+  await writeFile(schema9, Buffer.concat([bytes.subarray(0, offset), encode(withoutLink)]));
+  await expect(validateArchive(schema9)).rejects.toThrow();
 });

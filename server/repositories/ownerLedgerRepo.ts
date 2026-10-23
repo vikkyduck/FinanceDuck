@@ -5,7 +5,7 @@
  * остаток на эту дату + доля прибыли, которая пришла на счет ИП с этой даты,
  * - переводы. Ассистентам Кря платит с личной карты, на счет ИП это не влияет.
  * "Мы должны": неоплаченные исполнителям расходы, которые платит владелец,
- * и положительный остаток Кота.
+ * положительный остаток Кота и отдельно невыплаченный бонус ассистенту.
  */
 import Decimal from "decimal.js";
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
@@ -16,6 +16,7 @@ import {
 import { moneyDecimal } from "../../shared/money";
 import { OWNERS, type Owner } from "../../shared/domainTypes";
 import { decodeHtmlEntities } from "../lib/sanitize";
+import { getAssistantBonusSummary } from "./actsRepo";
 import { db as _db } from "../db";
 
 type DB = typeof _db;
@@ -46,7 +47,7 @@ const laterDate = (a: string, b: string) => (a > b ? a : b);
  *  этот счет, остальное закрывает счета партнера по порядку дат. Прибылью из
  *  перевода считается та же доля, что прибыль счета в его сумме к переводу:
  *  остальное возвращает владельцу оплаченные им расходы. */
-async function profitArrivals(db: DB): Promise<{ arrivals: { date: string; profit: Decimal }[]; pending: Decimal }> {
+export async function profitArrivals(db: DB): Promise<{ arrivals: { date: string; profit: Decimal }[]; pending: Decimal }> {
   const paid = await db.select({
     id: invoices.id,
     partnerId: invoices.partnerId,
@@ -109,14 +110,23 @@ async function profitArrivals(db: DB): Promise<{ arrivals: { date: string; profi
   return { arrivals, pending };
 }
 
+/** Прибыль, пришедшая на счет ИП с from по to включительно (to не задан - по сегодня и дальше). */
+export function arrivedProfit(arrivals: { date: string; profit: Decimal }[], from: string, to?: string): Decimal {
+  return moneyDecimal(arrivals.filter(a => a.date >= from && (to === undefined || a.date <= to))
+    .reduce((sum, a) => sum.plus(a.profit), new Decimal(0)));
+}
+
+/** Пополам, как в движке: Кря округляется до копеек, Коту остаток. */
+export function splitShares(profit: Decimal): { krya: Decimal; kot: Decimal } {
+  const krya = moneyDecimal(profit.div(2));
+  return { krya, kot: profit.minus(krya) };
+}
+
 function balanceOf(owner: Owner, transfers: OwnerTransfer[], arrivals: { date: string; profit: Decimal }[]): OwnerBalance {
   const opening = transfers.find(t => t.owner === owner && t.kind === "opening");
   if (!opening) return { since: null, opening: 0, accrued: 0, paidOut: 0, balance: 0 };
   const since = opening.transferDate;
-  // Пополам, как в движке: Кря округляется до копеек, Коту остаток.
-  const profit = moneyDecimal(arrivals.filter(a => a.date >= since).reduce((sum, a) => sum.plus(a.profit), new Decimal(0)));
-  const kryaShare = moneyDecimal(profit.div(2));
-  const accrued = owner === "krya" ? kryaShare : profit.minus(kryaShare);
+  const accrued = splitShares(arrivedProfit(arrivals, since))[owner];
   const paidOut = transfers
     .filter(t => t.owner === owner && t.kind === "payout" && t.transferDate >= since)
     .reduce((sum, t) => sum.plus(t.amount), new Decimal(0));
@@ -187,6 +197,8 @@ export interface UnpaidExpense {
 export interface Payables {
   executors: { total: number; count: number; items: UnpaidExpense[] };
   kot: { since: string | null; balance: number };
+  // Бонус ассистенту за принятые пакеты: Кря платит с личного счета, не со счета ИП.
+  assistant: { since: string; unpaid: number };
 }
 
 /** Расходы, которые платит владелец (оплачены админом или по партнеру-владельцу)
@@ -212,7 +224,7 @@ export async function getPayables(db: DB): Promise<Payables> {
     ))
     .orderBy(asc(invoiceExpenses.date), asc(invoices.invoiceNumber));
   const total = rows.reduce((sum, row) => sum.plus(row.amount), new Decimal(0));
-  const ledger = await getOwnerLedger(db);
+  const [ledger, bonus] = await Promise.all([getOwnerLedger(db), getAssistantBonusSummary(db)]);
   return {
     executors: {
       total: total.toNumber(),
@@ -220,5 +232,6 @@ export async function getPayables(db: DB): Promise<Payables> {
       items: rows.map(row => ({ ...row, description: decodeHtmlEntities(row.description), amount: Number(row.amount) })),
     },
     kot: { since: ledger.kot.since, balance: ledger.kot.balance },
+    assistant: { since: bonus.since, unpaid: bonus.unpaid },
   };
 }

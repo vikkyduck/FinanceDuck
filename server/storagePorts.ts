@@ -37,6 +37,7 @@ import type * as actsRepo from "./repositories/actsRepo";
 
 import type * as dashboardRepo from "./repositories/dashboardRepo";
 import type * as ownerLedgerRepo from "./repositories/ownerLedgerRepo";
+import type * as documentPackagesRepo from "./repositories/documentPackagesRepo";
 import type * as alertsRepo from "./repositories/alertsRepo";
 
 import type * as reportsRepo from "./repositories/reportsRepo";
@@ -316,23 +317,18 @@ export interface DocumentsRepository {
   createAssistantBonusPayment(
     payment: InsertAssistantBonusPayment,
   ): Promise<AssistantBonusPayment>;
-  getUnpaidBonusTotal(): Promise<{
-    total: number;
-    invoiceCount: number;
-    invoiceIds: string[];
-    executorActs: number;
-    companyActs: number;
-    totalEarned: number;
-    totalPaid: number;
-  }>;
+  getUnpaidBonusTotal(): ReturnType<typeof actsRepo.getUnpaidBonusTotal>;
   markBonusesAsPaid(invoiceIds: string[]): Promise<void>;
-  createSignedAct(act: InsertSignedAct): Promise<SignedAct>;
+  createSignedAct(act: InsertSignedAct, pkg?: { executorName: string | null }): Promise<SignedAct>;
+  getInvoicePackages(invoiceId: string): ReturnType<typeof documentPackagesRepo.getInvoicePackages>;
+  getPackagesByStatus(status: string, excludeHidden: boolean): ReturnType<typeof documentPackagesRepo.getPackagesByStatus>;
+  reviewPackage(id: string, action: documentPackagesRepo.PackageReview, comment: string | null, reviewerId: string): ReturnType<typeof documentPackagesRepo.reviewPackage>;
   getSignedActsByInvoice(
     invoiceId: string,
     actType?: ActType,
   ): Promise<Omit<SignedAct, "fileData" | "objectKey">[]>;
   getSignedAct(id: string): Promise<SignedAct | null>;
-  deleteSignedAct(id: string): Promise<void>;
+  deleteSignedAct(id: string, ownerEdit?: boolean): Promise<void>;
   getActsStatistics(excludeHidden?: boolean): Promise<{
     executorActs: number;
     companyActs: number;

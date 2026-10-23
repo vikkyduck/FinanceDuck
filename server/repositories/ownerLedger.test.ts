@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createTestDb, type TestDb } from "../test/testDb";
 import { createInvoice, createInvoiceExpense } from "./invoiceRepo";
 import { createOwnerPayout, deleteOwnerPayout, getOwnerLedger, getPayables, setOwnerLedgerStart } from "./ownerLedgerRepo";
-import { accessTokens, assistantBonusPayments, clients, invoiceExpenses, ownerTransfers, partnerPayments, partners } from "../../shared/schema";
+import { accessTokens, assistantBonusPayments, clients, documentPackages, invoiceExpenses, ownerTransfers, partnerPayments, partners } from "../../shared/schema";
 import { InvoiceCommands } from "../services/invoiceCommands";
 
 // Учет денег владельцев: остаток на дату начала + доля прибыли, пришедшей на счет
@@ -151,7 +151,26 @@ describe("Мы должны", () => {
     // Прибыль OWN: 90 000 - 15 000 - 1 000 = 74 000, Коту 37 000 - 1 000. EXT внешний
     // партнер еще не перевел, его прибыль 78 000 ждет перевода.
     expect(payables.kot).toEqual({ since: "2026-10-01", balance: 36000 });
+    expect(payables.assistant).toEqual({ since: "2026-10-22", unpaid: 0 });
     expect((await getOwnerLedger(asDb())).pendingFromPartners).toBe(78000);
+  });
+
+  it("долг ассистенту отдельной строкой: принятые пакеты минус выплаты с 22.10.2026, счет ИП не трогает", async () => {
+    const own = await invoice("PKG", ownerPartnerId, "paid", "100000", "2026-10-03");
+    await db.insert(documentPackages).values([
+      { invoiceId: own.id, side: "client", status: "accepted", acceptedAt: new Date("2026-10-23T10:00:00Z") },
+      { invoiceId: own.id, side: "executor", executorName: "Иван", status: "accepted", acceptedAt: new Date("2026-10-23T10:00:00Z") },
+      { invoiceId: own.id, side: "executor", executorName: "Анна", status: "pending" },
+    ]);
+    await db.insert(assistantBonusPayments).values([
+      { amount: "1000", paymentDate: "2026-10-24", paidBy: actorId },
+      { amount: "5000", paymentDate: "2026-10-01", paidBy: actorId },
+    ]);
+    await setOwnerLedgerStart(asDb(), { since: "2026-10-01", kot: "0", krya: "0", createdBy: actorId });
+    const payables = await getPayables(asDb());
+    expect(payables.assistant).toEqual({ since: "2026-10-22", unpaid: 2000 });
+    expect(payables.kot.balance).toBe(45000);
+    expect((await getOwnerLedger(asDb())).krya.balance).toBe(45000);
   });
 
   it("расход без отметки оплачен в свою дату, null - не оплачен, отметку можно поставить позже", async () => {

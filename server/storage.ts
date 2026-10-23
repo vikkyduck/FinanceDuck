@@ -24,6 +24,7 @@ import * as actsRepo        from "./repositories/actsRepo";
 import * as actionLogRepo   from "./repositories/actionLogRepo";
 import * as dashboardRepo    from "./repositories/dashboardRepo";
 import * as ownerLedgerRepo  from "./repositories/ownerLedgerRepo";
+import * as documentPackagesRepo from "./repositories/documentPackagesRepo";
 import * as alertsRepo from "./repositories/alertsRepo";
 import * as planningRepo from "./repositories/planningRepo";
 import * as reportsRepo from "./repositories/reportsRepo";
@@ -379,12 +380,15 @@ export class DatabaseStorage implements StorageOperations {
   async recalculateAllInvoices() { return invoiceRepo.recalculateAllInvoices(this.database); }
 
   // Signed Acts methods
-  async createSignedAct(act: InsertSignedAct)                        { return actsRepo.createSignedAct(this.database, act); }
+  async createSignedAct(act: InsertSignedAct, pkg?: { executorName: string | null }) { return actsRepo.createSignedAct(this.database, act, undefined, pkg); }
+  async getInvoicePackages(invoiceId: string) { return documentPackagesRepo.getInvoicePackages(this.database, invoiceId); }
+  async getPackagesByStatus(status: string, excludeHidden: boolean) { return documentPackagesRepo.getPackagesByStatus(this.database, status, excludeHidden); }
+  async reviewPackage(id: string, action: documentPackagesRepo.PackageReview, comment: string | null, reviewerId: string) { return documentPackagesRepo.reviewPackage(this.database, id, action, comment, reviewerId); }
   async getSignedActsByInvoice(invoiceId: string, actType?: ActType)  { return actsRepo.getSignedActsByInvoice(this.database, invoiceId, actType); }
   async openSignedActFile(id: string) { return actsRepo.openSignedActFile(this.database, id); }
   async readSignedActData(id: string) { return actsRepo.readSignedActData(this.database, id); }
   async getSignedAct(id: string)                                      { return actsRepo.getSignedAct(this.database, id); }
-  async deleteSignedAct(id: string)                                   { return actsRepo.deleteSignedAct(this.database, id); }
+  async deleteSignedAct(id: string, ownerEdit?: boolean)              { return actsRepo.deleteSignedAct(this.database, id, ownerEdit); }
   async getActsStatistics(excludeHidden = false)                      { return actsRepo.getActsStatistics(this.database, excludeHidden); }
   async getAssistantStats()                                           { return actsRepo.getAssistantStats(this.database); }
   async getAssistantBonusPayments()                                   { return actsRepo.getAssistantBonusPayments(this.database); }

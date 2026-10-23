@@ -297,6 +297,28 @@ export const ownerTransfers = pgTable("owner_transfers", {
   check("owner_transfers_payout_positive", sql`${table.kind} <> 'payout' OR ${table.amount} > 0`),
 ]);
 
+// Пакет документов ассистента для бонуса: документы с клиентом по счету или с одним
+// исполнителем. Владелец принимает или возвращает пакет целиком, бонус начисляется
+// в момент принятия (accepted_at). Документы до 22.10.2026 пакетов не имеют.
+export const documentPackages = pgTable("document_packages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
+  side: text("side").notNull(),
+  executorName: text("executor_name"),
+  status: text("status").notNull().default('pending'),
+  reviewComment: text("review_comment"),
+  reviewedBy: uuid("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_document_packages_identity").on(table.invoiceId, table.side, sql`lower(coalesce(${table.executorName}, ''))`),
+  index("idx_document_packages_status").on(table.status),
+  check("document_packages_side_check", sql`${table.side} IN ('client', 'executor')`),
+  check("document_packages_status_check", sql`${table.status} IN ('pending', 'accepted', 'returned')`),
+  check("document_packages_executor_check", sql`${table.side} = 'executor' OR ${table.executorName} IS NULL`),
+]);
+
 export const signedActs = pgTable("signed_acts", {
   id: uuid("id").defaultRandom().primaryKey(),
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: 'cascade' }).notNull(),
@@ -309,9 +331,12 @@ export const signedActs = pgTable("signed_acts", {
   url: text("url"),
   uploadedBy: uuid("uploaded_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  // Пакет ассистента, NULL у документов до 22.10.2026 и загруженных не ассистентом.
+  packageId: uuid("package_id").references(() => documentPackages.id, { onDelete: 'set null' }),
 }, (table) => [
   index("idx_signed_acts_invoice").on(table.invoiceId),
   index("idx_signed_acts_type").on(table.actType),
+  index("idx_signed_acts_package").on(table.packageId),
 ]);
 
 export const monthlyFinancialPlans = pgTable("monthly_financial_plans", {
@@ -443,6 +468,7 @@ export type InsertPartnerPayment = typeof partnerPayments.$inferInsert;
 export type MonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferSelect;
 export type InsertMonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferInsert;
 export type SignedAct = typeof signedActs.$inferSelect;
+export type DocumentPackage = typeof documentPackages.$inferSelect;
 export type InsertSignedAct = typeof signedActs.$inferInsert;
 export type OwnerTransfer = typeof ownerTransfers.$inferSelect;
 export type AssistantBonusPayment = typeof assistantBonusPayments.$inferSelect;

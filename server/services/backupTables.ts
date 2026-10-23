@@ -7,6 +7,7 @@ export const backupTables = {
   serviceUsage: schema.serviceUsage,
   invoiceCalculations: schema.invoiceCalculations, invoiceExpenses: schema.invoiceExpenses,
   invoiceTransfers: schema.invoiceTransfers, partnerPayments: schema.partnerPayments,
+  documentPackages: schema.documentPackages,
   signedActs: schema.signedActs, invoiceMessages: schema.invoiceMessages,
   assistantBonusPayments: schema.assistantBonusPayments,
   monthlyFinancialPlans: schema.monthlyFinancialPlans,
@@ -16,9 +17,10 @@ export const backupTables = {
   notificationOutbox: schema.notificationOutbox,
   commandReceipts: schema.commandReceipts,
   scheduledJobs: schema.scheduledJobs,
-  // Last: archives up to schema 7 predate it, and the reader appends it empty.
   ownerTransfers: schema.ownerTransfers,
 } as const;
 export type TableKey = keyof typeof backupTables;
+/** Archive schema that introduced a table: older archives restore it empty. */
+export const tableAddedInSchema: Partial<Record<TableKey, number>> = { ownerTransfers: 8, documentPackages: 9 };
 export type Rows = Record<string, unknown>[];
 

@@ -207,3 +207,44 @@ it('closing-document updates return the same safe fields as the accountant invoi
   expect(invoice.closingDocumentUrl).toBe('https://example.test/closing.pdf');
   for (const field of ['partnerId', 'partnerCommissionRate', 'hideFromAssistant']) expect(invoice[field]).toBeUndefined();
 });
+
+it('document packages: the assistant names executors, only the owner reviews and changes an accepted package', async () => {
+  const row = fixtures.find(r => !r.hidden && r.scheme === 'partner_15')!;
+  const hidden = fixtures.find(r => r.hidden && r.scheme === 'partner_15')!;
+  const link = { fileName: 'act.pdf', isLink: true, url: 'https://example.test/act' };
+  const upload = (role: string, body: object) => request(role, `/api/invoices/${row.id}/acts`, 'POST', { actType: 'executor', ...link, ...body });
+  const review = (role: string, id: string, body: object) => request(role, `/api/document-packages/${id}/review`, 'POST', body);
+  expect((await upload('assistant', {})).status).toBe(400);
+  const uploaded = await upload('assistant', { executorName: '  Иван   Петров ' });
+  expect(uploaded.status).toBe(201);
+  const act = await uploaded.json();
+  const ownerUpload = await upload('admin', {});
+  expect(ownerUpload.status).toBe(201);
+  expect((await ownerUpload.json()).packageId).toBeNull();
+  const packages = await request('assistant', `/api/invoices/${row.id}/document-packages`).then(r => r.json());
+  expect(packages).toMatchObject([{ side: 'executor', executorName: 'Иван Петров', status: 'pending', documents: 1 }]);
+  for (const role of ['accountant', 'partner', 'client']) {
+    expect((await request(role, `/api/invoices/${row.id}/document-packages`)).status).toBe(403);
+    expect((await request(role, '/api/document-packages?status=pending')).status).toBe(403);
+  }
+  expect((await request('assistant', `/api/invoices/${hidden.id}/document-packages`)).status).toBe(404);
+  expect((await request('admin', '/api/document-packages?status=unknown')).status).toBe(400);
+  const id: string = packages[0].id;
+  expect((await request('admin', '/api/document-packages?status=pending').then(r => r.json())).map((p: { id: string }) => p.id)).toEqual([id]);
+
+  expect((await review('assistant', id, { action: 'accept' })).status).toBe(403);
+  expect((await review('admin', id, { action: 'return' })).status).toBe(400);
+  expect((await review('admin', 'not-a-package', { action: 'accept' })).status).toBe(404);
+  const accepted = await review('admin', id, { action: 'accept' });
+  expect(accepted.status).toBe(200);
+  expect((await accepted.json()).status).toBe('accepted');
+  expect((await review('admin', id, { action: 'accept' })).status).toBe(409);
+
+  expect((await upload('assistant', { executorName: 'иван петров' })).status).toBe(409);
+  expect((await request('assistant', `/api/acts/${act.id}`, 'DELETE')).status).toBe(409);
+  expect(await request('assistant', '/api/assistant/stats').then(r => r.json())).toMatchObject({ accepted: { client: 0, executor: 1 }, earned: 1000, unpaid: 1000 });
+  expect((await request('admin', '/api/admin/payables').then(r => r.json())).assistant).toEqual({ since: '2026-10-22', unpaid: 1000 });
+  expect((await request('admin', `/api/acts/${act.id}`, 'DELETE')).status).toBe(200);
+  await db.delete(s.signedActs).where(eq(s.signedActs.invoiceId, row.id));
+  await db.delete(s.documentPackages).where(eq(s.documentPackages.id, id));
+});

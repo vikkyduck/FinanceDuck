@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,23 +8,17 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/lib/invoiceCalculations";
+import { formatDate } from "@/lib/format";
 import { DollarSign, User, Building2, History, Calendar, RefreshCw } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 import { AssistantBonusPayment } from "@shared/schema";
-import { ASSISTANT_BONUS_PER_ACT } from "@shared/financialEngine";
+import { bonusRows, type AssistantBonusSummary } from "@/lib/assistantBonus";
+import { packagesByStatusKey, packageTitle, type PackageListItem } from "@/lib/documentPackages";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 
-interface AssistantStats {
-  paidInvoicesCount: number;
-  executorActsCount: number;
-  companyActsCount: number;
-  totalPaidInvoices: number;
-  assistantBonus: number;
-  totalEarned: number;
-  totalPaid: number;
-}
+const rowIcon = { client: Building2, executor: User } as const;
 
 export const AssistantBonusCard = () => {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
@@ -34,6 +29,7 @@ export const AssistantBonusCard = () => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         queryClient.invalidateQueries({ queryKey: ['/api/assistant/stats'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/document-packages'] });
         queryClient.invalidateQueries({ queryKey: ['/api/my-bonus-payments'] });
       }
     };
@@ -44,9 +40,16 @@ export const AssistantBonusCard = () => {
     };
   }, [queryClient]);
 
-  const { data: stats, isLoading, isFetching } = useQuery<AssistantStats>({
+  const { data: stats, isLoading, isFetching } = useQuery<AssistantBonusSummary>({
     queryKey: ['/api/assistant/stats'],
     queryFn: () => apiGet('/assistant/stats'),
+    refetchInterval,
+    staleTime: 10000,
+  });
+
+  const { data: returned = [] } = useQuery<PackageListItem[]>({
+    queryKey: packagesByStatusKey("returned"),
+    queryFn: () => apiGet("/document-packages?status=returned"),
     refetchInterval,
     staleTime: 10000,
   });
@@ -88,17 +91,7 @@ export const AssistantBonusCard = () => {
     );
   }
 
-  const companyActsAmount = stats.companyActsCount * ASSISTANT_BONUS_PER_ACT.company;
-  const executorActsAmount = stats.executorActsCount * ASSISTANT_BONUS_PER_ACT.executor;
-  const progressPercent = Math.min((stats.assistantBonus / 50000) * 100, 100);
-
-  const executorProgress = stats.totalPaidInvoices > 0 
-    ? (stats.executorActsCount / stats.totalPaidInvoices) * 100 
-    : 0;
-  const companyProgress = stats.totalPaidInvoices > 0 
-    ? (stats.companyActsCount / stats.totalPaidInvoices) * 100 
-    : 0;
-
+  const progressPercent = Math.min((stats.unpaid / 50000) * 100, 100);
   const totalPaid = paymentHistory.reduce((sum, p) => sum + parseFloat(p.amount), 0);
 
   return (
@@ -112,8 +105,8 @@ export const AssistantBonusCard = () => {
               <RefreshCw className="h-3 w-3 text-muted-foreground animate-spin" />
             )}
           </CardTitle>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={() => setHistoryDialogOpen(true)}
             data-testid="button-view-my-bonus-history"
@@ -125,14 +118,14 @@ export const AssistantBonusCard = () => {
         <CardContent className="space-y-6">
           <div>
             <div className="text-3xl font-bold text-primary" data-testid="text-assistant-bonus">
-              {formatCurrency(stats.assistantBonus)}
+              {formatCurrency(stats.unpaid)}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Накоплено после последней выплаты
+              К выплате. Бонус начисляется, когда владелец принимает пакет документов, правило действует с {formatDate(stats.since)}
             </p>
-            {stats.totalPaid > 0 && (
+            {stats.paid > 0 && (
               <p className="text-xs text-muted-foreground mt-1">
-                Всего заработано: {formatCurrency(stats.totalEarned)} (выплачено: {formatCurrency(stats.totalPaid)})
+                Заработано: {formatCurrency(stats.earned)} (выплачено: {formatCurrency(stats.paid)})
               </p>
             )}
           </div>
@@ -145,46 +138,50 @@ export const AssistantBonusCard = () => {
             <Progress value={progressPercent} className="h-2" />
           </div>
 
-          <div className="space-y-4 pt-2">
-            <div className="p-3 rounded-md bg-background/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4 text-purple-500" />
-                  <span>Акты компаний</span>
+          <div className="space-y-2">
+            {bonusRows(stats).map(row => {
+              const Icon = rowIcon[row.key];
+              return (
+                <div key={row.key} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-md bg-background/50">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Icon className={`h-4 w-4 ${row.key === "client" ? "text-purple-500" : "text-blue-500"}`} />
+                    <span>{row.label}</span>
+                  </div>
+                  <span className="text-sm font-semibold" data-testid={`text-accepted-${row.key}`}>
+                    {row.count} x {formatCurrency(row.rate)} = {formatCurrency(row.count * row.rate)}
+                  </span>
                 </div>
-                <span className="text-sm font-medium" data-testid="text-company-acts-count">
-                  {stats.companyActsCount} / {stats.totalPaidInvoices}
-                </span>
-              </div>
-              <Progress value={companyProgress} className="h-1.5" />
-              <div className="text-sm font-semibold text-right">
-                {stats.companyActsCount} x 2 000 = {formatCurrency(companyActsAmount)}
-              </div>
-            </div>
-
-            <div className="p-3 rounded-md bg-background/50 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                  <User className="h-4 w-4 text-blue-500" />
-                  <span>Акты исполнителей</span>
-                </div>
-                <span className="text-sm font-medium" data-testid="text-executor-acts-count">
-                  {stats.executorActsCount} / {stats.totalPaidInvoices}
-                </span>
-              </div>
-              <Progress value={executorProgress} className="h-1.5" />
-              <div className="text-sm font-semibold text-right">
-                {stats.executorActsCount} x 1 000 = {formatCurrency(executorActsAmount)}
-              </div>
-            </div>
+              );
+            })}
           </div>
 
-          <div className="pt-2 border-t">
-            <div className="flex items-center justify-between p-2 rounded-md bg-primary/10">
-              <span className="font-medium">Итого бонус:</span>
-              <span className="font-bold text-primary">{formatCurrency(stats.assistantBonus)}</span>
-            </div>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <Badge variant="warning" data-testid="badge-packages-pending">
+              На проверке: {stats.pending}
+            </Badge>
+            <Badge variant={stats.returned > 0 ? "destructive" : "outline"} data-testid="badge-packages-returned">
+              Возвращены: {stats.returned}
+            </Badge>
           </div>
+
+          {returned.length > 0 && (
+            <div className="space-y-2" data-testid="list-returned-packages">
+              <p className="text-sm font-medium">Что исправить</p>
+              {returned.map(pkg => (
+                <Link key={pkg.id} to={`/invoices/${pkg.invoiceId}`} className="block p-3 rounded-md border hover-elevate text-sm">
+                  <span className="font-medium">{pkg.invoiceNumber}</span>
+                  {pkg.clientName ? `, ${pkg.clientName}` : ""}
+                  <span className="block text-xs text-muted-foreground [overflow-wrap:anywhere]">{packageTitle(pkg)}</span>
+                  {pkg.reviewComment && (
+                    <span className="block mt-1 [overflow-wrap:anywhere]">{pkg.reviewComment}</span>
+                  )}
+                </Link>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Загрузите исправленный документ в карточке счета: пакет снова уйдет на проверку.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -202,7 +199,7 @@ export const AssistantBonusCard = () => {
               </div>
             ) : paymentHistory.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
-                Выплат ещё не было
+                Выплат еще не было
               </p>
             ) : (
               <>

@@ -103,6 +103,9 @@ export type ActsStore = Pick<
   | "getSignedAct"
   | "getSignedActsByInvoice"
   | "getUnpaidBonusTotal"
+  | "getInvoicePackages"
+  | "getPackagesByStatus"
+  | "reviewPackage"
   | "logAssistantAction"
   | "markBonusesAsPaid"
 >;

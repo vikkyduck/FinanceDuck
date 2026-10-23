@@ -25,9 +25,11 @@ interface UnpaidExpense {
 interface Payables {
   executors: { total: number; count: number; items: UnpaidExpense[] };
   kot: { since: string | null; balance: number };
+  assistant: { since: string; unpaid: number };
 }
 
-/** "Мы должны": неоплаченные исполнителям расходы, которые платит владелец, и долг Коту. */
+/** "Мы должны": неоплаченные исполнителям расходы, которые платит владелец, долг Коту
+ *  и отдельно бонус ассистенту, который владелец платит с личного счета. */
 export const PayablesCard = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -62,7 +64,7 @@ export const PayablesCard = () => {
           <p className="text-sm text-muted-foreground">Не удалось загрузить данные</p>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-3 sm:p-4 bg-background/50 rounded-lg space-y-1">
                 <p className="text-sm text-muted-foreground">Исполнителям</p>
                 <p className="text-xl sm:text-2xl font-bold" data-testid="text-payables-executors">{formatMoney(data.executors.total)}</p>
@@ -79,6 +81,13 @@ export const PayablesCard = () => {
                     : data.kot.balance < 0
                       ? `Кот получил вперед ${formatMoney(-data.kot.balance)}`
                       : `с ${formatDate(data.kot.since)}`}
+                </p>
+              </div>
+              <div className="p-3 sm:p-4 bg-background/50 rounded-lg space-y-1">
+                <p className="text-sm text-muted-foreground">Ассистенту, с личного счета</p>
+                <p className="text-xl sm:text-2xl font-bold" data-testid="text-payables-assistant">{formatMoney(data.assistant.unpaid)}</p>
+                <p className="text-xs text-muted-foreground">
+                  Бонус за принятые пакеты с {formatDate(data.assistant.since)}, в итог не входит
                 </p>
               </div>
             </div>
@@ -123,7 +132,7 @@ export const PayablesCard = () => {
               </Collapsible>
             )}
             <p className="text-xs text-muted-foreground mt-3">
-              Сюда входят расходы, которые платите вы: с отметкой "Администратор" или по партнерам с оплатой напрямую владельцу. Бонус ассистента сюда пока не входит.
+              Сюда входят расходы, которые платите вы: с отметкой "Администратор" или по партнерам с оплатой напрямую владельцу. Бонус ассистенту вы платите с личного счета, поэтому он показан отдельно и в сумму в заголовке не входит.
             </p>
           </>
         )}

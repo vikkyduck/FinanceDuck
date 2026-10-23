@@ -6,7 +6,7 @@ import { createGzip, createGunzip } from 'node:zlib';
 import { getTableColumns, sql } from 'drizzle-orm';
 import { createSelectSchema } from 'drizzle-zod';
 import type { db } from '../db';
-import { backupTables, type TableKey } from './backupTables';
+import { backupTables, tableAddedInSchema, type TableKey } from './backupTables';
 import { objectDigest, type ObjectStore } from './objectStore';
 
 const MAX_LINE = 20 * 1024 * 1024;
@@ -15,12 +15,14 @@ const tableKeys = Object.keys(backupTables) as TableKey[];
 type Meta = { createdAt: string; type: 'manual' | 'auto' };
 /** Columns added after an archive schema: schema 5 / legacy JSON had no administrative
  *  archive marker, schemas up to 6 had no partner directToOwner flag, schemas up to 7
- *  had no expense paidAt (settled on the expense date, as migration 0009 does). */
+ *  had no expense paidAt (settled on the expense date, as migration 0009 does),
+ *  schemas up to 8 had no document package link. */
 export function upgradeLegacyRow(key: TableKey, row: Record<string, unknown>, schema: number) {
   let upgraded = row;
   if (schema < 6 && key === 'invoices' && !Object.hasOwn(upgraded, 'archivedAt')) upgraded = { ...upgraded, archivedAt: null };
   if (schema < 7 && key === 'partners' && !Object.hasOwn(upgraded, 'directToOwner')) upgraded = { ...upgraded, directToOwner: false };
   if (schema < 8 && key === 'invoiceExpenses' && !Object.hasOwn(upgraded, 'paidAt')) upgraded = { ...upgraded, paidAt: upgraded.date ?? null };
+  if (schema < 9 && key === 'signedActs' && !Object.hasOwn(upgraded, 'packageId')) upgraded = { ...upgraded, packageId: null };
   return upgraded;
 }
 export type ArchiveItem = { kind: 'table'; table: TableKey } | { kind: 'end'; table: TableKey; count: number }
@@ -51,7 +53,7 @@ function archiveKey() {
 /** A repeatable-read cursor snapshot with bounded batches and stream backpressure. */
 export async function writeArchive(database: typeof db, objects: ObjectStore, target: string, meta: Meta) {
   const key = archiveKey(), iv = randomBytes(12);
-  const header = Buffer.from(JSON.stringify({ format: 'fdb1', schema: 8, ...meta, encrypted: !!key, iv: iv.toString('base64') }) + '\n');
+  const header = Buffer.from(JSON.stringify({ format: 'fdb1', schema: 9, ...meta, encrypted: !!key, iv: iv.toString('base64') }) + '\n');
   const cipher = key ? createCipheriv('aes-256-gcm', key, iv) : undefined;
   cipher?.setAAD(header);
   const temporary = target + '.tmp';
@@ -106,7 +108,7 @@ export async function* readArchive(file: string): AsyncGenerator<ArchiveItem> {
     if (newline < 0) throw new Error('Invalid archive header');
     const header = probe.subarray(0, newline + 1);
     const meta = JSON.parse(header.toString());
-    if (meta.format !== 'fdb1' || ![5, 6, 7, 8].includes(meta.schema) || typeof meta.encrypted !== 'boolean') throw new Error('Unsupported archive');
+    if (meta.format !== 'fdb1' || ![5, 6, 7, 8, 9].includes(meta.schema) || typeof meta.encrypted !== 'boolean') throw new Error('Unsupported archive');
     const key = meta.encrypted ? archiveKey() : null;
     if (meta.encrypted && !key) throw new Error('Missing archive encryption key');
     const input = createReadStream(file, { fd: handle.fd, autoClose: false, start: header.length, end: size - 1 - (meta.encrypted ? 16 : 0) });
@@ -118,7 +120,15 @@ export async function* readArchive(file: string): AsyncGenerator<ArchiveItem> {
       done = pipeline(input, decipher, createGunzip(), output);
     } else done = pipeline(input, createGunzip(), output);
     void done.catch(() => {});
-    let pending = Buffer.alloc(0), ownerTransfers = false;
+    // Tables newer than the archive restore empty, in their foreign-key position.
+    const seen = new Set<TableKey>();
+    const missing = (before: number) => tableKeys.slice(0, before)
+      .filter(table => (tableAddedInSchema[table] ?? 0) > meta.schema && !seen.has(table));
+    const empty = (tables: TableKey[]) => tables.flatMap((table): ArchiveItem[] => {
+      seen.add(table);
+      return [{ kind: 'table', table }, { kind: 'end', table, count: 0 }];
+    });
+    let pending = Buffer.alloc(0);
     for await (const chunk of output) {
       pending = Buffer.concat([pending, Buffer.from(chunk)]);
       let end: number;
@@ -126,19 +136,15 @@ export async function* readArchive(file: string): AsyncGenerator<ArchiveItem> {
         if (end > MAX_LINE) throw new Error('Archive record too large');
         const line = pending.subarray(0, end); pending = pending.subarray(end + 1);
         const item = JSON.parse(line.toString()) as ArchiveItem;
-        if (meta.schema < 8 && item.kind === 'row') item.row = upgradeLegacyRow(item.table, item.row, meta.schema);
-        if (item.table === 'ownerTransfers') ownerTransfers = true;
+        if (meta.schema < 9 && item.kind === 'row') item.row = upgradeLegacyRow(item.table, item.row, meta.schema);
+        if (item.kind === 'table') { yield* empty(missing(tableKeys.indexOf(item.table))); seen.add(item.table); }
         yield item;
       }
       if (pending.length > MAX_LINE) throw new Error('Archive record too large');
     }
     await done;
     if (pending.length) throw new Error('Truncated archive record');
-    // Owner transfers start at schema 8: older archives restore them as an empty table.
-    if (meta.schema < 8 && !ownerTransfers) {
-      yield { kind: 'table', table: 'ownerTransfers' };
-      yield { kind: 'end', table: 'ownerTransfers', count: 0 };
-    }
+    yield* empty(missing(tableKeys.length));
   } finally {
     output?.destroy();
     await done?.catch(() => {});

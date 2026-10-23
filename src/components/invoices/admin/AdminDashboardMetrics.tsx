@@ -13,6 +13,7 @@ import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { ReceivablesCard } from "./ReceivablesCard";
 import { PayablesCard } from "./PayablesCard";
 import { OwnerTransfersCard } from "./OwnerTransfersCard";
+import { PackagesReviewCard } from "./PackagesReviewCard";
 import {
   TrendingUp, 
   Scale,
@@ -39,7 +40,10 @@ interface DashboardStats {
     recurring?: number;
   };
   monthlyProfit: number;
+  // Доли по прибыли, которая пришла на счет: по внешним партнерам после их перевода.
   ownerShares: {
+    yearlyArrived?: number;
+    monthlyArrived?: number;
     yearlyKrya: number;
     yearlyKot: number;
     monthlyKrya: number;
@@ -47,7 +51,7 @@ interface DashboardStats {
     yearlyKryaAfterAssistants?: number;
     monthlyKryaAfterAssistants?: number;
   };
-  // Бонусы ассистентам за акты периода, платятся из доли Кря.
+  // Бонус ассистенту за период: Кря платит его с личного счета.
   assistantBonus?: {
     yearly: number;
     monthly: number;
@@ -233,7 +237,7 @@ const formatCurrency = (amount: number) => formatMoney(amount);
 
 const KryaAfterAssistants = ({ bonus, after, testId }: { bonus?: number; after?: number; testId: string }) => (
   bonus === undefined || after === undefined ? null : (
-    <p className="text-xs text-muted-foreground" data-testid={testId} title="Бонусы ассистентам за акты этого периода">
+    <p className="text-xs text-muted-foreground" data-testid={testId} title="Бонус ассистенту за этот период, вы платите его с личного счета">
       после ассистентов{bonus > 0 ? ` (-${formatCurrency(bonus)})` : ""}: {formatCurrency(after)}
     </p>
   )
@@ -630,8 +634,8 @@ export const AdminDashboardMetrics = () => {
         </Card>
       </div>
 
-      {/* Долги к сбору + Черновики без даты оплаты (заменили «Требует внимания») */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+      {/* Долги к сбору, черновики без даты оплаты и документы ассистента на проверке */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-4">
         <DrillDownCard
           icon={DollarSign}
           title="Долги к сбору"
@@ -648,6 +652,7 @@ export const AdminDashboardMetrics = () => {
           accentClass="text-amber-600 dark:text-amber-400"
           showProfitSum={false}
         />
+        <PackagesReviewCard />
       </div>
 
       <ReceivablesCard />
@@ -660,13 +665,16 @@ export const AdminDashboardMetrics = () => {
             <Users className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />
             Доли (50/50)
           </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            По прибыли, которая пришла на счет: по внешним партнерам после их перевода
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Yearly Shares */}
             <div className="space-y-2 sm:space-y-3">
               <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
-                За {selectedYear} год (прибыль: {formatCurrency(stats.yearlySummary.totalProfit)})
+                За {selectedYear} год (пришло прибыли: {formatCurrency(stats.ownerShares.yearlyArrived ?? stats.yearlySummary.totalProfit)})
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
@@ -690,7 +698,7 @@ export const AdminDashboardMetrics = () => {
             {/* Monthly Shares */}
             <div className="space-y-2 sm:space-y-3">
               <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
-                {MONTH_NAMES[selectedMonth]} (прибыль: {formatCurrency(stats.monthlyProfit)})
+                {MONTH_NAMES[selectedMonth]} (пришло прибыли: {formatCurrency(stats.ownerShares.monthlyArrived ?? stats.monthlyProfit)})
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">

@@ -14,6 +14,9 @@ const address = new URL(process.env.TEST_POSTGRES_URL ?? 'postgres://postgres:po
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(address.hostname)) throw new Error('Use an explicit local PostgreSQL test instance');
 const name = `finance_test_${randomUUID().replaceAll('-', '')}`;
 const control = new Pool({ connectionString: address.toString(), max: 1 });
+// pool.end() resolves before idle sockets finish closing, and the database switch test
+// terminates those backends (57P01). Without a listener that pool 'error' crashes the run.
+const tolerateTermination = (target: Pool) => target.on('error', error => { if ((error as { code?: string }).code !== '57P01') throw error; });
 let pool: Pool | undefined;
 const restoreNames: string[] = [];
 try {
@@ -21,6 +24,7 @@ try {
   address.pathname = `/${name}`;
   process.env.DATABASE_URL = address.toString();
   pool = new Pool({ connectionString: address.toString(), max: 12, options: '-c statement_timeout=20000' });
+  tolerateTermination(pool);
   const db = drizzle(pool, { schema });
   await migrate(db, { migrationsFolder: 'drizzle' });
   const repo = await import('../server/repositories/invoiceRepo');
@@ -166,6 +170,7 @@ try {
     assert.equal(proof.tables, 23);
     const shadowAddress = new URL(address); shadowAddress.pathname = `/${shadow}`;
     const shadowPool = new Pool({ connectionString: shadowAddress.toString() });
+    tolerateTermination(shadowPool);
     try {
       const shadowDb = drizzle(shadowPool, { schema });
       await shadowPool.query("UPDATE invoice_calculations SET client_bill = client_bill + 0.01 WHERE invoice_id = $1", [from.id]);
@@ -190,10 +195,12 @@ try {
     console.log('PASS: interruption between database renames rolls back both names and connection policy');
     await switchDatabases(shadow, retained);
     let readback = new Pool({ connectionString: address.toString() });
+    tolerateTermination(readback);
     try { assert.equal((await readback.query("SELECT count(*)::int AS n FROM clients WHERE name='LIVE-AFTER-SNAPSHOT'")).rows[0].n, 0); }
     finally { await readback.end(); }
     await switchDatabases(retained, failed);
     readback = new Pool({ connectionString: address.toString() });
+    tolerateTermination(readback);
     try { assert.equal((await readback.query("SELECT count(*)::int AS n FROM clients WHERE name='LIVE-AFTER-SNAPSHOT'")).rows[0].n, 1); }
     finally { await readback.end(); }
     console.log('PASS: verified database switch and reverse switch preserve the original live database');

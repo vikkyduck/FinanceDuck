@@ -101,6 +101,7 @@ describe('Recurring schedule and authorization', () => {
     const result = await invoices.getInvoice(database(), generated.id);
     expect(Number(result?.calculations?.commissionAmount)).toBe(200);
     expect(Number(result?.calculations?.executorExpensesTotal)).toBe(50);
+    expect((await invoices.getInvoiceExpenses(database(), generated.id)).map(expense => expense.paidAt)).toEqual([null]);
     expect((await recurring.getRecurringInvoice(database(), template.id))?.nextInvoiceDate).toBe('2026-02-28');
   });
 });

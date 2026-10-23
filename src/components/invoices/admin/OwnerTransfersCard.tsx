@@ -19,7 +19,6 @@ interface OwnerBalance {
   since: string | null;
   opening: number;
   accrued: number;
-  assistants: number;
   paidOut: number;
   balance: number;
 }
@@ -36,6 +35,7 @@ interface OwnerTransfer {
 interface OwnerLedger {
   kot: OwnerBalance;
   krya: OwnerBalance;
+  pendingFromPartners: number;
   transfers: OwnerTransfer[];
 }
 
@@ -138,7 +138,6 @@ export const OwnerTransfersCard = () => {
                 </p>
                 {data.krya.opening !== 0 && <Line label={`Остаток на ${formatDate(data.krya.since)}`} value={data.krya.opening} />}
                 <Line label={`Доля Кря с ${formatDate(data.krya.since)}`} value={data.krya.accrued} />
-                <Line label="Выплачено ассистентам" value={data.krya.assistants} minus />
                 <Line label="Переведено себе" value={data.krya.paidOut} minus />
                 <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setPayoutOwner("krya")} data-testid="button-payout-krya">
                   Записать перевод себе
@@ -154,8 +153,13 @@ export const OwnerTransfersCard = () => {
                 Изменить дату начала
               </Button>
             </div>
+            {data.pendingFromPartners > 0 && (
+              <p className="text-sm mt-2" data-testid="text-owner-pending">
+                Ждет перевода от партнеров: прибыль {formatMoney(data.pendingFromPartners)}, по {formatMoney(data.pendingFromPartners / 2)} Коту и вам.
+              </p>
+            )}
             <p className="text-xs text-muted-foreground mt-2">
-              Доли считаются по оплаченным счетам, как в карточке "Доли (50/50)". Ассистентам вы платите из своей доли, поэтому их выплаты уменьшают остаток Кря.
+              Доля начисляется, когда деньги пришли на счет ИП: по клиентам, которые платят вам напрямую, в день оплаты, по остальным партнерам после их перевода.
             </p>
           </>
         )}
@@ -203,7 +207,7 @@ export const OwnerTransfersCard = () => {
           <DialogHeader>
             <DialogTitle>Дата начала учета</DialogTitle>
             <DialogDescription>
-              Доли и переводы считаются с этой даты. Остаток со знаком минус значит, что получено больше положенного.
+              Доли и переводы считаются с этой даты. В остатках учитывайте только деньги, которые уже пришли на счет ИП. Остаток со знаком минус значит, что получено больше положенного.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

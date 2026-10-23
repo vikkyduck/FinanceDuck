@@ -1,5 +1,6 @@
 import { USER_ROLES, INVOICE_SCHEMES, INVOICE_STATUSES } from "./domainTypes";
-import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, uniqueIndex, integer, bigint } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, uuid, timestamp, boolean, numeric, date, pgEnum, index, uniqueIndex, integer, bigint, check } from "drizzle-orm/pg-core";
 
 export const userRoleEnum = pgEnum('user_role', USER_ROLES);
 export const invoiceSchemeEnum = pgEnum('invoice_scheme', INVOICE_SCHEMES);
@@ -196,6 +197,10 @@ export const invoiceExpenses = pgTable("invoice_expenses", {
   amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
   paidByAdmin: boolean("paid_by_admin").default(false).notNull(),
   date: date("date").defaultNow().notNull(),
+  // Когда расход оплачен исполнителю. NULL - еще не оплачен, и если его платит
+  // владелец, он попадает в "Мы должны". Миграция считает старые расходы
+  // оплаченными в их дату.
+  paidAt: date("paid_at"),
   createdBy: uuid("created_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -270,6 +275,26 @@ export const partnerPayments = pgTable("partner_payments", {
   // getPartnerPayments фильтрует по partnerId; долги/остатки — по invoiceId.
   index("idx_partner_payments_partner").on(table.partnerId),
   index("idx_partner_payments_invoice").on(table.invoiceId),
+]);
+
+// Деньги владельцев со счета ИП. kind 'payout' - перевод Коту или себе,
+// 'opening' - остаток на дату начала учета (одна строка на владельца).
+// Балансы считает ownerLedgerRepo.
+export const ownerTransfers = pgTable("owner_transfers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  owner: text("owner").notNull(),
+  kind: text("kind").notNull(),
+  amount: numeric("amount", { precision: 15, scale: 2 }).notNull(),
+  transferDate: date("transfer_date").notNull(),
+  notes: text("notes"),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("idx_owner_transfers_owner_date").on(table.owner, table.transferDate),
+  uniqueIndex("uq_owner_transfers_opening").on(table.owner).where(sql`${table.kind} = 'opening'`),
+  check("owner_transfers_owner_check", sql`${table.owner} IN ('krya', 'kot')`),
+  check("owner_transfers_kind_check", sql`${table.kind} IN ('opening', 'payout')`),
+  check("owner_transfers_payout_positive", sql`${table.kind} <> 'payout' OR ${table.amount} > 0`),
 ]);
 
 export const signedActs = pgTable("signed_acts", {
@@ -419,6 +444,7 @@ export type MonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferSelect;
 export type InsertMonthlyFinancialPlan = typeof monthlyFinancialPlans.$inferInsert;
 export type SignedAct = typeof signedActs.$inferSelect;
 export type InsertSignedAct = typeof signedActs.$inferInsert;
+export type OwnerTransfer = typeof ownerTransfers.$inferSelect;
 export type AssistantBonusPayment = typeof assistantBonusPayments.$inferSelect;
 export type InsertAssistantBonusPayment = typeof assistantBonusPayments.$inferInsert;
 export type AccessToken = typeof accessTokens.$inferSelect;

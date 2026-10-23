@@ -36,6 +36,7 @@ import type * as recurringRepo from "./repositories/recurringRepo";
 import type * as actsRepo from "./repositories/actsRepo";
 
 import type * as dashboardRepo from "./repositories/dashboardRepo";
+import type * as ownerLedgerRepo from "./repositories/ownerLedgerRepo";
 import type * as alertsRepo from "./repositories/alertsRepo";
 
 import type * as reportsRepo from "./repositories/reportsRepo";
@@ -258,6 +259,11 @@ export interface ReportingQueries {
     typeof dashboardRepo.getPartnerDebtSummaries
   >;
   getReceivables(): ReturnType<typeof dashboardRepo.getReceivables>;
+  getPayables(): ReturnType<typeof ownerLedgerRepo.getPayables>;
+  getOwnerLedger(): ReturnType<typeof ownerLedgerRepo.getOwnerLedger>;
+  createOwnerPayout(payout: Parameters<typeof ownerLedgerRepo.createOwnerPayout>[1]): ReturnType<typeof ownerLedgerRepo.createOwnerPayout>;
+  deleteOwnerPayout(id: string): Promise<boolean>;
+  setOwnerLedgerStart(start: Parameters<typeof ownerLedgerRepo.setOwnerLedgerStart>[1]): Promise<void>;
   getDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getDoNotSpendData>;
   getPartnerSchemeDoNotSpendData(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getPartnerSchemeDoNotSpendData>;
   getExpectedCommission(actor: InvoiceActor): ReturnType<typeof financialReportsRepo.getExpectedCommission>;

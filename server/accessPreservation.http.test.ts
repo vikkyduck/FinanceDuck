@@ -106,6 +106,31 @@ it.each(roles)('%s: write operations retain role and parent-invoice restrictions
   }
 });
 
+it.each(roles)('%s: expense payment status is staff-only, owner money is admin-only', async role => {
+  const row = fixtures.find(r => allowed(role, r) && r.scheme === 'agency_30')!;
+  const [expense] = await request(role, `/api/invoices/${row.id}/expenses`).then(r => r.json());
+  if (role === 'partner' || role === 'client') expect(expense).not.toHaveProperty('paidAt');
+  else expect(expense).toHaveProperty('paidAt');
+  const admin = role === 'admin';
+  expect((await request(role, '/api/admin/payables')).status).toBe(admin ? 200 : 403);
+  expect((await request(role, '/api/admin/owner-ledger')).status).toBe(admin ? 200 : 403);
+  expect((await request(role, '/api/admin/owner-ledger/start', 'PUT', { since: '2026-10-01', kot: '-100.5', krya: '0' })).status).toBe(admin ? 200 : 403);
+  const created = await request(role, '/api/admin/owner-transfers', 'POST', { owner: 'kot', amount: '1500,5', transferDate: '2026-10-02' });
+  expect(created.status).toBe(admin ? 201 : 403);
+  if (!admin) return;
+  const transfer = await created.json();
+  expect(transfer).toMatchObject({ owner: 'kot', kind: 'payout', amount: '1500.50', notes: null });
+  for (const body of [{ owner: 'kot', amount: '0.001', transferDate: '2026-10-02' }, { owner: 'boss', amount: '1', transferDate: '2026-10-02' },
+    { owner: 'kot', amount: '1', transferDate: '2026-02-30' }, { owner: 'kot', amount: '1', transferDate: '2026-10-02', kind: 'opening' }]) {
+    expect((await request(role, '/api/admin/owner-transfers', 'POST', body)).status).toBe(400);
+  }
+  const ledger = await request(role, '/api/admin/owner-ledger').then(r => r.json());
+  expect(ledger.kot).toMatchObject({ since: '2026-10-01', opening: -100.5, paidOut: 1500.5 });
+  expect((await request(role, '/api/admin/owner-transfers/not-a-uuid', 'DELETE')).status).toBe(404);
+  expect((await request(role, `/api/admin/owner-transfers/${transfer.id}`, 'DELETE')).status).toBe(200);
+  expect((await request(role, `/api/admin/owner-transfers/${transfer.id}`, 'DELETE')).status).toBe(404);
+});
+
 it('unscoped partner/client sessions and forged role headers cannot gain access', async () => {
   for (const role of ['partner-unscoped', 'client-unscoped']) {
     const result = await request(role, '/api/invoices').then(r => r.json());

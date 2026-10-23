@@ -28,6 +28,7 @@ export const invoiceDtoSchema = z.object({
 export const expenseDtoSchema = z.object({
   id: z.string().uuid(), invoiceId: z.string().uuid(), description: z.string(),
   amount: z.string().regex(/^-?\d+(\.\d+)?$/).optional(), date: z.string(), paidByAdmin: z.boolean().optional(),
+  paidAt: z.string().nullable().optional(),
 }).passthrough();
 
 export const invoicePageSchema = z.object({

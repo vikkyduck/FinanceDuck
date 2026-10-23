@@ -54,7 +54,7 @@ it('queues a durable manual backup, completes in the worker, and exposes truthfu
   expect(await service.manualBackupStatus()).toMatchObject({ state:'idle', pending:false, filename:expect.stringMatching(/\.fdb$/) });
 });
 
-it('restores schema 5 archives and legacy JSON, while schema 7 preserves archive dates and rejects missing fields', async () => {
+it('restores schema 5 archives and legacy JSON, while schema 8 preserves archive dates and rejects missing fields', async () => {
   delete process.env.ACCESS_CODE_SECRET;
   const [partner] = await db.select().from(s.partners);
   const [client] = await db.select().from(s.clients);
@@ -65,7 +65,7 @@ it('restores schema 5 archives and legacy JSON, while schema 7 preserves archive
   const file = path.join(directory, info.id);
   const bytes = await readFile(file), offset = bytes.indexOf(10) + 1;
   const header = JSON.parse(bytes.subarray(0, offset).toString());
-  expect(header.schema).toBe(7);
+  expect(header.schema).toBe(8);
   await db.update(s.invoices).set({ archivedAt: null }).where(eq(s.invoices.id, invoice.id));
   expect((await service.restoreBackup(info.id)).success).toBe(true);
   expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual(invoice);
@@ -85,7 +85,7 @@ it('restores schema 5 archives and legacy JSON, while schema 7 preserves archive
   await expect(validateArchive(path.join(directory, legacyFile))).resolves.toBeUndefined();
   expect((await service.restoreBackup(legacyFile)).success).toBe(true);
   expect((await db.select().from(s.invoices).where(eq(s.invoices.id, invoice.id)))[0]).toEqual({ ...invoice, archivedAt: null });
-  const malformed = path.join(directory, 'backup-manual-schema7-missing-field.fdb');
+  const malformed = path.join(directory, 'backup-manual-schema8-missing-field.fdb');
   await writeFile(malformed, Buffer.concat([bytes.subarray(0, offset), gzipSync(payload)]));
   await expect(validateArchive(malformed)).rejects.toThrow();
 });
@@ -110,4 +110,43 @@ it('fills directToOwner=false for partners from schema 6 archives and rejects it
   const schema7 = path.join(directory, 'backup-manual-schema7-missing-flag.fdb');
   await writeFile(schema7, Buffer.concat([bytes.subarray(0, offset), gzipSync(payload)]));
   await expect(validateArchive(schema7)).rejects.toThrow();
+});
+it('settles schema 7 expenses on their own date, restores an empty owner ledger, and rejects missing paidAt in schema 8', async () => {
+  delete process.env.ACCESS_CODE_SECRET;
+  const [partner] = await db.select().from(s.partners);
+  const [client] = await db.select().from(s.clients);
+  const [invoice] = await db.insert(s.invoices).values({ invoiceNumber: 'ARCHIVE-EXPENSE', scheme: 'partner_10',
+    partnerId: partner.id, clientId: client.id, createdBy: randomUUID(), clientBill: '1000' }).returning();
+  const [expense] = await db.insert(s.invoiceExpenses).values({ invoiceId: invoice.id, description: 'Исполнитель',
+    amount: '300', date: '2026-09-15', paidAt: null, createdBy: randomUUID() }).returning();
+  await db.insert(s.ownerTransfers).values({ owner: 'kot', kind: 'opening', amount: '0', transferDate: '2026-10-01', createdBy: randomUUID() });
+  const info = await service.createBackup();
+  const json = (await service.downloadBackup(info.id))!;
+  delete (json.data as Partial<typeof json.data>).ownerTransfers;
+  for (const row of json.data.invoiceExpenses) delete row.paidAt;
+  const legacy = validateBackup(json);
+  expect(legacy.data.ownerTransfers).toEqual([]);
+  expect(legacy.data.invoiceExpenses.find(row => row.id === expense.id)?.paidAt).toBe('2026-09-15');
+
+  const bytes = await readFile(path.join(directory, info.id)), offset = bytes.indexOf(10) + 1;
+  const header = JSON.parse(bytes.subarray(0, offset).toString());
+  const lines = gunzipSync(bytes.subarray(offset)).toString().trimEnd().split('\n').map(line => JSON.parse(line));
+  const withoutPaidAt = lines.map(item => {
+    if (item.kind === 'row' && item.table === 'invoiceExpenses') delete item.row.paidAt;
+    return item;
+  });
+  const encode = (items: unknown[]) => gzipSync(items.map(item => JSON.stringify(item)).join('\n') + '\n');
+  const schema7 = 'backup-manual-schema7-expenses.fdb';
+  await writeFile(path.join(directory, schema7), Buffer.concat([
+    Buffer.from(JSON.stringify({ ...header, schema: 7 }) + '\n'),
+    encode(withoutPaidAt.filter(item => item.table !== 'ownerTransfers')),
+  ]));
+  await expect(validateArchive(path.join(directory, schema7))).resolves.toBeUndefined();
+  expect((await service.restoreBackup(schema7)).success).toBe(true);
+  expect((await db.select().from(s.invoiceExpenses).where(eq(s.invoiceExpenses.id, expense.id)))[0].paidAt).toBe('2026-09-15');
+  expect(await db.select().from(s.ownerTransfers)).toEqual([]);
+
+  const schema8 = path.join(directory, 'backup-manual-schema8-missing-paid.fdb');
+  await writeFile(schema8, Buffer.concat([bytes.subarray(0, offset), encode(withoutPaidAt)]));
+  await expect(validateArchive(schema8)).rejects.toThrow();
 });

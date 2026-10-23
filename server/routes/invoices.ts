@@ -158,7 +158,10 @@ invoicesRouter.get("/api/invoices/:id/expenses", authMiddleware, async (req: Aut
     const invoice = await findAuthorizedInvoice(storage, actor, id);
     if (!invoice) return res.status(404).json({ error: "Invoice not found" });
 
-    const expenses = await storage.getInvoiceExpenses(id);
+    const allExpenses = await storage.getInvoiceExpenses(id);
+    // Оплата исполнителю - внутренний учет владельца, клиенту и партнеру не видна.
+    const expenses = actor.role === "client" || actor.role === "partner"
+      ? allExpenses.map(({ paidAt: _paidAt, ...expense }) => expense) : allExpenses;
     if (actor.role === "client") {
       // Агентские 30/40 — клиент видит расходы целиком (вместе с суммами).
       if (isClientFinancialVisible(invoice.scheme)) {

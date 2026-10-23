@@ -4,3 +4,6 @@ export const INVOICE_STATUSES = ['draft', 'sent', 'paid', 'cancelled'] as const;
 export type UserRole = typeof USER_ROLES[number];
 export type InvoiceScheme = typeof INVOICE_SCHEMES[number];
 export type InvoiceStatus = typeof INVOICE_STATUSES[number];
+// Владельцы, которые делят прибыль 50/50: Кря и Кот.
+export const OWNERS = ['krya', 'kot'] as const;
+export type Owner = typeof OWNERS[number];

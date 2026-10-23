@@ -61,6 +61,7 @@ export const invoiceService = {
     amount: string;
     date?: string;
     paidByAdmin?: boolean;
+    paidAt?: string | null;
   }): Promise<void> {
     await apiPost(`/invoices/${invoiceId}/expenses`, expense);
   },

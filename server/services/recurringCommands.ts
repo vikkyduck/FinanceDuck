@@ -49,7 +49,7 @@ export async function generateOccurrence(db: DB, recurringId: string, invoiceDat
     if (Number(recurring.defaultExpenses) > 0) {
       await invoiceRepo.createInvoiceExpense(tx, {
         invoiceId: invoice.id, description: 'Расходы по умолчанию', amount: recurring.defaultExpenses!,
-        paidByAdmin: true, createdBy: actorId ?? recurring.createdBy, date: targetDate,
+        paidByAdmin: true, createdBy: actorId ?? recurring.createdBy, date: targetDate, paidAt: targetDate,
       });
     }
     await advance();

@@ -16,6 +16,8 @@ export const backupTables = {
   notificationOutbox: schema.notificationOutbox,
   commandReceipts: schema.commandReceipts,
   scheduledJobs: schema.scheduledJobs,
+  // Last: archives up to schema 7 predate it, and the reader appends it empty.
+  ownerTransfers: schema.ownerTransfers,
 } as const;
 export type TableKey = keyof typeof backupTables;
 export type Rows = Record<string, unknown>[];

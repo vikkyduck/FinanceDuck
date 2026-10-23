@@ -11,6 +11,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { apiGet } from "@/lib/api";
 import { useVisibilityAwareInterval } from "@/hooks/useVisibilityAwareInterval";
 import { ReceivablesCard } from "./ReceivablesCard";
+import { PayablesCard } from "./PayablesCard";
+import { OwnerTransfersCard } from "./OwnerTransfersCard";
 import {
   TrendingUp, 
   Scale,
@@ -649,6 +651,7 @@ export const AdminDashboardMetrics = () => {
       </div>
 
       <ReceivablesCard />
+      <PayablesCard />
 
       {/* Owner Shares Card - Full Width */}
       <Card className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/20" data-testid="card-owner-shares">
@@ -710,6 +713,8 @@ export const AdminDashboardMetrics = () => {
           </div>
         </CardContent>
       </Card>
+
+      <OwnerTransfersCard />
     </div>
   );
 };

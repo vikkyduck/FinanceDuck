@@ -42,7 +42,8 @@ export function validateBackup(backup: unknown): BackupData {
   const data = {} as BackupData["data"];
   for (const key of Object.keys(backupTables)) {
     const legacy = ["2.0", "3.0"].includes(String(value.version));
-    const rows = key === "serviceUsage" && String(value.version) !== "5.0" ? [] : legacy && key === "scheduledJobs" ? [] : value.data[key as TableKey];
+    const rows = key === "serviceUsage" && String(value.version) !== "5.0" ? [] : legacy && key === "scheduledJobs" ? [] :
+      key === "ownerTransfers" ? value.data[key] ?? [] : value.data[key as TableKey];
     if (!Array.isArray(rows)) throw new Error(`Отсутствует таблица ${key}`);
     data[key as TableKey] = rows.map(row => {
       const revived = { ...row };

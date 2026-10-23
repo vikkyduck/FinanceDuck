@@ -23,6 +23,7 @@ import * as recurringRepo   from "./repositories/recurringRepo";
 import * as actsRepo        from "./repositories/actsRepo";
 import * as actionLogRepo   from "./repositories/actionLogRepo";
 import * as dashboardRepo    from "./repositories/dashboardRepo";
+import * as ownerLedgerRepo  from "./repositories/ownerLedgerRepo";
 import * as alertsRepo from "./repositories/alertsRepo";
 import * as planningRepo from "./repositories/planningRepo";
 import * as reportsRepo from "./repositories/reportsRepo";
@@ -255,6 +256,12 @@ export class DatabaseStorage implements StorageOperations {
   async getReceivables() {
     return dashboardRepo.getReceivables(this.database);
   }
+
+  async getPayables() { return ownerLedgerRepo.getPayables(this.database); }
+  async getOwnerLedger() { return ownerLedgerRepo.getOwnerLedger(this.database); }
+  async createOwnerPayout(payout: Parameters<typeof ownerLedgerRepo.createOwnerPayout>[1]) { return ownerLedgerRepo.createOwnerPayout(this.database, payout); }
+  async deleteOwnerPayout(id: string) { return ownerLedgerRepo.deleteOwnerPayout(this.database, id); }
+  async setOwnerLedgerStart(start: Parameters<typeof ownerLedgerRepo.setOwnerLedgerStart>[1]) { return ownerLedgerRepo.setOwnerLedgerStart(this.database, start); }
 
   async getDoNotSpendData(actor: InvoiceActor) {
     return financialReportsRepo.getDoNotSpendData(this.database, actor);

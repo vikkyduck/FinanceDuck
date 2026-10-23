@@ -39,7 +39,7 @@ export const CLIENT_WRITABLE_FIELDS = [
 // Поля расхода. invoiceId и createdBy навязываются роутом отдельно;
 // исключены id, createdAt.
 export const EXPENSE_WRITABLE_FIELDS = [
-  "description", "amount", "paidByAdmin", "date",
+  "description", "amount", "paidByAdmin", "date", "paidAt",
 ] as const;
 
 // Описание расхода — простой текст. Старый клиент экранировал его в HTML

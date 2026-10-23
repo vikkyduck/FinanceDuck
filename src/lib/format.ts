@@ -107,6 +107,12 @@ export function formatDateTime(value: DateInput): string {
   return d ? dateTimeFmt.format(d) : "—";
 }
 
+/** Сегодняшняя дата по часам пользователя: "2026-10-23" для полей type="date". */
+export function todayIsoDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 /** Чистое число без валюты. Для случаев, где валюта не нужна. */
 export function formatNumber(value: MoneyInput, decimals: boolean = false): string {
   return formatMoney(value, { decimals, bare: true });

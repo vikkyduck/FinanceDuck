@@ -5,6 +5,10 @@ import type { DashboardStore } from "../routeStores";
 import { AuthenticatedRequest, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
 import { projectStatsForRole, projectInvoiceForRole } from "../permissions";
+import { ownerLedgerStartInput, ownerPayoutInput } from "../lib/ownerLedgerInput";
+import { z } from "zod";
+
+const inputError = (error: z.ZodError) => error.issues.slice(0, 3).map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
 
 export function createDashboardRouter(storage: DashboardStore, authMiddleware: AuthMiddleware) {
 const dashboardRouter = Router();
@@ -123,6 +127,58 @@ dashboardRouter.get("/api/admin/receivables", authMiddleware, requireRole("admin
   } catch (error) {
     console.error("Get receivables error:", error);
     res.status(500).json({ error: "Failed to get receivables" });
+  }
+});
+
+dashboardRouter.get("/api/admin/payables", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.json(await storage.getPayables());
+  } catch (error) {
+    console.error("Get payables error:", error);
+    res.status(500).json({ error: "Failed to get payables" });
+  }
+});
+
+dashboardRouter.get("/api/admin/owner-ledger", authMiddleware, requireRole("admin"), async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    res.json(await storage.getOwnerLedger());
+  } catch (error) {
+    console.error("Get owner ledger error:", error);
+    res.status(500).json({ error: "Failed to get owner ledger" });
+  }
+});
+
+dashboardRouter.put("/api/admin/owner-ledger/start", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const input = ownerLedgerStartInput.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: inputError(input.error) });
+    await storage.setOwnerLedgerStart({ ...input.data, createdBy: req.user!.token.id });
+    res.json(await storage.getOwnerLedger());
+  } catch (error) {
+    console.error("Set owner ledger start error:", error);
+    res.status(500).json({ error: "Failed to set owner ledger start" });
+  }
+});
+
+dashboardRouter.post("/api/admin/owner-transfers", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const input = ownerPayoutInput.safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: inputError(input.error) });
+    res.status(201).json(await storage.createOwnerPayout({ ...input.data, notes: input.data.notes || null, createdBy: req.user!.token.id }));
+  } catch (error) {
+    console.error("Create owner transfer error:", error);
+    res.status(500).json({ error: "Failed to create owner transfer" });
+  }
+});
+
+dashboardRouter.delete("/api/admin/owner-transfers/:id", authMiddleware, requireRole("admin"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success || !await storage.deleteOwnerPayout(id.data)) return res.status(404).json({ error: "Transfer not found" });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Delete owner transfer error:", error);
+    res.status(500).json({ error: "Failed to delete owner transfer" });
   }
 });
 

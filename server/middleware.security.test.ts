@@ -52,7 +52,7 @@ it('protects refresh and logout, permits read validation and rejects hostile ori
 
 it('enforces recurring HTTP scope and rejects role escalation or mass assignment', async () => {
   const headers = { Cookie: 'session_id=test', 'X-CSRF-Token': 'expected', 'Content-Type': 'application/json' };
-  const id = '00000000-0000-0000-0000-000000000001';
+  const id = '00000000-0000-4000-8000-000000000001';
   const template = { clientId: id, partnerId: id, scheme: 'agency_30', amount: '1000', startDate: '2026-01-31', dayOfMonth: 31 };
   sessions.validateSession.mockResolvedValue({ isValid: true, csrfToken: 'expected', token: { id, role: 'assistant' } });
   sessions.getRecurringInvoices.mockResolvedValue([]);

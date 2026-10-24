@@ -14,7 +14,7 @@ export const recurringInput = z.object({
   scheme: z.enum(invoiceSchemeEnum.enumValues).refine(scheme => scheme !== 'agency', 'Схема «Агентская» для периодики не поддерживается'),
   amount: money, defaultExpenses: money.optional(), partnerCommissionRate: rate.nullish(),
   frequency: z.enum(frequencyEnum.enumValues).default('monthly'),
-  dayOfMonth: z.coerce.number().int().min(1).max(31).transform(String).default(1),
+  dayOfMonth: z.coerce.number().int().min(1).max(31).transform(String).default("1"),
   startDate: isoDate, endDate: isoDate.nullish(), nextInvoiceDate: isoDate.optional(),
   description: z.string().max(10000).nullish(), notes: z.string().max(10000).nullish(),
   isActive: z.boolean().optional(), hideFromAssistant: z.boolean().optional(),

@@ -192,8 +192,8 @@ export const CreateInvoiceDialog = ({ open, onOpenChange, onSuccess }: CreateInv
     } catch (error: unknown) {
       console.error("CreateInvoiceDialog error:", error);
       if (error instanceof ZodError) {
-        console.error("Zod validation error:", error.errors);
-        handleValidationError("Форма", error.errors[0]?.message || 'Ошибка валидации данных');
+        console.error("Zod validation error:", error.issues);
+        handleValidationError("Форма", error.issues[0]?.message || 'Ошибка валидации данных');
       } else {
         toast.error((error instanceof Error ? error.message : String(error)) || "Не удалось создать счет");
       }

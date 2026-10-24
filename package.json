@@ -88,7 +88,7 @@
     "use-debounce": "^10.0.6",
     "vaul": "^0.9.9",
     "wouter": "^3.8.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4",

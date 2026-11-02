@@ -733,35 +733,6 @@ All colors MUST be HSL.
       inset -1.5px 0 1px rgba(29, 31, 35, .04),
       0 6px 18px rgba(29, 31, 35, .06), 0 2px 6px rgba(29, 31, 35, .04);
   }
-  /* Слой 03 «Линза»: кромка преломляет сцену внутрь (фильтр #bv-lens лежит
-     в DashboardLayout). Центр остаётся честным — маска пускает преломление
-     только по краю. Тёмная карточка живёт без линзы: у неё своя ::before-
-     фактура (графитовая пыль), и спорить с ней нельзя. */
-  .bv-glass-card:not(.bv-dark-card)::before {
-    content: ""; position: absolute; inset: 0; border-radius: inherit;
-    z-index: 0; pointer-events: none;
-    -webkit-mask: radial-gradient(125% 125% at 50% 50%, transparent 40%, #000 82%);
-    mask: radial-gradient(125% 125% at 50% 50%, transparent 40%, #000 82%);
-  }
-  @supports (backdrop-filter: url(#bv-lens)) {
-    .bv-glass-card:not(.bv-dark-card)::before {
-      -webkit-backdrop-filter: url(#bv-lens);
-      backdrop-filter: url(#bv-lens);
-    }
-  }
-  /* Safari: фильтр на подложке не работает — запасная кромка гнёт свет
-     насыщенностью и контрастом (брендбук, раздел 7) */
-  @supports not (backdrop-filter: url(#bv-lens)) {
-    .bv-glass-card:not(.bv-dark-card)::before {
-      inset: -1px; transform: scale(1.012); opacity: .75; padding: 12px;
-      -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
-      mask-composite: exclude;
-      -webkit-backdrop-filter: blur(3px) saturate(2.4) brightness(1.07) contrast(1.06);
-      backdrop-filter: blur(3px) saturate(2.4) brightness(1.07) contrast(1.06);
-    }
-  }
   /* Слои 05–06: блик под курсором и перелив. Переменные раскладывает
      bvGlassEngine; без мыши и при reduced-motion остаётся тихий свет 9%.
      Тёмная секция сама света не берёт — светятся её внутренние плитки,

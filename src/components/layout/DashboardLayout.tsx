@@ -7,28 +7,9 @@ interface DashboardLayoutProps {
 }
 
 /**
- * Слой 03 «Линза» жидкого стекла: одна карта смещения (feDisplacementMap)
- * обслуживает элементы любого размера — кромка карточек преломляет сцену
- * внутрь через backdrop-filter: url(#bv-lens). Кладётся один раз на страницу.
- */
-const LensFilter = () => (
-  <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
-    <filter id="bv-lens" x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
-      <feImage
-        preserveAspectRatio="none"
-        result="map"
-        href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' preserveAspectRatio='none'><defs><linearGradient id='x' x1='0' x2='1'><stop offset='0' stop-color='rgb(255,128,0)'/><stop offset='0.34' stop-color='rgb(128,128,0)'/><stop offset='0.66' stop-color='rgb(128,128,0)'/><stop offset='1' stop-color='rgb(0,128,0)'/></linearGradient><linearGradient id='y' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='rgb(0,255,0)'/><stop offset='0.34' stop-color='rgb(0,128,0)'/><stop offset='0.66' stop-color='rgb(0,128,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient></defs><rect width='100' height='100' fill='url(%23x)'/><rect width='100' height='100' fill='url(%23y)' style='mix-blend-mode:screen'/></svg>"
-      />
-      <feDisplacementMap in="SourceGraphic" in2="map" scale="38" xChannelSelector="R" yChannelSelector="G" />
-    </filter>
-  </svg>
-);
-
-/**
  * Сцена кабинета — та же, что на экране входа (брендбук, разделы 7 и 11):
  * градиент бумаги + блобы розового стекла и стали + граф узлов с рёбрами.
- * Именно её преломляет и подцвечивает стекло карточек — без сцены материал
- * вырождается в плоскую серую плашку («стекло без фона — серая плашка»).
+ * Фон просвечивает через карточки и задает цвет стекла.
  * Композиция «рама»: узлы и рёбра работают по краям, центр спокоен под данными.
  */
 const NodeBackdrop = () => (
@@ -98,7 +79,6 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
   return (
     <div className="relative min-h-screen bg-background">
-      <LensFilter />
       <NodeBackdrop />
       {/* max-w-screen-2xl (1536px) вместо 1280 — таблице счетов (10 колонок)
           не хватало ширины. mobile-first: max-width на узких экранах не мешает,

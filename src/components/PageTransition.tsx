@@ -1,33 +1,23 @@
-import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useState, type AnimationEvent, type ReactNode } from "react";
 
 interface PageTransitionProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export const PageTransition = ({ children }: PageTransitionProps) => {
-  const location = useLocation();
-  const [displayLocation, setDisplayLocation] = useState(location);
-  const [transitionStage, setTransitionStage] = useState<"enter" | "exit">("enter");
+  const [transitionStage, setTransitionStage] = useState<"enter" | "idle">(() =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "idle" : "enter",
+  );
 
-  useEffect(() => {
-    if (location.pathname !== displayLocation.pathname) {
-      setTransitionStage("exit");
-    }
-  }, [location, displayLocation]);
-
-  const handleAnimationEnd = () => {
-    if (transitionStage === "exit") {
-      setDisplayLocation(location);
-      setTransitionStage("enter");
+  const handleAnimationEnd = (event: AnimationEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget && event.animationName === "page-slide-in-up") {
+      setTransitionStage("idle");
     }
   };
 
   return (
     <div
-      className={`page-transition-wrapper ${
-        transitionStage === "enter" ? "page-enter" : "page-exit"
-      }`}
+      className={`page-transition-wrapper${transitionStage === "enter" ? " page-enter" : ""}`}
       onAnimationEnd={handleAnimationEnd}
     >
       {children}

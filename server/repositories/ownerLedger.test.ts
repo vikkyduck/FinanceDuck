@@ -5,6 +5,7 @@ import { createInvoice, createInvoiceExpense } from "./invoiceRepo";
 import { createOwnerPayout, deleteOwnerPayout, getOwnerLedger, getPayables, setOwnerLedgerStart } from "./ownerLedgerRepo";
 import { accessTokens, assistantBonusPayments, clients, documentPackages, invoiceExpenses, ownerTransfers, partnerPayments, partners } from "../../shared/schema";
 import { InvoiceCommands } from "../services/invoiceCommands";
+import { CommandError } from "../lib/commandError";
 
 // Учет денег владельцев: остаток на дату начала + доля прибыли, пришедшей на счет
 // ИП с этой даты, - переводы. Клиенты партнеров-владельцев платят напрямую, внешние
@@ -44,7 +45,8 @@ describe("Переводы Коту и себе", () => {
   it("без даты начала учета балансов нет", async () => {
     await invoice("PAID-1", ownerPartnerId, "paid", "100000", "2026-10-03");
     const ledger = await getOwnerLedger(asDb());
-    expect(ledger.kot).toEqual({ since: null, opening: 0, accrued: 0, paidOut: 0, balance: 0 });
+    expect(ledger.kot).toEqual({ since: null, opening: 0, accrued: 0, paidOut: 0, balance: 0, ignored: { count: 0, total: 0 } });
+    expect(ledger.arrivals).toEqual([]);
     expect(ledger.krya.since).toBeNull();
   });
 
@@ -57,16 +59,48 @@ describe("Переводы Коту и себе", () => {
       { amount: "3000", paymentDate: "2026-10-05", paidBy: actorId },
       { amount: "7000", paymentDate: "2026-09-30", paidBy: actorId },
     ]);
+    // Перевод, записанный до того, как начали учет: он уже в остатке на начало.
+    await payout("kot", "5000", "2026-09-25");
     await setOwnerLedgerStart(asDb(), { since: "2026-10-01", kot: "10000", krya: "0", createdBy: actorId });
     await payout("kot", "20000", "2026-10-10");
-    await payout("kot", "5000", "2026-09-25");
     await payout("krya", "30000", "2026-10-12");
 
     // partner_10: 100 000 - 10% = 90 000, минус расход 20 000 = прибыль 70 000, по 35 000.
     const ledger = await getOwnerLedger(asDb());
-    expect(ledger.kot).toEqual({ since: "2026-10-01", opening: 10000, accrued: 35000, paidOut: 20000, balance: 25000 });
-    expect(ledger.krya).toEqual({ since: "2026-10-01", opening: 0, accrued: 35000, paidOut: 30000, balance: 5000 });
+    expect(ledger.kot).toEqual({ since: "2026-10-01", opening: 10000, accrued: 35000, paidOut: 20000, balance: 25000, ignored: { count: 1, total: 5000 } });
+    expect(ledger.krya).toEqual({ since: "2026-10-01", opening: 0, accrued: 35000, paidOut: 30000, balance: 5000, ignored: { count: 0, total: 0 } });
     expect(ledger.transfers.filter(t => t.kind === "payout")).toHaveLength(3);
+    expect(ledger.arrivals).toEqual([
+      { date: "2026-10-03", invoiceId: paid.id, invoiceNumber: "AFTER", source: "client", profit: 70000 },
+    ]);
+  });
+
+  it("перевод раньше даты начала не записывается: он уже в остатке на начало дня", async () => {
+    await setOwnerLedgerStart(asDb(), { since: "2026-11-02", kot: "42000", krya: "42000", createdBy: actorId });
+    const early = await payout("kot", "42000", "2026-11-01").then(() => null, (error: unknown) => error);
+    expect(early).toBeInstanceOf(CommandError);
+    expect((early as CommandError).status).toBe(400);
+    expect((early as CommandError).message).toContain("02.11.2026");
+    await payout("kot", "1000", "2026-11-02");
+    const ledger = await getOwnerLedger(asDb());
+    expect(ledger.kot).toMatchObject({ paidOut: 1000, balance: 41000, ignored: { count: 0, total: 0 } });
+  });
+
+  it("расшифровка доли: каждое поступление с даты начала, в сумме ровно доли Кота и Кря", async () => {
+    await invoice("OWN-OCT", ownerPartnerId, "paid", "10000", "2026-11-01");
+    const own = await invoice("OWN-NOV", ownerPartnerId, "paid", "100000", "2026-11-02");
+    const ext = await invoice("EXT-NOV", externalId, "paid", "33333.33", "2026-11-03");
+    // К переводу 29 999.99, перевели треть: прибыль перевода 9 999.99 + копейки по доле.
+    await db.insert(partnerPayments).values({ partnerId: externalId, invoiceId: ext.id, amount: "10000", paymentDate: "2026-11-05", createdBy: actorId });
+    await setOwnerLedgerStart(asDb(), { since: "2026-11-02", kot: "0", krya: "0", createdBy: actorId });
+    const ledger = await getOwnerLedger(asDb());
+    expect(ledger.arrivals.map(a => [a.date, a.invoiceNumber, a.source])).toEqual([
+      ["2026-11-02", "OWN-NOV", "client"],
+      ["2026-11-05", "EXT-NOV", "partner"],
+    ]);
+    expect(ledger.arrivals[0].invoiceId).toBe(own.id);
+    const total = ledger.arrivals.reduce((sum, a) => sum + Math.round(a.profit * 100), 0);
+    expect(total).toBe(Math.round((ledger.kot.accrued + ledger.krya.accrued) * 100));
   });
 
   it("по внешнему партнеру доля приходит с его переводами: сначала по ссылке на счет, потом по порядку дат", async () => {
@@ -132,7 +166,7 @@ describe("Переводы Коту и себе", () => {
 });
 
 describe("Мы должны", () => {
-  it("неоплаченные расходы, которые платит владелец, и остаток Кота", async () => {
+  it("неоплаченные расходы, которые платит владелец, без долга Коту: это расчет между владельцами", async () => {
     const own = await invoice("OWN", ownerPartnerId, "paid", "100000", "2026-10-03");
     const ext = await invoice("EXT", externalId, "paid", "100000", "2026-10-03");
     const cancelled = await invoice("CANCELLED", ownerPartnerId, "cancelled", "100000", "2026-10-03");
@@ -148,11 +182,13 @@ describe("Мы должны", () => {
     expect(payables.executors.total).toBe(22000);
     expect(payables.executors.count).toBe(2);
     expect(payables.executors.items.map(item => [item.invoiceNumber, item.amount])).toEqual([["EXT", 7000], ["OWN", 15000]]);
+    expect(Object.keys(payables).sort()).toEqual(["assistant", "executors"]);
+    expect(payables.assistant).toEqual({ since: "2026-10-22", unpaid: 0 });
     // Прибыль OWN: 90 000 - 15 000 - 1 000 = 74 000, Коту 37 000 - 1 000. EXT внешний
     // партнер еще не перевел, его прибыль 78 000 ждет перевода.
-    expect(payables.kot).toEqual({ since: "2026-10-01", balance: 36000 });
-    expect(payables.assistant).toEqual({ since: "2026-10-22", unpaid: 0 });
-    expect((await getOwnerLedger(asDb())).pendingFromPartners).toBe(78000);
+    const ledger = await getOwnerLedger(asDb());
+    expect(ledger.kot.balance).toBe(36000);
+    expect(ledger.pendingFromPartners).toBe(78000);
   });
 
   it("долг ассистенту отдельной строкой: принятые пакеты минус выплаты с 22.10.2026, счет ИП не трогает", async () => {
@@ -169,8 +205,9 @@ describe("Мы должны", () => {
     await setOwnerLedgerStart(asDb(), { since: "2026-10-01", kot: "0", krya: "0", createdBy: actorId });
     const payables = await getPayables(asDb());
     expect(payables.assistant).toEqual({ since: "2026-10-22", unpaid: 2000 });
-    expect(payables.kot.balance).toBe(45000);
-    expect((await getOwnerLedger(asDb())).krya.balance).toBe(45000);
+    const ledger = await getOwnerLedger(asDb());
+    expect(ledger.kot.balance).toBe(45000);
+    expect(ledger.krya.balance).toBe(45000);
   });
 
   it("расход без отметки оплачен в свою дату, null - не оплачен, отметку можно поставить позже", async () => {

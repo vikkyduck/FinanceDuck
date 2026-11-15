@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, History, Loader2, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowRightLeft, ChevronDown, ChevronUp, History, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +23,16 @@ interface OwnerBalance {
   accrued: number;
   paidOut: number;
   balance: number;
+  ignored: { count: number; total: number };
+}
+
+// Поступление прибыли на счет ИП с даты начала: оплата клиента или перевод партнера.
+interface Arrival {
+  date: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  source: "client" | "partner";
+  profit: number;
 }
 
 interface OwnerTransfer {
@@ -36,6 +48,7 @@ interface OwnerLedger {
   kot: OwnerBalance;
   krya: OwnerBalance;
   pendingFromPartners: number;
+  arrivals: Arrival[];
   transfers: OwnerTransfer[];
 }
 
@@ -49,6 +62,15 @@ const Line = ({ label, value, minus = false }: { label: string; value: number; m
   </div>
 );
 
+/** Переводы с датой раньше начала учета в расчет не входят: показываем, чтобы их не потеряли. */
+const Ignored = ({ balance, testId }: { balance: OwnerBalance; testId: string }) => (
+  balance.ignored.count === 0 ? null : (
+    <p className="text-xs text-destructive" data-testid={testId}>
+      Не учитываются переводы до {formatDate(balance.since)}: {formatMoney(balance.ignored.total)}. Они должны входить в остаток на начало, проверьте историю переводов.
+    </p>
+  )
+);
+
 /** Переводы Коту и себе со счета ИП: сколько должны Коту и сколько своей доли можно забрать. */
 export const OwnerTransfersCard = () => {
   const { toast } = useToast();
@@ -59,6 +81,7 @@ export const OwnerTransfersCard = () => {
   const [startOpen, setStartOpen] = useState(false);
   const [start, setStart] = useState({ since: todayIsoDate(), kot: "0", krya: "0" });
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [arrivalsOpen, setArrivalsOpen] = useState(false);
 
   const { data, isLoading, isError } = useQuery<OwnerLedger>({
     queryKey: ["/api/admin/owner-ledger"],
@@ -95,6 +118,9 @@ export const OwnerTransfersCard = () => {
     setStartOpen(true);
   };
   const started = !!data?.kot.since && !!data?.krya.since;
+  // Перевод до даты начала уже входит в остаток: такой сервер не запишет.
+  const payoutSince = payoutOwner ? data?.[payoutOwner].since ?? null : null;
+  const payoutTooEarly = !!payoutSince && !!payout.transferDate && payout.transferDate < payoutSince;
 
   return (
     <Card data-testid="card-owner-transfers">
@@ -124,9 +150,10 @@ export const OwnerTransfersCard = () => {
                 <p className="text-xl sm:text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-owner-kot-balance">
                   {formatMoney(Math.abs(data.kot.balance))}
                 </p>
-                {data.kot.opening !== 0 && <Line label={`Остаток на ${formatDate(data.kot.since)}`} value={data.kot.opening} />}
+                {data.kot.opening !== 0 && <Line label={`Остаток на начало ${formatDate(data.kot.since)}`} value={data.kot.opening} />}
                 <Line label={`Доля Кота с ${formatDate(data.kot.since)}`} value={data.kot.accrued} />
                 <Line label="Переведено Коту" value={data.kot.paidOut} minus />
+                <Ignored balance={data.kot} testId="text-owner-kot-ignored" />
                 <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setPayoutOwner("kot")} data-testid="button-payout-kot">
                   Записать перевод Коту
                 </Button>
@@ -136,9 +163,10 @@ export const OwnerTransfersCard = () => {
                 <p className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-owner-krya-balance">
                   {formatMoney(Math.abs(data.krya.balance))}
                 </p>
-                {data.krya.opening !== 0 && <Line label={`Остаток на ${formatDate(data.krya.since)}`} value={data.krya.opening} />}
+                {data.krya.opening !== 0 && <Line label={`Остаток на начало ${formatDate(data.krya.since)}`} value={data.krya.opening} />}
                 <Line label={`Доля Кря с ${formatDate(data.krya.since)}`} value={data.krya.accrued} />
                 <Line label="Переведено себе" value={data.krya.paidOut} minus />
+                <Ignored balance={data.krya} testId="text-owner-krya-ignored" />
                 <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setPayoutOwner("krya")} data-testid="button-payout-krya">
                   Записать перевод себе
                 </Button>
@@ -153,6 +181,33 @@ export const OwnerTransfersCard = () => {
                 Изменить дату начала
               </Button>
             </div>
+            <Collapsible open={arrivalsOpen} onOpenChange={setArrivalsOpen} className="mt-2">
+              <CollapsibleTrigger className="w-full" data-testid="trigger-owner-arrivals">
+                <div className="flex items-center justify-center gap-1 hover-elevate p-1 rounded cursor-pointer text-sm text-muted-foreground">
+                  <span>{arrivalsOpen ? "Скрыть расшифровку доли" : `Из чего сложилась доля с ${formatDate(data.kot.since)}`}</span>
+                  {arrivalsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-1 mt-2" data-testid="list-owner-arrivals">
+                  {data.arrivals.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-2">С этой даты прибыль на счет еще не приходила</p>
+                  ) : data.arrivals.map((arrival, index) => (
+                    <div key={`${arrival.invoiceId}-${arrival.date}-${index}`} className="flex justify-between gap-2 text-xs p-2 rounded-md bg-muted/30">
+                      <span className="min-w-0 [overflow-wrap:anywhere]">
+                        {formatDate(arrival.date)}, <Link to={`/invoices/${arrival.invoiceId}`} className="underline underline-offset-2">{arrival.invoiceNumber}</Link>,
+                        {" "}{arrival.source === "client" ? "оплата клиента" : "перевод партнера"}
+                      </span>
+                      <span className="whitespace-nowrap">{formatMoney(arrival.profit)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between gap-2 text-xs font-medium p-2">
+                    <span>Пришло прибыли, пополам Коту и вам</span>
+                    <span className="whitespace-nowrap" data-testid="text-owner-arrivals-total">{formatMoney(data.kot.accrued + data.krya.accrued)}</span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
             {data.pendingFromPartners > 0 && (
               <p className="text-sm mt-2" data-testid="text-owner-pending">
                 Ждет перевода от партнеров: прибыль {formatMoney(data.pendingFromPartners)}, по {formatMoney(data.pendingFromPartners / 2)} Коту и вам.
@@ -179,10 +234,15 @@ export const OwnerTransfersCard = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="owner-payout-date">Дата *</Label>
-              <Input id="owner-payout-date" type="date" value={payout.transferDate}
+              <Input id="owner-payout-date" type="date" value={payout.transferDate} min={payoutSince ?? undefined}
                 onChange={e => setPayout({ ...payout, transferDate: e.target.value })} data-testid="input-owner-payout-date" />
             </div>
           </div>
+          {payoutTooEarly && payoutSince && (
+            <p className="text-xs text-destructive" data-testid="text-owner-payout-too-early">
+              Учет начат с {formatDate(payoutSince)}: перевод до этой даты уже входит в остаток на начало. Укажите другую дату или измените дату начала учета.
+            </p>
+          )}
           <div className="space-y-2">
             <Label htmlFor="owner-payout-notes">Комментарий</Label>
             <Input id="owner-payout-notes" value={payout.notes}
@@ -191,7 +251,7 @@ export const OwnerTransfersCard = () => {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setPayoutOwner(null)}>Отмена</Button>
             <Button
-              disabled={createPayout.isPending || !(Number(payout.amount) > 0) || !payout.transferDate}
+              disabled={createPayout.isPending || !(Number(payout.amount) > 0) || !payout.transferDate || payoutTooEarly}
               onClick={() => payoutOwner && createPayout.mutate(payoutOwner)}
               data-testid="button-save-owner-payout"
             >
@@ -207,7 +267,7 @@ export const OwnerTransfersCard = () => {
           <DialogHeader>
             <DialogTitle>Дата начала учета</DialogTitle>
             <DialogDescription>
-              Доли и переводы считаются с этой даты. В остатках учитывайте только деньги, которые уже пришли на счет ИП. Остаток со знаком минус значит, что получено больше положенного.
+              Остатки укажите на начало этого дня: поступления и переводы самой этой даты система посчитает сама. В остатках учитывайте только деньги, которые уже пришли на счет ИП. Остаток со знаком минус значит, что получено больше положенного.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -218,12 +278,12 @@ export const OwnerTransfersCard = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="owner-ledger-kot">Должны Коту на эту дату</Label>
+                <Label htmlFor="owner-ledger-kot">Должны Коту на начало дня</Label>
                 <Input id="owner-ledger-kot" type="number" step="0.01" value={start.kot}
                   onChange={e => setStart({ ...start, kot: e.target.value })} data-testid="input-owner-ledger-kot" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="owner-ledger-krya">Вашей доли на счете ИП</Label>
+                <Label htmlFor="owner-ledger-krya">Вашей доли на счете ИП на начало дня</Label>
                 <Input id="owner-ledger-krya" type="number" step="0.01" value={start.krya}
                   onChange={e => setStart({ ...start, krya: e.target.value })} data-testid="input-owner-ledger-krya" />
               </div>

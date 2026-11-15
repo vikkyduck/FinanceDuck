@@ -6,6 +6,7 @@ import { AuthenticatedRequest, requireRole } from "../middleware";
 import { parseNum } from "../../shared/financialEngine";
 import { projectStatsForRole, projectInvoiceForRole } from "../permissions";
 import { ownerLedgerStartInput, ownerPayoutInput } from "../lib/ownerLedgerInput";
+import { CommandError } from "../lib/commandError";
 import { z } from "zod";
 
 const inputError = (error: z.ZodError) => error.issues.slice(0, 3).map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
@@ -166,6 +167,7 @@ dashboardRouter.post("/api/admin/owner-transfers", authMiddleware, requireRole("
     if (!input.success) return res.status(400).json({ error: inputError(input.error) });
     res.status(201).json(await storage.createOwnerPayout({ ...input.data, notes: input.data.notes || null, createdBy: req.user!.token.id }));
   } catch (error) {
+    if (error instanceof CommandError) return res.status(error.status).json({ error: error.message });
     console.error("Create owner transfer error:", error);
     res.status(500).json({ error: "Failed to create owner transfer" });
   }

@@ -24,12 +24,12 @@ interface UnpaidExpense {
 
 interface Payables {
   executors: { total: number; count: number; items: UnpaidExpense[] };
-  kot: { since: string | null; balance: number };
   assistant: { since: string; unpaid: number };
 }
 
-/** "Мы должны": неоплаченные исполнителям расходы, которые платит владелец, долг Коту
- *  и отдельно бонус ассистенту, который владелец платит с личного счета. */
+/** "Мы должны" - долги Кота и Кря вместе перед другими: неоплаченные исполнителям расходы,
+ *  которые платит владелец, и отдельно бонус ассистенту, который Кря платит с личного счета.
+ *  Долг Коту - расчет между владельцами, он в карточке "Переводы Коту и себе". */
 export const PayablesCard = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -47,14 +47,12 @@ export const PayablesCard = () => {
     onError: (error: Error) => toast({ title: "Ошибка", description: error.message, variant: "destructive" }),
   });
 
-  const kotOwed = data?.kot.since ? Math.max(0, data.kot.balance) : 0;
-
   return (
     <Card data-testid="card-payables">
       <CardHeader className="pb-2">
         <CardTitle className="text-base sm:text-lg flex items-center gap-2">
           <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-rose-600" />
-          Мы должны{data ? `: ${formatMoney(data.executors.total + kotOwed)}` : ""}
+          Мы должны{data ? `: ${formatMoney(data.executors.total)}` : ""}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -64,23 +62,12 @@ export const PayablesCard = () => {
           <p className="text-sm text-muted-foreground">Не удалось загрузить данные</p>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-3 sm:p-4 bg-background/50 rounded-lg space-y-1">
                 <p className="text-sm text-muted-foreground">Исполнителям</p>
                 <p className="text-xl sm:text-2xl font-bold" data-testid="text-payables-executors">{formatMoney(data.executors.total)}</p>
                 <p className="text-xs text-muted-foreground">
                   {data.executors.count} {pluralizeRu(data.executors.count, ["расход не оплачен", "расхода не оплачены", "расходов не оплачено"])}
-                </p>
-              </div>
-              <div className="p-3 sm:p-4 bg-background/50 rounded-lg space-y-1">
-                <p className="text-sm text-muted-foreground">Коту</p>
-                <p className="text-xl sm:text-2xl font-bold" data-testid="text-payables-kot">{formatMoney(kotOwed)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {!data.kot.since
-                    ? "Учет переводов не начат: задайте дату начала в карточке \"Переводы Коту и себе\""
-                    : data.kot.balance < 0
-                      ? `Кот получил вперед ${formatMoney(-data.kot.balance)}`
-                      : `с ${formatDate(data.kot.since)}`}
                 </p>
               </div>
               <div className="p-3 sm:p-4 bg-background/50 rounded-lg space-y-1">
@@ -132,7 +119,7 @@ export const PayablesCard = () => {
               </Collapsible>
             )}
             <p className="text-xs text-muted-foreground mt-3">
-              Сюда входят расходы, которые платите вы: с отметкой "Администратор" или по партнерам с оплатой напрямую владельцу. Бонус ассистенту вы платите с личного счета, поэтому он показан отдельно и в сумму в заголовке не входит.
+              "Мы" - это Кот и Кря вместе. Сюда входят расходы, которые платите вы: с отметкой "Администратор" или по партнерам с оплатой напрямую владельцу. Бонус ассистенту вы платите с личного счета, поэтому он показан отдельно и в сумму в заголовке не входит. Расчет с Котом - в карточке "Переводы Коту и себе".
             </p>
           </>
         )}

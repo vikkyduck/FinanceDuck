@@ -26,12 +26,13 @@ interface OwnerBalance {
   ignored: { count: number; total: number };
 }
 
-// Поступление прибыли на счет ИП с даты начала: оплата клиента или перевод партнера.
-interface Arrival {
+// Оплаченный счет с даты начала: из таких счетов складываются доли.
+interface PaidInvoice {
   date: string;
+  dateSource: "actual" | "planned" | "created";
   invoiceId: string;
   invoiceNumber: string;
-  source: "client" | "partner";
+  clientName: string | null;
   profit: number;
 }
 
@@ -47,8 +48,7 @@ interface OwnerTransfer {
 interface OwnerLedger {
   kot: OwnerBalance;
   krya: OwnerBalance;
-  pendingFromPartners: number;
-  arrivals: Arrival[];
+  invoices: PaidInvoice[];
   transfers: OwnerTransfer[];
 }
 
@@ -187,37 +187,39 @@ export const OwnerTransfersCard = () => {
             <Collapsible open={arrivalsOpen} onOpenChange={setArrivalsOpen} className="mt-2">
               <CollapsibleTrigger className="w-full" data-testid="trigger-owner-arrivals">
                 <div className="flex items-center justify-center gap-1 hover-elevate p-1 rounded cursor-pointer text-sm text-muted-foreground">
-                  <span>{arrivalsOpen ? "Скрыть расшифровку доли" : `Из чего сложилась доля с ${formatDate(data.kot.since)}`}</span>
+                  <span>
+                    {arrivalsOpen ? "Скрыть счета" : `Счета, оплаченные с ${formatDate(data.kot.since)}: прибыль ${formatMoney(data.kot.accrued + data.krya.accrued)}`}
+                  </span>
                   {arrivalsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 </div>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="space-y-1 mt-2" data-testid="list-owner-arrivals">
-                  {data.arrivals.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-2">С этой даты прибыль на счет еще не приходила</p>
-                  ) : data.arrivals.map((arrival, index) => (
-                    <div key={`${arrival.invoiceId}-${arrival.date}-${index}`} className="flex justify-between gap-2 text-xs p-2 rounded-md bg-muted/30">
+                  {data.invoices.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-2">С этой даты оплаченных счетов еще нет</p>
+                  ) : data.invoices.map(invoice => (
+                    <div key={invoice.invoiceId} className="flex justify-between gap-2 text-xs p-2 rounded-md bg-muted/30">
                       <span className="min-w-0 [overflow-wrap:anywhere]">
-                        {formatDate(arrival.date)}, <Link to={`/invoices/${arrival.invoiceId}`} className="underline underline-offset-2">{arrival.invoiceNumber}</Link>,
-                        {" "}{arrival.source === "client" ? "оплата клиента" : "перевод партнера"}
+                        {formatDate(invoice.date)}, <Link to={`/invoices/${invoice.invoiceId}`} className="underline underline-offset-2">{invoice.invoiceNumber}</Link>
+                        {invoice.clientName ? `, ${invoice.clientName}` : ""}
+                        {invoice.dateSource !== "actual" && (
+                          <span className="block text-muted-foreground" data-testid={`text-owner-invoice-date-${invoice.invoiceId}`}>
+                            {invoice.dateSource === "planned" ? "фактическая дата оплаты не указана, взята плановая" : "даты оплаты нет, взята дата создания"}
+                          </span>
+                        )}
                       </span>
-                      <span className="whitespace-nowrap">{formatMoney(arrival.profit)}</span>
+                      <span className="whitespace-nowrap">{formatMoney(invoice.profit)}</span>
                     </div>
                   ))}
                   <div className="flex justify-between gap-2 text-xs font-medium p-2">
-                    <span>Пришло прибыли: Коту {formatMoney(data.kot.accrued)}, вам {formatMoney(data.krya.accrued)}</span>
+                    <span>Прибыль пополам: Коту {formatMoney(data.kot.accrued)}, вам {formatMoney(data.krya.accrued)}</span>
                     <span className="whitespace-nowrap" data-testid="text-owner-arrivals-total">{formatMoney(data.kot.accrued + data.krya.accrued)}</span>
                   </div>
                 </div>
               </CollapsibleContent>
             </Collapsible>
-            {data.pendingFromPartners > 0 && (
-              <p className="text-sm mt-2" data-testid="text-owner-pending">
-                Ждет перевода от партнеров: прибыль {formatMoney(data.pendingFromPartners)}, по {formatMoney(data.pendingFromPartners / 2)} Коту и вам.
-              </p>
-            )}
             <p className="text-xs text-muted-foreground mt-2">
-              Доля начисляется, когда деньги пришли на счет ИП: по клиентам, которые платят вам напрямую, в день оплаты, по остальным партнерам после их перевода.
+              Доля - половина чистой прибыли оплаченных счетов. Счет попадает в расчет в день оплаты: по фактической дате, а если ее нет, по плановой. Когда вы ставите статус "Оплачен", фактическая дата ставится сегодняшним днем.
             </p>
           </>
         )}
@@ -270,7 +272,7 @@ export const OwnerTransfersCard = () => {
           <DialogHeader>
             <DialogTitle>Дата начала учета</DialogTitle>
             <DialogDescription>
-              Остатки укажите на начало этого дня: поступления и переводы самой этой даты система посчитает сама. В остатках учитывайте только деньги, которые уже пришли на счет ИП. Остаток со знаком минус значит, что получено больше положенного.
+              Остатки укажите на начало этого дня: счета, оплаченные с этой даты, и переводы с этой даты система посчитает сама. Остаток со знаком минус значит, что получено больше положенного.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

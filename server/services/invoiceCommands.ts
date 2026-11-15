@@ -13,12 +13,24 @@ import type { InvoiceActor } from '../invoiceAccess';
 import { constrainInvoiceWrite } from '../invoiceAccess';
 import { isClientFinancialVisible, isClientUsageVisible } from '../permissions';
 import { escapeHtml } from '../lib/telegram';
+import { moscowToday } from '../lib/businessDate';
 
 export interface CommandActor extends InvoiceActor {
   tokenId: string; requestKey?: string; ip?: string; userAgent?: string;
 }
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 const money = (value: string | number | null | undefined) => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(Number(value ?? 0));
+
+/** Счет, который закрыли статусом "Оплачен" без фактической даты, оплачен сегодня: по этой
+ *  дате он попадает в доли владельцев. Снятая оплата снимает и дату, если ее не передали. */
+export function paymentDateOnStatusChange(
+  before: { status: string; actualPaymentDate: string | null },
+  terms: { status?: string; actualPaymentDate?: string | null },
+): { actualPaymentDate?: string | null } {
+  if (terms.actualPaymentDate !== undefined || terms.status === undefined || terms.status === before.status) return {};
+  if (terms.status === 'paid') return before.actualPaymentDate ? {} : { actualPaymentDate: moscowToday() };
+  return before.status === 'paid' ? { actualPaymentDate: null } : {};
+}
 
 /** Application boundary: authorization, locking, mutation, audit and outbox commit together. */
 export class InvoiceCommands {
@@ -86,7 +98,8 @@ export class InvoiceCommands {
     return this.run(actor, [id], 'update_invoice', { input, calculations }, async tx => {
       const before = (await repo.getInvoice(tx, id))!;
       validatePeriodicTerms({ ...before, ...terms });
-      const invoice = (await repo.updateInvoice(tx, id, constrainInvoiceWrite(actor.role, terms, 'update'), projection))!;
+      const dated = { ...terms, ...paymentDateOnStatusChange(before, terms) };
+      const invoice = (await repo.updateInvoice(tx, id, constrainInvoiceWrite(actor.role, dated, 'update'), projection))!;
       const full = (await repo.getInvoice(tx, id))!;
       return { result: invoice, entityId: id, description: `Обновлён счёт: ${invoice.invoiceNumber}`,
         notification: before.status !== 'paid' && invoice.status === 'paid' ? invoiceNotice(full, 'Оплата получена') : undefined };

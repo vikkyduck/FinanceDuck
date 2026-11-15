@@ -40,10 +40,8 @@ interface DashboardStats {
     recurring?: number;
   };
   monthlyProfit: number;
-  // Доли по прибыли, которая пришла на счет: по внешним партнерам после их перевода.
+  // Доли 50/50 по чистой прибыли оплаченных счетов.
   ownerShares: {
-    yearlyArrived?: number;
-    monthlyArrived?: number;
     yearlyKrya: number;
     yearlyKot: number;
     monthlyKrya: number;
@@ -666,7 +664,7 @@ export const AdminDashboardMetrics = () => {
             Доли (50/50)
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            По прибыли, которая пришла на счет: по внешним партнерам после их перевода
+            Половина чистой прибыли оплаченных счетов: счет считается в день оплаты
           </p>
         </CardHeader>
         <CardContent>
@@ -674,7 +672,7 @@ export const AdminDashboardMetrics = () => {
             {/* Yearly Shares */}
             <div className="space-y-2 sm:space-y-3">
               <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
-                За {selectedYear} год (пришло прибыли: {formatCurrency(stats.ownerShares.yearlyArrived ?? stats.yearlySummary.totalProfit)})
+                За {selectedYear} год (прибыль: {formatCurrency(stats.yearlySummary.totalProfit)})
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">
@@ -698,7 +696,7 @@ export const AdminDashboardMetrics = () => {
             {/* Monthly Shares */}
             <div className="space-y-2 sm:space-y-3">
               <h4 className="text-xs sm:text-sm font-medium text-muted-foreground">
-                {MONTH_NAMES[selectedMonth]} (пришло прибыли: {formatCurrency(stats.ownerShares.monthlyArrived ?? stats.monthlyProfit)})
+                {MONTH_NAMES[selectedMonth]} (прибыль: {formatCurrency(stats.monthlyProfit)})
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div className="flex items-center justify-between sm:flex-col sm:text-center p-2 sm:p-4 bg-background/50 rounded-lg">

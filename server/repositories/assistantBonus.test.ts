@@ -4,11 +4,11 @@ import { createInvoice } from "./invoiceRepo";
 import { getActsStatistics, getAssistantBonusAccrued } from "./actsRepo";
 import { getAdminDashboardStats } from "./adminDashboardRepo";
 import { eq } from "drizzle-orm";
-import { invoices, partnerPayments, partners, signedActs } from "../../shared/schema";
+import { invoices, partnerPayments, signedActs } from "../../shared/schema";
 
 // Старое правило бонуса ассистенту, до 22.10.2026: только акты по оплаченным
 // счетам, видимым ассистенту, по дате загрузки акта. Кря платит бонус с личного
-// счета. Доли 50/50 считаются по прибыли, которая пришла на счет ИП.
+// счета. Доли 50/50 - половина чистой прибыли оплаченных счетов по дню оплаты.
 
 let db: TestDb;
 let close: () => Promise<void>;
@@ -57,23 +57,20 @@ describe("Бонус ассистентам за период", () => {
   });
 
   it("доля Кря после ассистентов = доля Кря минус бонус периода", async () => {
-    // Клиенты партнера-владельца платят напрямую: прибыль пришла в день оплаты.
-    await db.update(partners).set({ directToOwner: true }).where(eq(partners.id, partnerId));
     const stats = await getAdminDashboardStats(asDb(), noRecurring, 2026, 2);
     expect(stats.assistantBonus).toEqual({ yearly: 4000, monthly: 3000 });
-    expect(stats.ownerShares.monthlyArrived).toBe(180000);
     expect(stats.ownerShares.monthlyKrya).toBe(90000);
     expect(stats.ownerShares.monthlyKryaAfterAssistants).toBe(87000);
     expect(stats.ownerShares.yearlyKryaAfterAssistants).toBe(stats.ownerShares.yearlyKrya - 4000);
   });
 
-  it("доли по внешнему партнеру начисляются, когда партнер перевел деньги", async () => {
+  it("доли - по оплаченным счетам в месяце оплаты, переводы партнера их не меняют", async () => {
     const [visible] = await db.select().from(invoices).where(eq(invoices.invoiceNumber, "PAID-1"));
     await db.insert(partnerPayments).values({ partnerId, invoiceId: visible.id, amount: "45000", paymentDate: "2026-04-05", createdBy });
     const march = await getAdminDashboardStats(asDb(), noRecurring, 2026, 2);
     expect(march.monthlyProfit).toBe(180000);
-    expect(march.ownerShares).toMatchObject({ monthlyArrived: 0, monthlyKrya: 0, monthlyKot: 0, yearlyArrived: 45000 });
+    expect(march.ownerShares).toMatchObject({ monthlyKrya: 90000, monthlyKot: 90000, yearlyKrya: 90000, yearlyKot: 90000 });
     const april = await getAdminDashboardStats(asDb(), noRecurring, 2026, 3);
-    expect(april.ownerShares).toMatchObject({ monthlyArrived: 45000, monthlyKrya: 22500, monthlyKot: 22500 });
+    expect(april.ownerShares).toMatchObject({ monthlyKrya: 0, monthlyKot: 0 });
   });
 });

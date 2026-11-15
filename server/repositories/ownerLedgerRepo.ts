@@ -2,7 +2,7 @@
  * Деньги владельцев на счете ИП и долги владельца.
  *
  * Учет идет с даты начала (строка kind 'opening' у каждого владельца):
- * остаток на начало этого дня + доля прибыли, которая пришла на счет ИП с этого
+ * остаток на начало этого дня + половина чистой прибыли счетов, оплаченных с этого
  * дня включительно, - переводы с этого дня. Ассистентам Кря платит с личной
  * карты, на счет ИП это не влияет.
  * "Мы должны" - долги Кота и Кря вместе перед другими: неоплаченные исполнителям
@@ -12,7 +12,7 @@
 import Decimal from "decimal.js";
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import {
-  clients, invoiceCalculations, invoiceExpenses, invoices, ownerTransfers, partnerPayments, partners,
+  clients, invoiceCalculations, invoiceExpenses, invoices, ownerTransfers, partners,
   type OwnerTransfer,
 } from "../../shared/schema";
 import { moneyDecimal } from "../../shared/money";
@@ -34,110 +34,56 @@ export interface OwnerBalance {
   ignored: { count: number; total: number };
 }
 
-/** Поступление прибыли на счет ИП: оплата клиента или перевод партнера по счету. */
-export interface Arrival {
-  date: string;
+/** Оплаченный счет с даты начала учета: из таких счетов складываются доли. */
+export interface PaidInvoice {
+  date: string;                                  // день оплаты
+  dateSource: "actual" | "planned" | "created";  // дата фактическая, плановая или дата создания
   profit: Decimal;
   invoiceId: string;
   invoiceNumber: string;
-  source: "client" | "partner";
+  clientName: string | null;
 }
 
 export interface OwnerLedger {
   kot: OwnerBalance;
   krya: OwnerBalance;
-  // Прибыль в деньгах, которые внешние партнеры еще не перевели: доли начислятся по их переводам.
-  pendingFromPartners: number;
-  // Из чего сложилась доля с даты начала: каждое поступление прибыли по дате.
-  arrivals: { date: string; invoiceId: string; invoiceNumber: string; source: Arrival["source"]; profit: number }[];
+  // Из чего сложилась доля: оплаченные счета с даты начала по дню оплаты.
+  invoices: { date: string; dateSource: PaidInvoice["dateSource"]; invoiceId: string; invoiceNumber: string; clientName: string | null; profit: number }[];
   transfers: OwnerTransfer[];
 }
 
 const effectiveDate = sql`COALESCE(${invoices.actualPaymentDate}, ${invoices.paymentDate}, DATE(${invoices.createdAt}))`;
-const laterDate = (a: string, b: string) => (a > b ? a : b);
 
-/** Когда прибыль оплаченных счетов приходит на счет ИП. Единственное место правила
- *  начисления долей: длинные предоплаты по месяцам работы поменяют его здесь.
- *  Клиенты партнеров-владельцев платят напрямую: прибыль приходит в день оплаты.
- *  Внешние партнеры переводят деньги сами: перевод со ссылкой на счет закрывает
- *  этот счет, остальное закрывает счета партнера по порядку дат. Прибылью из
- *  перевода считается та же доля, что прибыль счета в его сумме к переводу:
- *  остальное возвращает владельцу оплаченные им расходы. */
-export async function profitArrivals(db: DB): Promise<{ arrivals: Arrival[]; pending: Decimal }> {
-  const paid = await db.select({
-    id: invoices.id,
+/** Правило долей: чистая прибыль оплаченных счетов пополам, в день оплаты. День оплаты -
+ *  фактическая дата, без нее плановая, без нее дата создания (так же считает "Доли (50/50)").
+ *  Владелец ставит "Оплачен", когда деньги пришли к нему, в том числе от внешнего партнера,
+ *  поэтому записи о переводах партнеров на доли не влияют. */
+export async function paidInvoices(db: DB, since: string): Promise<PaidInvoice[]> {
+  const rows = await db.select({
+    invoiceId: invoices.id,
     invoiceNumber: invoices.invoiceNumber,
-    partnerId: invoices.partnerId,
-    direct: partners.directToOwner,
+    clientName: clients.name,
     date: sql<string>`to_char(${effectiveDate}, 'YYYY-MM-DD')`,
-    due: invoiceCalculations.partnerTransferDue,
+    dateSource: sql<PaidInvoice["dateSource"]>`CASE WHEN ${invoices.actualPaymentDate} IS NOT NULL THEN 'actual'
+      WHEN ${invoices.paymentDate} IS NOT NULL THEN 'planned' ELSE 'created' END`,
     profit: invoiceCalculations.netProfitAdmin,
   })
     .from(invoices)
     .innerJoin(invoiceCalculations, eq(invoiceCalculations.invoiceId, invoices.id))
-    .innerJoin(partners, eq(partners.id, invoices.partnerId))
-    .where(eq(invoices.status, "paid"))
-    .orderBy(asc(effectiveDate), asc(invoices.createdAt), asc(invoices.id));
-  const payments = await db.select({
-    partnerId: partnerPayments.partnerId,
-    invoiceId: partnerPayments.invoiceId,
-    amount: partnerPayments.amount,
-    date: partnerPayments.paymentDate,
-  })
-    .from(partnerPayments)
-    .innerJoin(partners, eq(partners.id, partnerPayments.partnerId))
-    .where(eq(partners.directToOwner, false))
-    .orderBy(asc(partnerPayments.paymentDate), asc(partnerPayments.createdAt), asc(partnerPayments.id));
-
-  type Waiting = { id: string; invoiceNumber: string; date: string; profit: Decimal; due: Decimal; left: Decimal };
-  const arrivals: Arrival[] = [];
-  const waiting = new Map<string, Waiting>();
-  const byPartner = new Map<string, Waiting[]>();
-  for (const invoice of paid) {
-    const profit = new Decimal(invoice.profit ?? 0), due = Decimal.max(0, invoice.due ?? 0);
-    if (invoice.direct || due.lte(0)) {
-      arrivals.push({ date: invoice.date, profit, invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, source: "client" });
-      continue;
-    }
-    const item = { id: invoice.id, invoiceNumber: invoice.invoiceNumber, date: invoice.date, profit, due, left: due };
-    const list = byPartner.get(invoice.partnerId) ?? [];
-    list.push(item);
-    byPartner.set(invoice.partnerId, list);
-    waiting.set(invoice.id, item);
-  }
-  // Прибыль каждого перевода в копейках: строки расшифровки в сумме дают ровно долю.
-  const allocate = (invoice: Waiting, amount: Decimal, date: string) => {
-    const part = Decimal.min(amount, invoice.left);
-    invoice.left = invoice.left.minus(part);
-    arrivals.push({
-      date: laterDate(date, invoice.date), profit: moneyDecimal(part.mul(invoice.profit).div(invoice.due)),
-      invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber, source: "partner",
-    });
-    return amount.minus(part);
-  };
-  // Сначала переводы со ссылкой на счет, затем остальное по порядку дат.
-  const unlinked: { partnerId: string; amount: Decimal; date: string }[] = [];
-  for (const payment of payments) {
-    const linked = payment.invoiceId ? waiting.get(payment.invoiceId) : undefined;
-    const own = linked && byPartner.get(payment.partnerId)?.includes(linked);
-    const rest = own ? allocate(linked, new Decimal(payment.amount), payment.date) : new Decimal(payment.amount);
-    if (rest.gt(0)) unlinked.push({ partnerId: payment.partnerId, amount: rest, date: payment.date });
-  }
-  for (const payment of unlinked) {
-    let rest = payment.amount;
-    for (const invoice of byPartner.get(payment.partnerId) ?? []) {
-      if (rest.lte(0)) break;
-      if (invoice.left.gt(0)) rest = allocate(invoice, rest, payment.date);
-    }
-  }
-  const pending = [...waiting.values()].reduce((sum, invoice) => sum.plus(invoice.left.mul(invoice.profit).div(invoice.due)), new Decimal(0));
-  return { arrivals, pending };
+    .leftJoin(clients, eq(clients.id, invoices.clientId))
+    .where(and(eq(invoices.status, "paid"), sql`${effectiveDate} >= ${since}::date`))
+    .orderBy(asc(effectiveDate), asc(invoices.invoiceNumber));
+  return rows.map(row => ({
+    ...row,
+    clientName: row.clientName === null ? null : decodeHtmlEntities(row.clientName),
+    profit: new Decimal(row.profit ?? 0),
+  }));
 }
 
-/** Прибыль, пришедшая на счет ИП с from по to включительно (to не задан - по сегодня и дальше). */
-export function arrivedProfit(arrivals: Pick<Arrival, "date" | "profit">[], from: string, to?: string): Decimal {
-  return moneyDecimal(arrivals.filter(a => a.date >= from && (to === undefined || a.date <= to))
-    .reduce((sum, a) => sum.plus(a.profit), new Decimal(0)));
+/** Прибыль оплаченных счетов с from по to включительно (to не задан - без конца). */
+export function paidProfit(rows: Pick<PaidInvoice, "date" | "profit">[], from: string, to?: string): Decimal {
+  return moneyDecimal(rows.filter(row => row.date >= from && (to === undefined || row.date <= to))
+    .reduce((sum, row) => sum.plus(row.profit), new Decimal(0)));
 }
 
 /** Пополам, как в движке: Кря округляется до копеек, Коту остаток. */
@@ -148,11 +94,11 @@ export function splitShares(profit: Decimal): { krya: Decimal; kot: Decimal } {
 
 const sum = (rows: OwnerTransfer[]) => rows.reduce((total, t) => total.plus(t.amount), new Decimal(0));
 
-function balanceOf(owner: Owner, transfers: OwnerTransfer[], arrivals: Arrival[]): OwnerBalance {
+function balanceOf(owner: Owner, transfers: OwnerTransfer[], paid: PaidInvoice[]): OwnerBalance {
   const opening = transfers.find(t => t.owner === owner && t.kind === "opening");
   if (!opening) return { since: null, opening: 0, accrued: 0, paidOut: 0, balance: 0, ignored: { count: 0, total: 0 } };
   const since = opening.transferDate;
-  const accrued = splitShares(arrivedProfit(arrivals, since))[owner];
+  const accrued = splitShares(paidProfit(paid, since))[owner];
   const payouts = transfers.filter(t => t.owner === owner && t.kind === "payout");
   const paidOut = sum(payouts.filter(t => t.transferDate >= since));
   const ignored = payouts.filter(t => t.transferDate < since);
@@ -170,18 +116,12 @@ function balanceOf(owner: Owner, transfers: OwnerTransfer[], arrivals: Arrival[]
 export async function getOwnerLedger(db: DB): Promise<OwnerLedger> {
   const transfers = await db.select().from(ownerTransfers)
     .orderBy(desc(ownerTransfers.transferDate), desc(ownerTransfers.createdAt));
-  const { arrivals, pending } = await profitArrivals(db);
-  const kot = balanceOf("kot", transfers, arrivals);
-  const krya = balanceOf("krya", transfers, arrivals);
-  const since = [kot.since, krya.since].filter((date): date is string => !!date).sort()[0];
+  const since = transfers.filter(t => t.kind === "opening").map(t => t.transferDate).sort()[0];
+  const paid = since === undefined ? [] : await paidInvoices(db, since);
   return {
-    kot,
-    krya,
-    pendingFromPartners: moneyDecimal(pending).toNumber(),
-    arrivals: since === undefined ? [] : arrivals
-      .filter(a => a.date >= since)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.invoiceNumber.localeCompare(b.invoiceNumber))
-      .map(a => ({ date: a.date, invoiceId: a.invoiceId, invoiceNumber: a.invoiceNumber, source: a.source, profit: moneyDecimal(a.profit).toNumber() })),
+    kot: balanceOf("kot", transfers, paid),
+    krya: balanceOf("krya", transfers, paid),
+    invoices: paid.map(row => ({ ...row, profit: row.profit.toNumber() })),
     transfers,
   };
 }

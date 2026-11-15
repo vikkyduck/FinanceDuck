@@ -1,10 +1,11 @@
+import Decimal from "decimal.js";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { parseNum } from "../../shared/financialEngine";
 import { clients, invoiceCalculations, invoices, partners } from "../../shared/schema";
 import { db as _db } from "../db";
 import type { DashboardInvoiceDetail, MonthlyData } from "../storage";
 import { getAssistantBonusAccrued } from "./actsRepo";
-import { arrivedProfit, profitArrivals, splitShares } from "./ownerLedgerRepo";
+import { splitShares } from "./ownerLedgerRepo";
 
 type DB = typeof _db;
 
@@ -55,11 +56,8 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     recurring: number;
   };
   monthlyProfit: number;
-  // Доли по прибыли, которая пришла на счет ИП за период: по внешним партнерам
-  // после их перевода, по партнерам-владельцам в день оплаты клиентом.
+  // Доли 50/50 по чистой прибыли оплаченных счетов периода, как "Переводы Коту и себе".
   ownerShares: {
-    yearlyArrived: number;
-    monthlyArrived: number;
     yearlyKrya: number;
     yearlyKot: number;
     monthlyKrya: number;
@@ -227,17 +225,14 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
 
   // Get recurring expected for selected month
   const recurringStats = await getRecurringExpectedForMonth(selectedYear, selectedMonth);
-  const [yearlyAssistantBonus, monthlyAssistantBonus, { arrivals }] = await Promise.all([
+  const [yearlyAssistantBonus, monthlyAssistantBonus] = await Promise.all([
     getAssistantBonusAccrued(db, yearStartStr, yearEndStr),
     getAssistantBonusAccrued(db, monthStartStr, monthEndStr),
-    profitArrivals(db),
   ]);
 
-  // Доли 50/50 по пришедшей прибыли, по тому же правилу, что "Переводы Коту и себе".
-  const yearlyArrived = arrivedProfit(arrivals, yearStartStr, yearEndStr);
-  const monthlyArrived = arrivedProfit(arrivals, monthStartStr, monthEndStr);
-  const yearlyShares = splitShares(yearlyArrived);
-  const monthlyShares = splitShares(monthlyArrived);
+  // Доли 50/50 по чистой прибыли оплаченных счетов: Кря с округлением до копеек, Коту остаток.
+  const yearlyShares = splitShares(new Decimal(yearlyRows[0]?.profit ?? 0));
+  const monthlyShares = splitShares(new Decimal(monthlyPaidRows[0]?.profit ?? 0));
 
   return {
     yearlySummary: {
@@ -252,8 +247,6 @@ export async function getAdminDashboardStats(db: DB, getRecurringExpectedForMont
     },
     monthlyProfit,
     ownerShares: {
-      yearlyArrived: yearlyArrived.toNumber(),
-      monthlyArrived: monthlyArrived.toNumber(),
       yearlyKrya: yearlyShares.krya.toNumber(),
       yearlyKot: yearlyShares.kot.toNumber(),
       monthlyKrya: monthlyShares.krya.toNumber(),

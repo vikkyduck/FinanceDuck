@@ -1,0 +1,38 @@
+# Регулярные обновления зависимостей. Dependabot открывает PR, CI проверяет их как обычные правки.
+# Минорные версии и исправления приходят одним PR на группу, мажорные - отдельными PR,
+# потому что они могут требовать правок кода.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+      development-minor-patch:
+        dependency-type: development
+        update-types: [minor, patch]
+    commit-message:
+      prefix: deps
+    # Намеренно не обновляемые мажорные версии, причины в AGENTS.md.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-resizable-panels
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+      timezone: Europe/Moscow
+    commit-message:
+      prefix: ci

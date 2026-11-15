@@ -44,8 +44,12 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('/expenses') ? [] : invoice))));
   renders = 0;
 });
-afterEach(() => {
-  tree?.unmount(); client.clear(); vi.unstubAllGlobals();
+afterEach(async () => {
+  tree?.unmount();
+  // React 19 снимает эффекты размонтированного дерева асинхронно, а их очистке нужен window:
+  // подмены убираем только после нее.
+  await wait(20);
+  client.clear(); vi.unstubAllGlobals();
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT;
 });
 

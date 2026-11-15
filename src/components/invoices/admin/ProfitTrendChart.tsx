@@ -34,7 +34,7 @@ export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
   });
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
@@ -43,7 +43,7 @@ export const ProfitTrendChart = ({ year }: ProfitTrendChartProps) => {
             Прибыль: {formatCurrency(payload[0].payload.profit)}
           </p>
           <p className="text-sm font-semibold text-primary">
-            Накопительно: {formatCurrency(payload[0].value)}
+            Накопительно: {formatCurrency(Number(payload[0].value))}
           </p>
         </div>
       );

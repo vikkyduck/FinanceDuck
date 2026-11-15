@@ -34,13 +34,13 @@ export const MonthlySalesChart = ({ year }: MonthlySalesChartProps) => {
     queryFn: () => apiGet<MonthlyData[]>(`/admin/monthly-data?year=${year}`),
   });
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
           <p className="font-semibold mb-2">{payload[0].payload.month}</p>
           <p className="text-sm text-primary">
-            Продано: {formatCurrency(payload[0].value)}
+            Продано: {formatCurrency(Number(payload[0].value))}
           </p>
           <p className="text-sm text-muted-foreground">
             Счетов: {payload[0].payload.count}

@@ -23,19 +23,19 @@ export const RevenueForecastChart = ({ monthsAhead = 6 }: RevenueForecastChartPr
     queryFn: () => apiGet<ForecastData[]>(`/admin/forecast?months=${monthsAhead}`),
   });
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
           <p className="font-semibold mb-2">{payload[0].payload.monthName}</p>
           <p className="text-sm text-chart-1">
-            Ожидается: {formatCurrency(payload[0]?.value || 0)}
+            Ожидается: {formatCurrency(Number(payload[0]?.value ?? 0))}
           </p>
           <p className="text-sm text-chart-2">
-            Получено: {formatCurrency(payload[1]?.value || 0)}
+            Получено: {formatCurrency(Number(payload[1]?.value ?? 0))}
           </p>
           <p className="text-sm font-semibold text-primary mt-1">
-            Итого: {formatCurrency((payload[0]?.value || 0) + (payload[1]?.value || 0))}
+            Итого: {formatCurrency(Number(payload[0]?.value ?? 0) + Number(payload[1]?.value ?? 0))}
           </p>
         </div>
       );

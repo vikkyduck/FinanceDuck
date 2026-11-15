@@ -172,7 +172,7 @@ export function InvoiceWaterfallChart({
     });
   }, [data]);
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (!active || !payload?.[0]) return null;
     const item = payload[0].payload;
     return (

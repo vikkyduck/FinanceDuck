@@ -99,14 +99,14 @@ export const PlanHistoryComparison = () => {
       }));
   };
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
           <p className="font-semibold mb-2">{payload[0].payload.month}</p>
           {payload.map((entry, index: number) => (
             <p key={index} className="text-sm" style={{ color: entry.color }}>
-              {entry.name}: {formatCurrency(entry.value)}
+              {entry.name}: {formatCurrency(Number(entry.value))}
             </p>
           ))}
         </div>

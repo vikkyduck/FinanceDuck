@@ -237,9 +237,9 @@ export async function getPartnerClientStats(db: Db, partnerId: string, year: num
     const clientBill = parseNum(row.calculations.clientBill);
     const scheme = row.invoice.scheme;
     
-    let commission = 0;
-    let clientRemaining = 0;
-    
+    let commission: number;
+    let clientRemaining: number;
+
     if (isAgencyScheme(scheme)) {
       commission = parseNum(row.calculations.partnerShareFromMargin);
       // База клиента — из расчётов (гибкая 'agency' жёсткой ставки не имеет);

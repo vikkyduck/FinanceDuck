@@ -18,7 +18,10 @@ export default tseslint.config(
       "react-refresh": reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules,
+      // Классические правила хуков. Правила React Compiler, которые react-hooks 7 добавил
+      // в recommended, находят 46 мест: включать их отдельной задачей вместе с правкой кода.
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
     },

@@ -91,7 +91,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.16",
-    "@eslint/js": "^9.39.5",
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.3.5",
     "@types/cookie-parser": "^1.4.10",
@@ -102,30 +102,35 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@types/react-test-renderer": "^18.3.2",
-    "@vitejs/plugin-react-swc": "^4.3.3",
+    "@vitejs/plugin-react": "^6.3.0",
     "autoprefixer": "^10.6.2",
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.2",
-    "eslint": "^9.39.5",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^15.15.0",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.8",
+    "globals": "^17.14.0",
     "postcss": "^8.5.33",
     "react-test-renderer": "^18.3.1",
     "tailwindcss": "^4.3.5",
     "tailwindcss-animate": "^1.0.7",
     "tsx": "^4.23.15",
-    "typescript": "^5.8.3",
+    "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.2",
     "vite": "^8.3.8",
-    "vitest": "^4.1.9"
+    "vitest": "^5.1.0"
   },
   "overrides": {
     "exceljs": {
       "uuid": "11.1.1"
     },
     "postcss-selector-parser": "^7.1.6",
-    "esbuild": "$esbuild",
+    "drizzle-kit": {
+      "esbuild": "^0.28.2"
+    },
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.28.2"
+    },
     "@typescript-eslint/typescript-estree": {
       "minimatch": "^11.0.8"
     }

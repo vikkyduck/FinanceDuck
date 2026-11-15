@@ -11,8 +11,8 @@ const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart'];
 export function useCookieSession() {
   const navigate = useNavigate();
   const { isAuthenticated, refreshSession, logout, validateSession } = useAuth();
-  const checkIntervalRef = useRef<NodeJS.Timeout>();
-  const activityTimeoutRef = useRef<NodeJS.Timeout>();
+  const checkIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hasShownWarningRef = useRef(false);
   const lastActivityRef = useRef(Date.now());
 

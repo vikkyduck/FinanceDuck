@@ -57,7 +57,6 @@ export function InvoiceWaterfallChart({
     }
 
     const items: WaterfallItem[] = [];
-    let runningTotal = 0;
 
     items.push({
       name: "Счёт клиенту",
@@ -66,7 +65,7 @@ export function InvoiceWaterfallChart({
       isPositive: true,
       color: "hsl(var(--primary))",
     });
-    runningTotal = safeClientBill;
+    let runningTotal = safeClientBill;
 
     if (isAgencyScheme(scheme)) {
       const partnerPercent = scheme === "agency_40" ? "16%" : "15%";
@@ -142,7 +141,6 @@ export function InvoiceWaterfallChart({
         isPositive: false,
         color: "hsl(var(--chart-5))",
       });
-      runningTotal -= halfProfit;
     } else {
       items.push({
         name: "Чистая прибыль",

@@ -28,7 +28,7 @@ interface Payables {
 }
 
 /** "Мы должны" - долги Кота и Кря вместе перед другими: неоплаченные исполнителям расходы,
- *  которые платит владелец, и отдельно бонус ассистенту, который Кря платит с личного счета.
+ *  которые платит владелец, и бонус ассистенту, который Кря платит с личного счета.
  *  Долг Коту - расчет между владельцами, он в карточке "Переводы Коту и себе". */
 export const PayablesCard = () => {
   const { toast } = useToast();
@@ -52,7 +52,7 @@ export const PayablesCard = () => {
       <CardHeader className="pb-2">
         <CardTitle className="text-base sm:text-lg flex items-center gap-2">
           <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-rose-600" />
-          Мы должны{data ? `: ${formatMoney(data.executors.total)}` : ""}
+          Мы должны{data ? `: ${formatMoney(data.executors.total + data.assistant.unpaid)}` : ""}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -74,7 +74,7 @@ export const PayablesCard = () => {
                 <p className="text-sm text-muted-foreground">Ассистенту, с личного счета</p>
                 <p className="text-xl sm:text-2xl font-bold" data-testid="text-payables-assistant">{formatMoney(data.assistant.unpaid)}</p>
                 <p className="text-xs text-muted-foreground">
-                  Бонус за принятые пакеты с {formatDate(data.assistant.since)}, в итог не входит
+                  Бонус за принятые пакеты с {formatDate(data.assistant.since)}, платите с личного счета
                 </p>
               </div>
             </div>
@@ -119,7 +119,7 @@ export const PayablesCard = () => {
               </Collapsible>
             )}
             <p className="text-xs text-muted-foreground mt-3">
-              "Мы" - это Кот и Кря вместе. Сюда входят расходы, которые платите вы: с отметкой "Администратор" или по партнерам с оплатой напрямую владельцу. Бонус ассистенту вы платите с личного счета, поэтому он показан отдельно и в сумму в заголовке не входит. Расчет с Котом - в карточке "Переводы Коту и себе".
+              "Мы" - это Кот и Кря вместе. Сюда входят расходы, которые платите вы: с отметкой "Администратор" или по партнерам с оплатой напрямую владельцу, и бонус ассистенту, его вы платите с личного счета. Расчет с Котом - в карточке "Переводы Коту и себе".
             </p>
           </>
         )}

@@ -55,8 +55,9 @@ interface OwnerLedger {
 const OWNER_NAMES: Record<Owner, string> = { kot: "Коту", krya: "себе" };
 
 // minus: вычитаемая строка, ноль без знака ("-0 ₽" у Intl).
-const Line = ({ label, value, minus = false }: { label: string; value: number; minus?: boolean }) => (
-  <div className="flex justify-between gap-2 text-xs text-muted-foreground">
+// strong: итоговая строка расчета.
+const Line = ({ label, value, minus = false, strong = false, testId }: { label: string; value: number; minus?: boolean; strong?: boolean; testId?: string }) => (
+  <div className={`flex justify-between gap-2 text-xs ${strong ? "font-medium text-foreground" : "text-muted-foreground"}`} data-testid={testId}>
     <span>{label}</span>
     <span className="whitespace-nowrap">{formatMoney(minus && value !== 0 ? -value : value)}</span>
   </div>
@@ -146,12 +147,13 @@ export const OwnerTransfersCard = () => {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-3 sm:p-4 bg-background/50 rounded-lg space-y-1">
-                <p className="text-sm text-muted-foreground">{data.kot.balance < 0 ? "Кот получил вперед" : "Должны Коту"}</p>
+                <p className="text-sm text-muted-foreground">{data.kot.balance < 0 ? "Кот получил вперед" : "Осталось перевести Коту"}</p>
                 <p className="text-xl sm:text-2xl font-bold text-orange-600 dark:text-orange-400" data-testid="text-owner-kot-balance">
                   {formatMoney(Math.abs(data.kot.balance))}
                 </p>
-                {data.kot.opening !== 0 && <Line label={`Остаток на начало ${formatDate(data.kot.since)}`} value={data.kot.opening} />}
+                <Line label={`Долг Коту на начало ${formatDate(data.kot.since)}`} value={data.kot.opening} />
                 <Line label={`Доля Кота с ${formatDate(data.kot.since)}`} value={data.kot.accrued} />
+                <Line label="Итого причитается Коту" value={data.kot.opening + data.kot.accrued} strong testId="text-owner-kot-due" />
                 <Line label="Переведено Коту" value={data.kot.paidOut} minus />
                 <Ignored balance={data.kot} testId="text-owner-kot-ignored" />
                 <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setPayoutOwner("kot")} data-testid="button-payout-kot">
@@ -163,8 +165,9 @@ export const OwnerTransfersCard = () => {
                 <p className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400" data-testid="text-owner-krya-balance">
                   {formatMoney(Math.abs(data.krya.balance))}
                 </p>
-                {data.krya.opening !== 0 && <Line label={`Остаток на начало ${formatDate(data.krya.since)}`} value={data.krya.opening} />}
+                <Line label={`Ваших денег на начало ${formatDate(data.krya.since)}`} value={data.krya.opening} />
                 <Line label={`Доля Кря с ${formatDate(data.krya.since)}`} value={data.krya.accrued} />
+                <Line label="Итого ваших денег" value={data.krya.opening + data.krya.accrued} strong testId="text-owner-krya-due" />
                 <Line label="Переведено себе" value={data.krya.paidOut} minus />
                 <Ignored balance={data.krya} testId="text-owner-krya-ignored" />
                 <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => setPayoutOwner("krya")} data-testid="button-payout-krya">
@@ -202,7 +205,7 @@ export const OwnerTransfersCard = () => {
                     </div>
                   ))}
                   <div className="flex justify-between gap-2 text-xs font-medium p-2">
-                    <span>Пришло прибыли, пополам Коту и вам</span>
+                    <span>Пришло прибыли: Коту {formatMoney(data.kot.accrued)}, вам {formatMoney(data.krya.accrued)}</span>
                     <span className="whitespace-nowrap" data-testid="text-owner-arrivals-total">{formatMoney(data.kot.accrued + data.krya.accrued)}</span>
                   </div>
                 </div>

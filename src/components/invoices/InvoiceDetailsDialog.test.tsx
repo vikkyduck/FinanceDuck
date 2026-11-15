@@ -36,7 +36,10 @@ beforeEach(() => {
   // а планировщик React между проходами отдаёт управление таймерам, и тест успевает посчитать рендеры.
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   vi.stubGlobal('localStorage', { getItem: () => 'test' });
-  vi.stubGlobal('window', new EventTarget());
+  // Компоненты Radix снимают таймеры через window.clearTimeout, а переключатель с версии 1.4
+  // ищет связанную форму через instanceof HTMLFormElement. В окружении node нет ни того, ни другого.
+  vi.stubGlobal('window', Object.assign(new EventTarget(), { setTimeout, clearTimeout }));
+  vi.stubGlobal('HTMLFormElement', class HTMLFormElement {});
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('/expenses') ? [] : invoice))));
   renders = 0;

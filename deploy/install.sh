@@ -5,7 +5,7 @@
 #   DOMAIN=<ваш-домен> sudo -E bash deploy/install.sh
 #
 # Что делает:
-#   1. Обновляет систему, ставит Node.js 22, Postgres 16, nginx, certbot
+#   1. Обновляет систему, ставит Node.js 26, Postgres 16, nginx, certbot
 #   2. Создаёт пользователя financeduck без shell-доступа
 #   3. Создаёт БД finance_duck и пользователя БД
 #   4. Кладёт код в /opt/finance-duck
@@ -35,9 +35,9 @@ apt-get upgrade -y
 echo "==> Установка пакетов"
 apt-get install -y curl ca-certificates gnupg lsb-release ufw nginx postgresql postgresql-contrib certbot python3-certbot-nginx rsync git
 
-echo "==> Установка Node.js 22"
-if ! command -v node &>/dev/null || [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 22 ]]; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+echo "==> Установка Node.js 26"
+if ! command -v node &>/dev/null || [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 26 ]]; then
+  curl -fsSL https://deb.nodesource.com/setup_26.x | bash -
   apt-get install -y nodejs
 fi
 

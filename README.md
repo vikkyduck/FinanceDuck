@@ -1,6 +1,6 @@
 # FinanceDuck
 
-Кабинет счетов, расходов и взаиморасчётов: React + TypeScript, Express, PostgreSQL и Drizzle. Требуются Node.js 22.12+ и PostgreSQL 16.
+Кабинет счетов, расходов и взаиморасчётов: React + TypeScript, Express, PostgreSQL и Drizzle. Требуются Node.js 26 и PostgreSQL 16.
 
 ## Локальная работа
 

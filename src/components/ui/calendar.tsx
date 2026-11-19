@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker } from "react-day-picker";
+import { ru } from "react-day-picker/locale";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -9,16 +10,19 @@ export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
 // Разметка react-day-picker 9+: состояния дня (выбран, сегодня, вне месяца) ставятся на ячейку,
 // а кнопка дня лежит внутри нее, поэтому цвет кнопки задается через [&>button].
+// Русская локаль переводит месяцы, дни недели и подписи для экранного диктора, неделя начинается
+// с понедельника. Названия месяцев и дней в ней строчные, заглавную букву дает класс capitalize.
 function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
   return (
     <DayPicker
+      locale={ru}
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
         months: "relative flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         month_caption: "flex justify-center pt-1 relative items-center h-7",
-        caption_label: "text-sm font-medium",
+        caption_label: "text-sm font-medium capitalize",
         nav: "absolute inset-x-1 top-1 z-10 flex items-center justify-between",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
@@ -30,7 +34,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         ),
         month_grid: "w-full border-collapse space-y-1",
         weekdays: "flex",
-        weekday: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
+        weekday: "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem] capitalize",
         week: "flex w-full mt-2",
         day: "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
         day_button: cn(buttonVariants({ variant: "ghost" }), "h-9 w-9 p-0 font-normal"),

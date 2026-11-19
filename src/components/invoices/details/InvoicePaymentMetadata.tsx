@@ -109,7 +109,7 @@ export function InvoicePaymentMetadata({ model }: { model: Props }) {
                       setPlannedPaymentDate(date);
                       if (date) handleUpdatePlannedDate(date);
                     }}
-                    initialFocus
+                    autoFocus
                     className="pointer-events-auto"
                   />
                 </PopoverContent>
@@ -158,7 +158,7 @@ export function InvoicePaymentMetadata({ model }: { model: Props }) {
                       setActualPaymentDate(date);
                       if (date) handleUpdateActualPaymentDate(date);
                     }}
-                    initialFocus
+                    autoFocus
                     className="pointer-events-auto"
                   />
                 </PopoverContent>

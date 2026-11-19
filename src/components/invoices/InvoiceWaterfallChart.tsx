@@ -57,7 +57,6 @@ export function InvoiceWaterfallChart({
     }
 
     const items: WaterfallItem[] = [];
-    let runningTotal = 0;
 
     items.push({
       name: "Счёт клиенту",
@@ -66,7 +65,7 @@ export function InvoiceWaterfallChart({
       isPositive: true,
       color: "hsl(var(--primary))",
     });
-    runningTotal = safeClientBill;
+    let runningTotal = safeClientBill;
 
     if (isAgencyScheme(scheme)) {
       const partnerPercent = scheme === "agency_40" ? "16%" : "15%";
@@ -142,7 +141,6 @@ export function InvoiceWaterfallChart({
         isPositive: false,
         color: "hsl(var(--chart-5))",
       });
-      runningTotal -= halfProfit;
     } else {
       items.push({
         name: "Чистая прибыль",
@@ -174,7 +172,7 @@ export function InvoiceWaterfallChart({
     });
   }, [data]);
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (!active || !payload?.[0]) return null;
     const item = payload[0].payload;
     return (

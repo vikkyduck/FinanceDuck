@@ -106,7 +106,7 @@ export function DatePicker({
             onDateChange(newDate);
             setOpen(false);
           }}
-          initialFocus
+          autoFocus
           className="pointer-events-auto"
         />
       </PopoverContent>

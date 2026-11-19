@@ -34,7 +34,7 @@ try {
   await Promise.all(Array.from({ length: concurrency }, async () => {
     while (performance.now() - start < seconds * 1000 && failures < 3) {
       const route = routes[next++ % routes.length], at = performance.now();
-      let status = 0;
+      let status: number;
       try {
         const response = await fetch(new URL(route, origin), { headers: { Cookie: cookie }, redirect: 'error', signal: AbortSignal.timeout(5000) });
         status = response.status;

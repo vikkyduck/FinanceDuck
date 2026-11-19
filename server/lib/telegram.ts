@@ -62,7 +62,8 @@ export async function sendTelegramMessageStrict(
     if (!res.ok) {
       throw new Error("Telegram delivery failed");
     }
-  } catch (e) {
+  } catch {
+    // Исходную ошибку дальше не передаем: в ней может оказаться адрес запроса с токеном бота.
     throw new Error("Telegram delivery failed");
   }
 }

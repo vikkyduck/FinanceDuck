@@ -149,7 +149,6 @@ export async function getAlertCounts(db: DB, actor: InvoiceActor): Promise<{
 }> {
   const today = new Date();
   let overdueCount = 0;
-  let pendingCount = 0;
 
   if (actor.role === 'admin' || actor.role === 'assistant') {
     const overdueInvoices = await db
@@ -171,7 +170,7 @@ export async function getAlertCounts(db: DB, actor: InvoiceActor): Promise<{
     .select({ id: invoices.id })
     .from(invoices)
     .where(and(eq(invoices.status, 'draft'), invoiceScope(actor)));
-  pendingCount = pendingInvoices.length;
+  const pendingCount = pendingInvoices.length;
 
   return {
     overdueInvoices: overdueCount,

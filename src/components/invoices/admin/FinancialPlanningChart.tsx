@@ -35,16 +35,16 @@ export const FinancialPlanningChart = ({ year }: FinancialPlanningChartProps) =>
     queryFn: () => apiGet<PlanFactData[]>(`/admin/plan-fact?year=${year}`),
   });
 
-  const CustomTooltip = ({ active, payload }: import("recharts").TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: Partial<import("recharts").TooltipContentProps<number, string>>) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-background border border-border p-3 rounded-lg shadow-lg">
           <p className="font-semibold mb-2">{payload[0].payload.month}</p>
           <p className="text-sm text-primary">
-            Продажи: {formatCurrency(payload[0]?.value || 0)}
+            Продажи: {formatCurrency(Number(payload[0]?.value ?? 0))}
           </p>
           <p className="text-sm text-chart-2">
-            Поступления: {formatCurrency(payload[1]?.value || 0)}
+            Поступления: {formatCurrency(Number(payload[1]?.value ?? 0))}
           </p>
         </div>
       );

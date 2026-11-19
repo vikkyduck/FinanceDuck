@@ -98,7 +98,7 @@ export const AssistantMonthlyChart = ({ selectedYear }: Props) => {
                 border: '1px solid hsl(var(--border))',
                 borderRadius: '8px'
               }}
-              formatter={(value: number) => [formatMoney(value), 'Сумма']}
+              formatter={(value) => [formatMoney(Number(value)), 'Сумма']}
             />
             {chartData.average > 0 && (
               <ReferenceLine

@@ -72,14 +72,11 @@ export async function getExpectedCommission(db: DB, actor: InvoiceActor): Promis
     const scheme = row.invoice.scheme || 'commission_based';
     
     // Calculate commission based on scheme
-    let commission = 0;
-    if (isAgencyScheme(scheme)) {
-      // For agency schemes (включая гибкую 'agency'): partner gets partnerShareFromMargin
-      commission = parseNum(row.calculations.partnerShareFromMargin);
-    } else {
-      // For partner_10, partner_15, commission_based: use commissionAmount
-      commission = parseNum(row.calculations.commissionAmount);
-    }
+    // Agency schemes (включая гибкую 'agency'): partner gets partnerShareFromMargin.
+    // partner_10, partner_15, commission_based: commissionAmount.
+    const commission = isAgencyScheme(scheme)
+      ? parseNum(row.calculations.partnerShareFromMargin)
+      : parseNum(row.calculations.commissionAmount);
     
     if (commission <= 0) continue;
     

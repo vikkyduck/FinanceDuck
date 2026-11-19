@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -182,9 +182,8 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                 const isExpanded = expandedMonths.has(row.monthNumber);
                 
                 return (
-                  <>
-                    <TableRow 
-                      key={row.monthNumber}
+                  <Fragment key={row.monthNumber}>
+                    <TableRow
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => toggleMonth(row.monthNumber)}
                       data-testid={`row-month-${row.monthNumber}`}
@@ -220,7 +219,7 @@ export const MonthlyFinancialTable = ({ year }: MonthlyFinancialTableProps) => {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>

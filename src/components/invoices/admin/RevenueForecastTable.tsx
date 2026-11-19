@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, ChevronDown, Loader2 } from "lucide-react";
@@ -181,9 +181,8 @@ export const RevenueForecastTable = () => {
                 const isExpanded = expandedMonths.has(monthKey);
                 
                 return (
-                  <>
-                    <TableRow 
-                      key={monthKey}
+                  <Fragment key={monthKey}>
+                    <TableRow
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => toggleMonth(monthKey)}
                       data-testid={`row-forecast-${row.monthIndex}-${row.yearNum}`}
@@ -220,7 +219,7 @@ export const RevenueForecastTable = () => {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
               <TableRow className="bg-muted/50 font-semibold">

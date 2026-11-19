@@ -17,5 +17,4 @@
 - Намеренно не обновлены, Dependabot их пропускает:
   - TypeScript 7: typescript-eslint пока поддерживает TypeScript только до 6.0.
   - `@types/node` выше 22: типы следуют за версией Node на сервере. Обновлять вместе с Node на сервере.
-  - `react-resizable-panels` 4: нужен только неиспользуемому `src/components/ui/resizable.tsx`, версия 4 устроена иначе.
 - `overrides` в `package.json` закрывают уязвимости в чужих зависимостях: minimatch 11 для typescript-eslint, esbuild 0.28 для старого загрузчика drizzle-kit. При обновлении typescript-eslint и drizzle-kit проверить `npm ls minimatch esbuild`: если пакеты сами требуют исправленные версии, переопределение убрать.

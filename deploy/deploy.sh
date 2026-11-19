@@ -16,7 +16,7 @@ remote="$SERVER_USER@$SERVER_HOST"
 npm ci
 npm run check
 npm audit --audit-level=moderate
-ssh "$remote" "node -e 'if(Number(process.versions.node.split(\".\")[0])<22)process.exit(1)'; test -L /opt/finance-duck; mkdir '$release'"
+ssh "$remote" "node -e 'if(Number(process.versions.node.split(\".\")[0])<22)process.exit(1)' && test -L /opt/finance-duck && mkdir '$release'"
 git archive HEAD | ssh "$remote" "tar -xf - -C '$release'"
 rsync -az dist dist-server "$remote:$release/"
 ssh "$remote" "cd '$release' && npm ci --omit=dev && cp -p /opt/finance-duck/.env .env && chown -R financeduck:financeduck '$release'"

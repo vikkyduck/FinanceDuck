@@ -87,7 +87,7 @@ Outbox worker забирает события с `FOR UPDATE SKIP LOCKED`, от�
 
 ## Проверки перед выпуском
 
-Требуются Node.js 22.12+ и PostgreSQL 16. Команды:
+Требуются Node.js 26 и PostgreSQL 16. Команды:
 
 ```sh
 npm ci

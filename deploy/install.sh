@@ -5,7 +5,7 @@
 #   DOMAIN=<ваш-домен> sudo -E bash deploy/install.sh
 #
 # Что делает:
-#   1. Обновляет систему, ставит Node.js 26, Postgres 16, nginx, certbot
+#   1. Обновляет систему, включает ночные автообновления безопасности, ставит Node.js 26, Postgres 16, nginx, certbot
 #   2. Создаёт пользователя financeduck без shell-доступа
 #   3. Создаёт БД finance_duck и пользователя БД
 #   4. Кладёт код в /opt/finance-duck
@@ -33,7 +33,7 @@ apt-get update -y
 apt-get upgrade -y
 
 echo "==> Установка пакетов"
-apt-get install -y curl ca-certificates gnupg lsb-release ufw nginx postgresql postgresql-contrib certbot python3-certbot-nginx rsync git
+apt-get install -y curl ca-certificates gnupg lsb-release ufw nginx postgresql postgresql-contrib certbot python3-certbot-nginx rsync git unattended-upgrades
 
 echo "==> Установка Node.js 26"
 if ! command -v node &>/dev/null || [[ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 26 ]]; then
@@ -86,6 +86,13 @@ if [[ -f "$APP_DIR/deploy/nginx.conf" ]]; then
   nginx -t
   systemctl reload nginx
 fi
+
+echo "==> Автообновления безопасности (ночью, 04:00 МСК)"
+if [[ -f "$APP_DIR/deploy/apt-daily-upgrade.override.conf" ]]; then
+  install -D -m 644 "$APP_DIR/deploy/apt-daily-upgrade.override.conf" /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf
+  systemctl daemon-reload
+fi
+systemctl enable --now apt-daily.timer apt-daily-upgrade.timer
 
 echo "==> Firewall (ufw)"
 ufw allow OpenSSH || true

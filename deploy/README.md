@@ -119,6 +119,10 @@ sudo -u postgres pg_dump finance_duck | gzip > /var/finance-duck/backups/pgdump-
 - **Оффсайт-бэкапы**: машина администратора ежедневно (09:30) забирает
   `/var/finance-duck/backups` к себе (launchd `com.financeduck.backup-pull`,
   скрипт `~/FinanceDuckBackups/pull.sh`). Локальный ретеншн на сервере — 30 копий.
+- **Автообновления безопасности Ubuntu**: таймеры `apt-daily` и `apt-daily-upgrade`,
+  установка ночью в 01:00–01:30 UTC (04:00–04:30 МСК), см. `deploy/apt-daily-upgrade.override.conf`.
+  После обновления ядра сервер сам не перезагружается: если есть файл `/var/run/reboot-required`,
+  перезагрузить вручную в тихое время.
 
 ## Второй домен кабинета: app.withoutwater.ru (2026-08)
 
